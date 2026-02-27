@@ -616,6 +616,42 @@ function habilitarEdicion(habilitar) {
 }
 
 // ===== FUNCIONES DE CATEGORÍAS =====
+
+// Flag para asegurarse de que los listeners del contenedor se registren UNA SOLA VEZ
+let _categoriasListenersInit = false;
+
+function inicializarListenersCategorias() {
+    if (_categoriasListenersInit) return;
+    const container = document.querySelector('.categorias-container');
+    if (!container) return;
+
+    container.addEventListener('click', (e) => {
+        const btn = e.target.closest('.categoria-btn[data-categoria]');
+        if (btn) {
+            cambiarCategoria(btn.dataset.categoria);
+            return;
+        }
+        const addBtn = e.target.closest('#btn-agregar-categoria');
+        if (addBtn) {
+            agregarCategoria();
+        }
+    });
+
+    container.addEventListener('contextmenu', (e) => {
+        const wrapper = e.target.closest('.categoria-wrapper');
+        if (wrapper) {
+            e.preventDefault();
+            const categoriaId = wrapper.dataset.categoriaId;
+            const esEditable = wrapper.dataset.categoriaEditable === 'true';
+            if (esEditable) {
+                mostrarMenuContextualCategoria(e, categoriaId);
+            }
+        }
+    });
+
+    _categoriasListenersInit = true;
+}
+
 function renderizarCategorias() {
     const container = document.querySelector('.categorias-container');
     if (!container) return;
@@ -645,39 +681,8 @@ function renderizarCategorias() {
 
     container.innerHTML = html;
 
-    // Delegar eventos al contenedor para categorías nuevas
-    // Esto evita el problema de eventos no asignados a elementos dinámicos
-    container.onclick = null; // Limpiar evento anterior
-    container.addEventListener('click', (e) => {
-        // Handle category button click
-        const btn = e.target.closest('.categoria-btn[data-categoria]');
-        if (btn) {
-            const categoriaId = btn.dataset.categoria;
-            cambiarCategoria(categoriaId);
-            return;
-        }
-
-        // Handle add category button
-        const addBtn = e.target.closest('#btn-agregar-categoria');
-        if (addBtn) {
-            agregarCategoria();
-        }
-    });
-
-    // Delegar evento de menú contextual
-    container.oncontextmenu = null;
-    container.addEventListener('contextmenu', (e) => {
-        const wrapper = e.target.closest('.categoria-wrapper');
-        if (wrapper) {
-            e.preventDefault();
-            const categoriaId = wrapper.dataset.categoriaId;
-            const esEditable = wrapper.dataset.categoriaEditable === 'true';
-
-            if (esEditable) {
-                mostrarMenuContextualCategoria(e, categoriaId);
-            }
-        }
-    });
+    // Registrar listeners solo la primera vez (evita acumulación con cada render)
+    inicializarListenersCategorias();
 }
 
 function actualizarCategoriasUI() {
@@ -803,47 +808,58 @@ function mostrarMenuContextualCategoria(event, categoriaId) {
     }, 100);
 }
 
+let _agregarCategoriaEnProceso = false;
+
 async function agregarCategoria() {
-    const nombre = prompt('Ingresa el nombre de la nueva categoría (máx 20 caracteres):');
+    // Guard: evitar que se abra el prompt múltiples veces si hay listeners duplicados
+    if (_agregarCategoriaEnProceso) return;
+    _agregarCategoriaEnProceso = true;
 
-    if (nombre === null) return;
+    try {
+        const nombre = prompt('Ingresa el nombre de la nueva categoría (máx 20 caracteres):');
 
-    const nombreTrim = nombre.trim();
-    if (!nombreTrim) {
-        alert('El nombre no puede estar vacío');
-        return;
+        if (nombre === null) return;
+
+        const nombreTrim = nombre.trim();
+        if (!nombreTrim) {
+            alert('El nombre no puede estar vacío');
+            return;
+        }
+
+        if (nombreTrim.length > 20) {
+            alert('El nombre no puede tener más de 20 caracteres');
+            return;
+        }
+
+        // Verificar si ya existe una categoría con ese nombre
+        if (categoriasPersonalizadas.some(c => c.nombre.toLowerCase() === nombreTrim.toLowerCase())) {
+            alert('Ya existe una categoría con ese nombre');
+            return;
+        }
+
+        // Generar ID único
+        const id = 'cat_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+
+        // Usar el fondo de la categoría actual como base para la nueva
+        const categoriaActual = categoriasPersonalizadas.find(c => c.id === estado.categoriaActual);
+        const fondoBase = categoriaActual && categoriaActual.background ? categoriaActual.background : FONDO_DEFAULT;
+
+        const nuevaCategoria = {
+            id: id,
+            nombre: nombreTrim,
+            editable: true,
+            background: { ...fondoBase },
+            accesos: []
+        };
+
+        categoriasPersonalizadas.push(nuevaCategoria);
+        await guardarConfiguracionCompleta();
+
+        renderizarCategorias();
+    } finally {
+        // Siempre liberar el guard, incluso si hay un error o se canceló
+        _agregarCategoriaEnProceso = false;
     }
-
-    if (nombreTrim.length > 20) {
-        alert('El nombre no puede tener más de 20 caracteres');
-        return;
-    }
-
-    // Verificar si ya existe una categoría con ese nombre
-    if (categoriasPersonalizadas.some(c => c.nombre.toLowerCase() === nombreTrim.toLowerCase())) {
-        alert('Ya existe una categoría con ese nombre');
-        return;
-    }
-
-    // Generar ID único
-    const id = 'cat_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
-
-    // Usar el fondo de la categoría actual como base para la nueva
-    const categoriaActual = categoriasPersonalizadas.find(c => c.id === estado.categoriaActual);
-    const fondoBase = categoriaActual && categoriaActual.background ? categoriaActual.background : FONDO_DEFAULT;
-
-    const nuevaCategoria = {
-        id: id,
-        nombre: nombreTrim,
-        editable: true,
-        background: { ...fondoBase },
-        accesos: []
-    };
-
-    categoriasPersonalizadas.push(nuevaCategoria);
-    await guardarConfiguracionCompleta();
-
-    renderizarCategorias();
 }
 
 async function editarCategoria(categoriaId) {
