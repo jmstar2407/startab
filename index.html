@@ -9,8 +9,30 @@
     <!-- Firebase -->
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
 </head>
 <body>
+    <!-- BOTÓN DE AUTENTICACIÓN -->
+    <div class="auth-container" id="auth-container">
+        <button class="auth-btn" id="auth-btn">
+            <span class="auth-btn-text">Iniciar sesión</span>
+        </button>
+        <div class="user-menu" id="user-menu" style="display: none;">
+            <img src="" alt="Perfil" class="user-avatar" id="user-avatar">
+            <div class="user-dropdown" id="user-dropdown">
+                <div class="user-info">
+                    <span class="user-name" id="user-name"></span>
+                    <span class="user-email" id="user-email"></span>
+                </div>
+                <div class="dropdown-divider"></div>
+                <button class="logout-btn" id="logout-btn">
+                    <span class="logout-icon">🚪</span>
+                    Cerrar sesión
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- ICONO DE NOTA MODERNO -->
     <div class="nota-icono-container" id="nota-icono">
         <div class="nota-icono">
