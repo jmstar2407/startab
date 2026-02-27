@@ -147,21 +147,6 @@ function cachearElementos() {
     DOM.logoutBtn = document.getElementById('logout-btn');
 }
 
-// ===== UTILIDADES =====
-const debounce = (fn, delay) => {
-    let timeoutId;
-    return (...args) => {
-        clearTimeout(timeoutId);
-        timeoutId = setTimeout(() => fn(...args), delay);
-    };
-};
-
-const convertirABase64 = file => new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-});
 
 // ===== FUNCIONES DE AUTENTICACIÓN =====
 function inicializarAutenticacion() {
