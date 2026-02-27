@@ -1,4 +1,4 @@
-// script.js - Versión con Autenticación Google Firebase y Datos por Usuario
+// script.js - Versión Optimizada con Configuración Unificada en Firebase
 // Configuración de Firebase
 const firebaseConfig = {
     apiKey: "AIzaSyBU8DyN2kRcDq0fxB20qRUXWBHV0E-0d6A",
@@ -11,18 +11,9 @@ const firebaseConfig = {
 
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
-const auth = firebase.auth();
-const googleProvider = new firebase.auth.GoogleAuthProvider();
-
-// Habilitar persistencia de sesión
-auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
-
-// ===== VARIABLES DE AUTENTICACIÓN =====
-let currentUser = null;
-let userConfigRef = null;
-let unsubscribeUserConfig = null;
 
 // ===== CONSTANTES =====
+const CONFIG_REF = db.collection('accesos_directos').doc('configuracion');
 const MAX_CATEGORIAS = 6;
 
 const URLS_BUSQUEDA = {
@@ -62,39 +53,17 @@ const CATEGORIA_GENERAL = {
     id: 'general',
     nombre: 'General',
     editable: false,
-    background: { ...FONDO_DEFAULT },
+    background: { ...FONDO_DEFAULT }, // ✅ CORREGIDO: era FONGO_DEFAULT
     accesos: []
-};
-
-// Configuración por defecto para nuevos usuarios
-const CONFIG_DEFAULT = {
-    categorias: [
-        {
-            ...CATEGORIA_GENERAL,
-            accesos: obtenerIconosPorDefecto()
-        }
-    ],
-    notas: {
-        nota1: '',
-        nota2: '',
-        nota3: '',
-        nota4: '',
-        nota5: ''
-    },
-    settings: {
-        buscadorActual: 'google',
-        filtroActual: 'web'
-    },
-    metadata: {
-        ultimaModificacion: null,
-        version: "1.0"
-    }
 };
 
 // ===== NOTAS =====
 const NOTA_CONFIG = {
-    coleccion: 'users'
+    coleccion: 'accesos_directos',
+    documento: 'notas'
 };
+
+const notaRef = db.collection(NOTA_CONFIG.coleccion).doc(NOTA_CONFIG.documento);
 
 let notaTimeouts = {};
 let notaEstado = {
@@ -118,8 +87,7 @@ const estado = {
     filtroActual: 'web',
     iconoSeleccionadoIndex: null,
     elementoArrastrado: null,
-    iconosActuales: [],
-    isAuthenticated: false
+    iconosActuales: []
 };
 
 // ===== CACHÉ DE ELEMENTOS DOM =====
@@ -135,16 +103,6 @@ function cachearElementos() {
     DOM.btnPersonalizar = document.getElementById('btn-personalizar');
     DOM.modalIconos = document.getElementById('modal-iconos');
     DOM.modalPersonalizar = document.getElementById('modal-personalizar');
-
-    // Elementos de autenticación
-    DOM.authContainer = document.getElementById('auth-container');
-    DOM.authBtn = document.getElementById('auth-btn');
-    DOM.userMenu = document.getElementById('user-menu');
-    DOM.userAvatar = document.getElementById('user-avatar');
-    DOM.userDropdown = document.getElementById('user-dropdown');
-    DOM.userName = document.getElementById('user-name');
-    DOM.userEmail = document.getElementById('user-email');
-    DOM.logoutBtn = document.getElementById('logout-btn');
 }
 
 // ===== UTILIDADES =====
@@ -163,384 +121,74 @@ const convertirABase64 = file => new Promise((resolve, reject) => {
     reader.readAsDataURL(file);
 });
 
-// ===== FUNCIONES DE AUTENTICACIÓN =====
-function inicializarAutenticacion() {
-    // Escuchar cambios en el estado de autenticación
-    auth.onAuthStateChanged(async (user) => {
-        if (user) {
-            // Usuario autenticado
-            currentUser = user;
-            estado.isAuthenticated = true;
-
-            // Actualizar UI
-            actualizarUIAutenticacion(user);
-
-            // Sincronizar perfil con Firestore
-            await sincronizarPerfilUsuario(user);
-
-            // Cargar configuración del usuario desde Firestore
-            await cargarConfiguracionUsuario(user.uid);
-
-            // Habilitar edición
-            habilitarEdicion(true);
-
-            console.log('Usuario autenticado:', user.displayName);
-        } else {
-            // Usuario no autenticado
-            currentUser = null;
-            estado.isAuthenticated = false;
-
-            // Actualizar UI
-            actualizarUIAutenticacion(null);
-
-            // Desuscribirse deconfiguración anterior
-            if (unsubscribeUserConfig) {
-                unsubscribeUserConfig();
-                unsubscribeUserConfig = null;
-            }
-
-            // Cargar configuración por defecto (local)
-            await cargarConfiguracionLocal();
-
-            // Deshabilitar edición
-            habilitarEdicion(false);
-
-            console.log('Usuario no autenticado');
-        }
-    });
-
-    // Event listeners para botones de auth
-    DOM.authBtn?.addEventListener('click', iniciarSesionGoogle);
-    DOM.logoutBtn?.addEventListener('click', cerrarSesion);
-
-    // Cerrar dropdown al hacer clic fuera
-    document.addEventListener('click', (e) => {
-        if (DOM.userMenu && !DOM.userMenu.contains(e.target)) {
-            DOM.userDropdown.style.display = 'none';
-        }
-    });
-
-    // Toggle dropdown al hacer clic en el avatar
-    DOM.userAvatar?.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const display = DOM.userDropdown.style.display;
-        DOM.userDropdown.style.display = display === 'none' ? 'block' : 'none';
-    });
-}
-
-function actualizarUIAutenticacion(user) {
-    if (user) {
-        // Mostrar avatar y ocultar botón de login
-        DOM.authBtn.style.display = 'none';
-        DOM.userMenu.style.display = 'flex';
-
-        // Actualizar información del usuario
-        DOM.userAvatar.src = user.photoURL || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23667eea"><circle cx="12" cy="12" r="10"/></svg>';
-        DOM.userName.textContent = user.displayName || 'Usuario';
-        DOM.userEmail.textContent = user.email || '';
-    } else {
-        // Mostrar botón de login y ocultar avatar
-        DOM.authBtn.style.display = 'flex';
-        DOM.userMenu.style.display = 'none';
-        DOM.userAvatar.src = '';
-        DOM.userName.textContent = '';
-        DOM.userEmail.textContent = '';
-    }
-}
-
-async function iniciarSesionGoogle() {
+// ===== FUNCIONES DE CONFIGURACIÓN UNIFICADA =====
+async function cargarConfiguracionCompleta() {
     try {
-        DOM.authBtn.disabled = true;
-        DOM.authBtn.innerHTML = '<span class="auth-btn-text">Cargando...</span>';
-
-        const result = await auth.signInWithPopup(googleProvider);
-
-        console.log('Inicio de sesión exitoso:', result.user.displayName);
-    } catch (error) {
-        console.error('Error al iniciar sesión:', error);
-
-        let mensajeError = 'Error al iniciar sesión';
-        if (error.code === 'auth/popup-closed-by-user') {
-            mensajeError = 'Ventana cerrada por el usuario';
-        } else if (error.code === 'auth/account-exists-with-different-credential') {
-            mensajeError = 'Ya existe una cuenta con diferente método de autenticación';
-        }
-
-        alert(mensajeError);
-    } finally {
-        DOM.authBtn.disabled = false;
-        DOM.authBtn.innerHTML = '<span class="auth-btn-text">Iniciar sesión</span>';
-    }
-}
-
-async function cerrarSesion() {
-    try {
-        await auth.signOut();
-        DOM.userDropdown.style.display = 'none';
-        console.log('Sesión cerrada');
-    } catch (error) {
-        console.error('Error al cerrar sesión:', error);
-    }
-}
-
-async function sincronizarPerfilUsuario(user) {
-    if (!user || !user.uid) return;
-
-    try {
-        const userDocRef = db.collection('users').doc(user.uid);
-        const doc = await userDocRef.get();
-
-        if (doc.exists) {
-            const data = doc.data();
-            // Actualizar photoURL si ha cambiado en Google
-            if (data.profile?.photoURL !== user.photoURL) {
-                await userDocRef.set({
-                    profile: {
-                        displayName: user.displayName,
-                        email: user.email,
-                        photoURL: user.photoURL
-                    }
-                }, { merge: true });
+        const doc = await CONFIG_REF.get();
+        
+        if (doc.exists && doc.data().categorias) {
+            categoriasPersonalizadas = doc.data().categorias;
+            
+            // Verificar que la categoría General existe
+            const tieneGeneral = categoriasPersonalizadas.some(c => c.id === 'general');
+            if (!tieneGeneral) {
+                categoriasPersonalizadas.unshift({ ...CATEGORIA_GENERAL });
+                await guardarConfiguracionCompleta();
             }
         } else {
-            // Crear documento de usuario con perfil
-            await userDocRef.set({
-                profile: {
-                    displayName: user.displayName,
-                    email: user.email,
-                    photoURL: user.photoURL
+            // Primera vez: crear configuración inicial
+            categoriasPersonalizadas = [
+                {
+                    ...CATEGORIA_GENERAL,
+                    accesos: obtenerIconosPorDefecto()
                 }
-            }, { merge: true });
-        }
-    } catch (error) {
-        console.error('Error al sincronizar perfil:', error);
-    }
-}
-
-// ===== CONFIGURACIÓN POR USUARIO =====
-async function cargarConfiguracionUsuario(uid) {
-    try {
-        // Desuscribirse deconfiguración anterior si existe
-        if (unsubscribeUserConfig) {
-            unsubscribeUserConfig();
+            ];
+            await guardarConfiguracionCompleta();
         }
 
-        // Referencia al documento del usuario
-        userConfigRef = db.collection('users').doc(uid);
-
-        // Escuchar cambios en tiempo real
-        unsubscribeUserConfig = userConfigRef.onSnapshot(async (doc) => {
-            if (doc.exists) {
-                const data = doc.data();
-
-                // Cargar categorías
-                if (data.categorias && data.categorias.length > 0) {
-                    categoriasPersonalizadas = data.categorias;
-                } else {
-                    // Nueva configuración por defecto
-                    categoriasPersonalizadas = [
-                        {
-                            ...CATEGORIA_GENERAL,
-                            accesos: obtenerIconosPorDefecto()
-                        }
-                    ];
-                    await guardarConfiguracionCompleta();
-                }
-
-                // Cargar notas
-                if (data.notas) {
-                    for (let i = 1; i <= 5; i++) {
-                        if (data.notas[`nota${i}`]) {
-                            notaEstado.notas[i].contenido = data.notas[`nota${i}`];
-                        }
-                    }
-                }
-
-                // Cargar configuración del buscador
-                if (data.settings) {
-                    if (data.settings.buscadorActual) {
-                        estado.buscadorActual = data.settings.buscadorActual;
-                        localStorage.setItem('buscadorSeleccionado', estado.buscadorActual);
-                    }
-                    if (data.settings.filtroActual) {
-                        estado.filtroActual = data.settings.filtroActual;
-                    }
-                }
-
-                // Validar categoría actual
-                if (!categoriasPersonalizadas.some(c => c.id === estado.categoriaActual)) {
-                    estado.categoriaActual = 'general';
-                    localStorage.setItem('categoriaSeleccionada', 'general');
-                }
-
-                // Actualizar estado.iconosActuales
-                const categoriaActual = categoriasPersonalizadas.find(c => c.id === estado.categoriaActual);
-                estado.iconosActuales = categoriaActual?.accesos || [];
-
-                // Renderizar
-                renderizarCategorias();
-                actualizarBuscadorUI();
-                actualizarPlaceholder();
-                await aplicarFondoCategoria(estado.categoriaActual);
-                await renderizarIconos();
-
-                // Actualizar notas si el modal está abierto
-                const notaDOM = {
-                    textarea: document.getElementById('nota-textarea')
-                };
-                if (notaDOM.textarea) {
-                    cargarNota(notaEstado.notaActual, notaDOM);
-                }
-
-                console.log('Configuración cargada desde Firestore');
-            } else {
-                // Primer inicio de sesión - crear configuración por defecto
-                console.log('Creando configuración por defecto para nuevo usuario');
-                await crearConfiguracionPorDefecto(uid);
-            }
-        }, (error) => {
-            console.error('Error al escuchar configuración:', error);
-            // Si hay error, cargar configuración local
-            cargarConfiguracionLocal();
-        });
-
-    } catch (error) {
-        console.error('Error al cargar configuración de usuario:', error);
-        await cargarConfiguracionLocal();
-    }
-}
-
-async function crearConfiguracionPorDefecto(uid) {
-    try {
-        const configInicial = { ...CONFIG_DEFAULT };
-        configInicial.profile = {
-            displayName: currentUser?.displayName || 'Usuario',
-            email: currentUser?.email || '',
-            photoURL: currentUser?.photoURL || ''
-        };
-
-        await db.collection('users').doc(uid).set(configInicial);
-        console.log('Configuración por defecto creada');
-    } catch (error) {
-        console.error('Error al crear configuración por defecto:', error);
-    }
-}
-
-async function cargarConfiguracionLocal() {
-    // Cargar configuración por defecto sin usuario
-    categoriasPersonalizadas = [
-        {
-            ...CATEGORIA_GENERAL,
-            accesos: obtenerIconosPorDefecto()
+        // Validar categoría actual
+        if (!categoriasPersonalizadas.some(c => c.id === estado.categoriaActual)) {
+            estado.categoriaActual = 'general';
+            localStorage.setItem('categoriaSeleccionada', 'general');
         }
-    ];
 
-    // Reiniciar notas
-    for (let i = 1; i <= 5; i++) {
-        notaEstado.notas[i].contenido = '';
+        // Actualizar estado.iconosActuales con los accesos de la categoría actual
+        const categoriaActual = categoriasPersonalizadas.find(c => c.id === estado.categoriaActual);
+        estado.iconosActuales = categoriaActual?.accesos || [];
+
+        renderizarCategorias();
+        await aplicarFondoCategoria(estado.categoriaActual);
+        await renderizarIconos();
+        
+    } catch (error) {
+        console.error('Error al cargar configuración:', error);
     }
-
-    // Renderizar
-    renderizarCategorias();
-    await aplicarFondoCategoria(estado.categoriaActual);
-    await renderizarIconos();
-
-    console.log('Configuración local cargada');
 }
 
 async function guardarConfiguracionCompleta() {
     try {
-        if (currentUser && userConfigRef) {
-            // Guardar en Firestore para el usuario
-            await userConfigRef.set({
-                categorias: categoriasPersonalizadas,
-                metadata: {
-                    ultimaModificacion: firebase.firestore.FieldValue.serverTimestamp(),
-                    version: "1.0"
-                }
-            }, { merge: true });
-        }
-        // Si no hay usuario, no se guarda nada (solo se mantiene en memoria)
+        await CONFIG_REF.set({
+            categorias: categoriasPersonalizadas,
+            metadata: {
+                ultimaModificacion: firebase.firestore.FieldValue.serverTimestamp(),
+                version: "1.0"
+            }
+        });
     } catch (error) {
         console.error('Error al guardar configuración:', error);
     }
-}
-
-async function guardarConfiguracionNotas() {
-    try {
-        if (currentUser && userConfigRef) {
-            const notasData = {};
-            for (let i = 1; i <= 5; i++) {
-                notasData[`nota${i}`] = notaEstado.notas[i].contenido || '';
-            }
-
-            await userConfigRef.set({
-                notas: notasData,
-                metadata: {
-                    ultimaModificacion: firebase.firestore.FieldValue.serverTimestamp()
-                }
-            }, { merge: true });
-        }
-    } catch (error) {
-        console.error('Error al guardar notas:', error);
-    }
-}
-
-async function guardarConfiguracionBuscador() {
-    try {
-        if (currentUser && userConfigRef) {
-            await userConfigRef.set({
-                settings: {
-                    buscadorActual: estado.buscadorActual,
-                    filtroActual: estado.filtroActual
-                },
-                metadata: {
-                    ultimaModificacion: firebase.firestore.FieldValue.serverTimestamp()
-                }
-            }, { merge: true });
-        }
-    } catch (error) {
-        console.error('Error al guardar configuración de buscador:', error);
-    }
-}
-
-// ===== HABILITAR/DESABILITAR EDICIÓN =====
-function habilitarEdicion(habilitar) {
-    // Botón agregar acceso directo
-    if (DOM.btnAgregar) {
-        DOM.btnAgregar.style.display = habilitar ? 'flex' : 'none';
-    }
-
-    // Botón personalizar fondo
-    if (DOM.btnPersonalizar) {
-        DOM.btnPersonalizar.style.display = habilitar ? 'flex' : 'none';
-    }
-
-    // Categorías - agregar nueva
-    const btnAgregarCategoria = document.getElementById('btn-agregar-categoria');
-    if (btnAgregarCategoria) {
-        btnAgregarCategoria.style.display = habilitar ? 'inline-flex' : 'none';
-    }
-
-    // Menú contextual para editar/eliminar iconos
-    // Esto se maneja en el renderizado de iconos
-
-    // Actualizar estado
-    estado.isAuthenticated = habilitar;
-
-    console.log('Edición', habilitar ? 'habilitada' : 'deshabilitada');
 }
 
 // ===== FUNCIONES DE CATEGORÍAS =====
 function renderizarCategorias() {
     const container = document.querySelector('.categorias-container');
     if (!container) return;
-
+    
     let html = '';
-
+    
     categoriasPersonalizadas.forEach(cat => {
         const activo = cat.id === estado.categoriaActual ? 'activo' : '';
-
+        
         html += `
             <div class="categoria-wrapper" data-categoria-id="${cat.id}" data-categoria-editable="${cat.editable !== false}">
                 <button class="categoria-btn ${activo}" data-categoria="${cat.id}">
@@ -549,7 +197,7 @@ function renderizarCategorias() {
             </div>
         `;
     });
-
+    
     // Botón para agregar nueva categoría (si no se ha alcanzado el límite)
     if (categoriasPersonalizadas.length < MAX_CATEGORIAS) {
         html += `
@@ -558,42 +206,35 @@ function renderizarCategorias() {
             </button>
         `;
     }
-
+    
     container.innerHTML = html;
-
-    // Delegar eventos al contenedor para categorías nuevas
-    // Esto evita el problema de eventos no asignados a elementos dinámicos
-    container.onclick = null; // Limpiar evento anterior
-    container.addEventListener('click', (e) => {
-        // Handle category button click
-        const btn = e.target.closest('.categoria-btn[data-categoria]');
-        if (btn) {
+    
+    // Event listeners para categorías (clic normal)
+    document.querySelectorAll('.categoria-btn[data-categoria]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
             const categoriaId = btn.dataset.categoria;
             cambiarCategoria(categoriaId);
-            return;
-        }
-
-        // Handle add category button
-        const addBtn = e.target.closest('#btn-agregar-categoria');
-        if (addBtn) {
-            agregarCategoria();
-        }
+        });
     });
-
-    // Delegar evento de menú contextual
-    container.oncontextmenu = null;
-    container.addEventListener('contextmenu', (e) => {
-        const wrapper = e.target.closest('.categoria-wrapper');
-        if (wrapper) {
+    
+    // Event listeners para menú contextual (clic derecho)
+    document.querySelectorAll('.categoria-wrapper').forEach(wrapper => {
+        wrapper.addEventListener('contextmenu', (e) => {
             e.preventDefault();
             const categoriaId = wrapper.dataset.categoriaId;
             const esEditable = wrapper.dataset.categoriaEditable === 'true';
-
+            
             if (esEditable) {
                 mostrarMenuContextualCategoria(e, categoriaId);
             }
-        }
+        });
     });
+    
+    // Event listener para agregar categoría
+    const btnAgregar = document.getElementById('btn-agregar-categoria');
+    if (btnAgregar) {
+        btnAgregar.addEventListener('click', agregarCategoria);
+    }
 }
 
 function actualizarCategoriasUI() {
@@ -618,29 +259,6 @@ async function cambiarCategoria(categoriaId) {
 }
 
 function mostrarMenuContextualCategoria(event, categoriaId) {
-    // Verificar si el usuario está autenticado
-    if (!estado.isAuthenticated) {
-        // Cerrar menú contextual existente
-        document.querySelector('.menu-contextual-categoria')?.remove();
-
-        const menu = document.createElement('div');
-        menu.className = 'menu-contextual menu-contextual-categoria';
-        menu.style.cssText = `left:${event.clientX}px;top:${event.clientY}px`;
-        menu.innerHTML = `
-            <div class="menu-item" style="cursor: default;">
-                <span class="menu-icono">🔒</span>Inicia sesión para editar
-            </div>
-        `;
-
-        document.body.appendChild(menu);
-
-        setTimeout(() => {
-            menu.remove();
-        }, 2000);
-
-        return;
-    }
-
     // Cerrar menú contextual existente
     document.querySelector('.menu-contextual-categoria')?.remove();
 
@@ -659,7 +277,7 @@ function mostrarMenuContextualCategoria(event, categoriaId) {
             <span class="menu-icono">🗑️</span>Eliminar categoría
         </div>
     `;
-
+    
     document.body.appendChild(menu);
     
     // Obtener dimensiones reales
@@ -977,29 +595,6 @@ async function handleDrop(e) {
 
 // ===== MENÚ CONTEXTUAL =====
 function mostrarMenuContextual(event, icono) {
-    // Verificar si el usuario está autenticado
-    if (!estado.isAuthenticated) {
-        // Mostrar mensaje de que debe iniciar sesión
-        document.querySelector('.menu-contextual')?.remove();
-
-        const menu = document.createElement('div');
-        menu.className = 'menu-contextual';
-        menu.style.cssText = `left:${event.clientX}px;top:${event.clientY}px`;
-        menu.innerHTML = `
-            <div class="menu-item" style="cursor: default;">
-                <span class="menu-icono">🔒</span>Inicia sesión para editar
-            </div>
-        `;
-
-        document.body.appendChild(menu);
-
-        setTimeout(() => {
-            menu.remove();
-        }, 2000);
-
-        return;
-    }
-
     document.querySelector('.menu-contextual')?.remove();
 
     const menu = document.createElement('div');
@@ -1009,7 +604,7 @@ function mostrarMenuContextual(event, icono) {
         <div class="menu-item" data-action="editar"><span class="menu-icono">✏️</span>Editar</div>
         <div class="menu-item" data-action="eliminar"><span class="menu-icono">🗑️</span>Eliminar</div>
     `;
-
+    
     document.body.appendChild(menu);
 
     menu.addEventListener('click', async e => {
@@ -1237,17 +832,16 @@ async function guardarFondoCategoria(nuevaConfiguracion) {
             tipo: nuevaConfiguracion.tipo,
             url: nuevaConfiguracion.url,
             opacidad: nuevaConfiguracion.opacidad,
-            desenblur: nuevaConfiguracion.desenblur,
+            desenfoque: nuevaConfiguracion.desenfoque,
             colorInicio: nuevaConfiguracion.colorInicio,
             colorFin: nuevaConfiguracion.colorFin
         };
 
-        // Guardar toda la configuración en Firebase
+        // Guardar toda la configuración
         await guardarConfiguracionCompleta();
 
-        // Aplicar el fondo INMEDIATAMENTE (sin esperar a Firebase)
-        // Esto da feedback instantáneo al usuario
-        await aplicarFondoCategoria(estado.categoriaActual);
+        // Aplicar el fondo
+        aplicarFondoConFade(categoriasPersonalizadas[categoriaIndex].background);
     } catch (error) {
         console.error('Error al guardar fondo:', error);
     }
@@ -1833,42 +1427,29 @@ function cambiarNota(notaNum, notaDOM) {
 
 async function cargarNotasDeFirebase(notaDOM) {
     try {
-        // Si no hay usuario autenticado, cargar notas vacías
-        if (!currentUser || !userConfigRef) {
-            console.log('Usuario no autenticado - mostrando notas locales');
-            for (let i = 1; i <= 5; i++) {
-                const notaDefault = `📝 Nota ${i}\n\n• Inicia sesión para sincronizar tus notas\n• Se guardarán automáticamente en la nube\n• Accede desde cualquier dispositivo\n\n¡Empieza a escribir! ✨`;
-                notaEstado.notas[i].contenido = notaDefault;
-            }
-            cargarNota(1, notaDOM);
-            actualizarEstadoSync('sincronizado', 'Sin sesión', notaDOM);
-            return;
-        }
-
         actualizarEstadoSync('sincronizando', 'Cargando...', notaDOM);
-
-        const doc = await userConfigRef.get();
-
-        if (doc.exists && doc.data() && doc.data().notas) {
+        
+        const doc = await notaRef.get();
+        
+        if (doc.exists && doc.data()) {
             const data = doc.data();
-
+            
             for (let i = 1; i <= 5; i++) {
-                if (data.notas[`nota${i}`]) {
-                    notaEstado.notas[i].contenido = data.notas[`nota${i}`];
+                if (data[`nota${i}`]) {
+                    notaEstado.notas[i].contenido = data[`nota${i}`];
                 } else {
                     const notaDefault = `📝 Nota ${i}\n\n• Escribe lo que necesites recordar\n• Se guarda automáticamente\n• Sincronizado con todos tus dispositivos\n• Atajo: Ctrl+${i} para cambiar\n\n¡Empieza a escribir! ✨`;
                     notaEstado.notas[i].contenido = notaDefault;
                 }
             }
         } else {
-            // Primer usuario - crear notas por defecto
             for (let i = 1; i <= 5; i++) {
                 const notaDefault = `📝 Nota ${i}\n\n• Escribe lo que necesites recordar\n• Se guarda automáticamente\n• Sincronizado con todos tus dispositivos\n• Atajo: Ctrl+${i} para cambiar\n\n¡Empieza a escribir! ✨`;
                 notaEstado.notas[i].contenido = notaDefault;
             }
             await guardarTodasLasNotasEnFirebase();
         }
-
+        
         cargarNota(1, notaDOM);
         actualizarEstadoSync('sincronizado', 'Sincronizado', notaDOM);
     } catch (error) {
@@ -1921,19 +1502,14 @@ function guardarNotaEnTiempoReal(notaNum, texto, notaDOM) {
 
 async function guardarNotaEnFirebase(notaNum, texto) {
     try {
-        // Solo guardar si hay usuario autenticado
-        if (!currentUser || !userConfigRef) {
-            console.log('Nota guardada solo en memoria (sin usuario)');
-            return;
-        }
-
         notaEstado.notas[notaNum].contenido = texto;
-
+        
         const updateData = {};
-        updateData[`notas.nota${notaNum}`] = texto;
-        updateData['metadata.ultimaModificacion'] = firebase.firestore.FieldValue.serverTimestamp();
-
-        await userConfigRef.set(updateData, { merge: true });
+        updateData[`nota${notaNum}`] = texto;
+        updateData[`ultimaModificacion_nota${notaNum}`] = firebase.firestore.FieldValue.serverTimestamp();
+        updateData.ultimaModificacion = firebase.firestore.FieldValue.serverTimestamp();
+        
+        await notaRef.set(updateData, { merge: true });
     } catch (error) {
         throw error;
     }
@@ -1941,22 +1517,18 @@ async function guardarNotaEnFirebase(notaNum, texto) {
 
 async function guardarTodasLasNotasEnFirebase() {
     try {
-        // Solo guardar si hay usuario autenticado
-        if (!currentUser || !userConfigRef) {
-            console.log('Notas guardadas solo en memoria (sin usuario)');
-            return;
-        }
-
-        const notasData = {};
+        const data = {
+            ultimaModificacion: firebase.firestore.FieldValue.serverTimestamp()
+        };
+        
         for (let i = 1; i <= 5; i++) {
             if (notaEstado.notas[i] && notaEstado.notas[i].contenido) {
-                notasData[`notas.nota${i}`] = notaEstado.notas[i].contenido;
+                data[`nota${i}`] = notaEstado.notas[i].contenido;
+                data[`ultimaModificacion_nota${i}`] = firebase.firestore.FieldValue.serverTimestamp();
             }
         }
-
-        notasData['metadata.ultimaModificacion'] = firebase.firestore.FieldValue.serverTimestamp();
-
-        await userConfigRef.set(notasData, { merge: true });
+        
+        await notaRef.set(data, { merge: true });
     } catch (error) {
         console.error('Error al guardar todas las notas:', error);
         throw error;
@@ -2034,16 +1606,11 @@ function cerrarModalNota(notaDOM) {
 document.addEventListener('DOMContentLoaded', () => {
     cachearElementos();
 
-    // Inicializar autenticación primero
-    // Esto disparará la carga de configuración según el estado del usuario
-    inicializarAutenticacion();
+    // Cargar toda la configuración de una vez
+    cargarConfiguracionCompleta();
 
-    // Inicializar resto de componentes
     inicializarBarraBusqueda();
     inicializarNota();
     inicializarModalIconos();
     inicializarModalPersonalizar();
-
-    // Deshabilitar edición inicialmente (hasta que se verifique auth)
-    habilitarEdicion(false);
 });

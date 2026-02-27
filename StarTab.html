@@ -1,78 +1,245 @@
 <!-- StarTab.html -->
 <!DOCTYPE html>
 <html lang="es">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>StarTab - Tu página de inicio personalizada</title>
+    <title>StarTab</title>
     <link rel="stylesheet" href="styles.css">
     <!-- Firebase -->
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
 </head>
-
 <body>
+    <!-- ICONO DE NOTA MODERNO -->
+    <div class="nota-icono-container" id="nota-icono">
+        <div class="nota-icono">
+            <span class="nota-icono-emoji">📝</span>
+        </div>
+        <span class="nota-icono-tooltip">Notas rápidas (Ctrl+N)</span>
+    </div>
+
+    <!-- MODAL DE NOTA MODERNO -->
+    <div class="nota-modal" id="nota-modal">
+        <div class="nota-modal-contenido">
+            <div class="nota-modal-header">
+                <h2 class="nota-modal-titulo">
+                    <span class="nota-modal-icono">📝</span>
+                    Notas rápidas
+                </h2>
+                <button class="nota-modal-cerrar" id="nota-modal-cerrar">×</button>
+            </div>
+            <div class="nota-modal-body">
+                <div class="notes-box">
+                    <textarea class="nota-textarea" id="nota-textarea" placeholder="Nota 1 - Escribe aquí..." spellcheck="false"></textarea>
+                    <div class="nota-stats">
+                        <span id="nota-char-count">0 caracteres</span>
+                    </div>
+                </div>
+                <div class="nota-botones-container">
+                    <button class="nota-btn-numero activo" data-nota="1" title="Nota 1 (Ctrl+1)">1</button>
+                    <button class="nota-btn-numero" data-nota="2" title="Nota 2 (Ctrl+2)">2</button>
+                    <button class="nota-btn-numero" data-nota="3" title="Nota 3 (Ctrl+3)">3</button>
+                    <button class="nota-btn-numero" data-nota="4" title="Nota 4 (Ctrl+4)">4</button>
+                    <button class="nota-btn-numero" data-nota="5" title="Nota 5 (Ctrl+5)">5</button>
+                </div>
+            </div>
+            <div class="nota-modal-footer">
+                <div class="nota-footer-info">
+                    <span class="nota-sync-icon" id="nota-sync-icon">🔄</span>
+                    <span class="nota-sync-text" id="nota-sync-text">Sincronizado</span>
+                </div>
+                <button class="nota-btn nota-btn-copiar" id="nota-btn-copiar">
+                    <span class="nota-btn-icono">📋</span>
+                    Copiar nota
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DE ICONOS (AGREGAR/EDITAR) -->
+    <div class="modal-moderno" id="modal-iconos">
+        <div class="modal-moderno-contenido">
+            <div class="modal-header">
+                <h2>Agregar acceso directo</h2>
+                <button class="modal-cerrar" id="cerrar-modal-iconos">×</button>
+            </div>
+            <div class="modal-contenido-scroll">
+                <div class="modal-grid">
+                    <div class="modal-preview">
+                        <h3>Vista previa</h3>
+                        <div class="preview-container">
+                            <div class="preview-icono" id="preview-icono" style="background-color:transparent; border-radius:50%; width:150px; height:150px; display:flex; align-items:center; justify-content:center; margin:0 auto;">
+                                <img src="https://via.placeholder.com/64" alt="Preview" id="preview-img" style="width:74%; height:74%; object-fit:contain;">
+                            </div>
+                        </div>
+                        <div class="control-grupo">
+                            <div class="checkbox-container">
+                                <input type="checkbox" id="tiene-fondo-icono">
+                                <label for="tiene-fondo-icono">Agregar fondo al icono</label>
+                            </div>
+                        </div>
+                        <div class="control-grupo" id="color-fondo-container" style="display:none">
+                            <label>Color de fondo</label>
+                            <div class="color-picker-container">
+                                <input type="color" id="color-fondo-icono" value="#667eea">
+                                <span class="color-valor" id="color-valor">#667eea</span>
+                            </div>
+                        </div>
+                        <div class="control-grupo">
+                            <div class="control-label">
+                                <label>Borde redondeado</label>
+                                <span class="control-valor" id="radio-valor">50%</span>
+                            </div>
+                            <input type="range" id="radio-borde-icono" min="0" max="100" value="50" class="control-range">
+                            <div class="range-marks"><span>0%</span><span>50%</span><span>100%</span></div>
+                        </div>
+                        <div class="control-grupo">
+                            <div class="control-label">
+                                <label>Tamaño del icono</label>
+                                <span class="control-valor" id="tamano-valor">74%</span>
+                            </div>
+                            <input type="range" id="tamano-icono" min="30" max="100" value="74" class="control-range">
+                            <div class="range-marks"><span>30%</span><span>65%</span><span>100%</span></div>
+                        </div>
+                    </div>
+                    <div class="modal-controles">
+                        <h3>DETALLES DEL SITIO</h3>
+                        <div class="control-separador"></div>
+                        <div class="control-grupo">
+                            <label>Nombre del sitio</label>
+                            <input type="text" id="nombre-sitio" placeholder="Ej: Google" class="control-input">
+                        </div>
+                        <div class="control-grupo">
+                            <label>URL</label>
+                            <input type="url" id="url-sitio" placeholder="https://ejemplo.com" class="control-input">
+                        </div>
+                        <div class="control-grupo">
+                            <label>URL del icono (opcional)</label>
+                            <input type="url" id="icono-sitio" placeholder="https://ejemplo.com/icono.png" class="control-input">
+                        </div>
+                        <div class="control-grupo">
+                            <label>O sube una imagen local</label>
+                            <div class="file-upload-container">
+                                <input type="file" id="icono-file" accept="image/*" class="file-input">
+                                <label for="icono-file" class="file-label">
+                                    <span class="file-icon">📁</span>
+                                    <span class="file-text">Seleccionar imagen</span>
+                                </label>
+                                <div class="file-name" id="file-name"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-botones">
+                <button class="btn-secundario" id="cancelar-icono">Cancelar</button>
+                <button class="btn-primario" id="guardar-icono">Guardar cambios</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DE PERSONALIZACIÓN DE FONDO -->
+    <div class="modal-personalizar" id="modal-personalizar">
+        <div class="modal-personalizar-contenido">
+            <h2>Personalizar fondo</h2>
+            <div class="personalizar-input-group">
+                <label>Tipo de fondo:</label>
+                <select id="fondo-tipo" class="control-input">
+                    <option value="gradiente">Gradiente</option>
+                    <option value="imagen">Imagen</option>
+                    <option value="video">Video</option>
+                </select>
+            </div>
+            
+            <div id="imagenes-predefinidas" style="display: none;">
+                <h3>Imágenes predefinidas</h3>
+                <div class="opciones-fondo" id="opciones-imagenes">
+                    <div class="opcion-fondo" data-tipo="imagen" data-url="img/backgrounds/img_background_1.jpg">
+                        <img src="img/backgrounds/img_background_1.jpg" alt="Fondo 1" loading="lazy">
+                    </div>
+                    <div class="opcion-fondo" data-tipo="imagen" data-url="img/backgrounds/img_background_2.jpg">
+                        <img src="img/backgrounds/img_background_2.jpg" alt="Fondo 2" loading="lazy">
+                    </div>
+                    <div class="opcion-fondo" data-tipo="imagen" data-url="img/backgrounds/img_background_3.jpg">
+                        <img src="img/backgrounds/img_background_3.jpg" alt="Fondo 3" loading="lazy">
+                    </div>
+                    <div class="opcion-fondo" data-tipo="imagen" data-url="img/backgrounds/img_background_4.jpg">
+                        <img src="img/backgrounds/img_background_4.jpg" alt="Fondo 4" loading="lazy">
+                    </div>
+                </div>
+            </div>
+            
+            <div id="videos-predefinidos" style="display: none;">
+                <h3>Videos predefinidos</h3>
+                <div class="opciones-fondo" id="opciones-videos">
+                    <div class="opcion-fondo" data-tipo="video" data-url="img/backgrounds/vid_background_1.mp4">
+                        <video src="img/backgrounds/vid_background_1.mp4" muted loop playsinline></video>
+                    </div>
+                    <div class="opcion-fondo" data-tipo="video" data-url="img/backgrounds/vid_background_2.mp4">
+                        <video src="img/backgrounds/vid_background_2.mp4" muted loop playsinline></video>
+                    </div>
+                    <div class="opcion-fondo" data-tipo="video" data-url="img/backgrounds/vid_background_3.mp4">
+                        <video src="img/backgrounds/vid_background_3.mp4" muted loop playsinline></video>
+                    </div>
+                    <div class="opcion-fondo" data-tipo="video" data-url="img/backgrounds/vid_background_4.mp4">
+                        <video src="img/backgrounds/vid_background_4.mp4" muted loop playsinline></video>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="personalizar-input-group">
+                <label>URL personalizada (opcional):</label>
+                <input type="url" id="fondo-url-input" placeholder="https://ejemplo.com/imagen.jpg o video.mp4" class="control-input">
+            </div>
+            
+            <div class="personalizar-input-group" id="grupo-colores">
+                <label>Color inicio gradiente:</label>
+                <input type="color" id="color-inicio" value="#667eea" class="color-input">
+                <label style="margin-top:10px">Color fin gradiente:</label>
+                <input type="color" id="color-fin" value="#764ba2" class="color-input">
+            </div>
+            
+            <div class="range-group">
+                <div class="range-header">
+                    <label for="fondo-opacidad">Opacidad</label>
+                    <span class="range-value" id="opacidad-valor">20%</span>
+                </div>
+                <input type="range" id="fondo-opacidad" min="0" max="100" value="20" class="control-range">
+                <div class="range-marks">
+                    <span>0% (más claro)</span>
+                    <span>100% (más oscuro)</span>
+                </div>
+            </div>
+
+            <div class="range-group">
+                <div class="range-header">
+                    <label for="fondo-desenfoque">Desenfoque</label>
+                    <span class="range-value" id="desenfoque-valor">0px</span>
+                </div>
+                <input type="range" id="fondo-desenfoque" min="0" max="20" value="0" step="1" class="control-range">
+                <div class="range-marks">
+                    <span>0px</span>
+                    <span>10px</span>
+                    <span>20px</span>
+                </div>
+            </div>
+            
+            <h3>Vista previa</h3>
+            <div class="preview-fondo" id="preview-fondo"></div>
+            <video class="preview-video" id="preview-video" muted loop playsinline style="display:none"></video>
+            
+            <div class="personalizar-botones">
+                <button class="btn-secundario" id="cancelar-personalizacion">Cancelar</button>
+                <button class="btn-primario" id="guardar-personalizacion">Guardar cambios</button>
+            </div>
+        </div>
+    </div>
+
     <div class="box-master">
-        <!-- CONTENEDOR DE AUTENTICACIÓN -->
-        <div class="auth-container">
-            <!-- Botón de inicio de sesión -->
-            <div class="btn-login" id="btn-login">
-                <span class="btn-login-icono">👤</span>
-                <span>Iniciar sesión</span>
-            </div>
-            
-            <!-- Avatar de usuario (visible cuando está autenticado) -->
-            <div class="user-avatar" id="user-avatar">
-                <img src="https://via.placeholder.com/45" alt="Avatar">
-            </div>
-            
-            <!-- Menú de usuario -->
-            <div class="user-menu" id="user-menu"></div>
-        </div>
-
-        <!-- ICONO DE NOTA MODERNO -->
-        <div class="nota-icono-container" id="nota-icono">
-            <div class="nota-icono">
-                <span class="nota-icono-emoji">📝</span>
-            </div>
-            <span class="nota-icono-tooltip">Notas rápidas (Ctrl+N)</span>
-        </div>
-
-        <!-- SECCIÓN DE INFORMACIÓN (Dólar y Clima) -->
-        <div class="info-util-container" id="info-util">
-            <!-- Precio del Dólar -->
-            <div class="info-item" id="info-dolar" title="Click para buscar en Google">
-                <div class="info-icono">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" />
-                        <path d="M12 6v12M8 10h8M8 14h8" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
-                    </svg>
-                </div>
-                <div class="info-contenido">
-                    <span class="info-label">USD/DOP</span>
-                    <span class="info-valor" id="valor-dolar">Cargando...</span>
-                </div>
-            </div>
-
-            <!-- Clima Santo Domingo -->
-            <div class="info-item" id="info-clima" title="Click para buscar el clima en Google">
-                <div class="info-icono" id="icono-clima">
-                    <!-- Icono dinámico del clima -->
-                </div>
-                <div class="info-contenido">
-                    <span class="info-label">Santo Domingo</span>
-                    <span class="info-valor" id="valor-clima">Cargando...</span>
-                </div>
-            </div>
-        </div>
-
-        <!-- BARRA DE BÚSQUEDA MODERNA -->
         <div class="contenedor-busqueda">
             <h1 class="titulo">StarTab</h1>
 
-            <!-- Selector de buscadores (círculos) -->
             <div class="selectores-buscador">
                 <div class="circulo-buscador activo" data-buscador="google" title="Google">
                     <img src="./img/icons/google_1.png" alt="Google">
@@ -85,7 +252,6 @@
                 </div>
             </div>
 
-            <!-- Caja de búsqueda -->
             <div class="caja-busqueda">
                 <input type="text" id="barra-busqueda" placeholder="Buscar en la web...">
                 <div class="iconos-busqueda">
@@ -101,7 +267,6 @@
                 </div>
             </div>
 
-            <!-- Filtros de búsqueda -->
             <div class="filtros-busqueda">
                 <div class="filtro-item activo" data-filtro="web">Web</div>
                 <div class="filtro-item" data-filtro="imagenes">Imágenes</div>
@@ -110,69 +275,23 @@
             </div>
         </div>
 
-        <!-- CONTENEDOR DE ICONOS -->
         <div class="contenedor-iconos-master">
-            <div class="contenedor-iconos" id="contenedor-iconos">
-                <!-- Los iconos se renderizan dinámicamente -->
-            </div>
+            <div class="contenedor-iconos" id="contenedor-iconos"></div>
         </div>
 
-        <!-- CATEGORÍAS -->
-        <div class="categorias-container">
-            <!-- Se renderizan dinámicamente -->
-        </div>
-
-        <!-- BOTONES FLOTANTES -->
-        <div class="agregar-icono">
-            <button id="btn-agregar" title="Agregar acceso directo">+</button>
-        </div>
-
-        <button id="btn-personalizar" class="btn-personalizar" title="Personalizar fondo">
-            <span class="btn-personalizar-icono">🎨</span>
-        </button>
+<div class="categorias-container">
+    <!-- Las categorías se generan dinámicamente -->
+</div>
     </div>
 
-    <!-- MODAL DE NOTA MODERNO -->
-    <div class="nota-modal" id="nota-modal">
-        <div class="nota-modal-contenido">
-            <div class="nota-modal-header">
-                <h2 class="nota-modal-titulo">
-                    <span class="nota-modal-icono">📝</span>
-                    Notas rápidas
-                </h2>
-                <button class="nota-modal-cerrar" id="nota-modal-cerrar">×</button>
-            </div>
-            <div class="nota-modal-body">
-                <div class="notes-box">
-                    <textarea class="nota-textarea" id="nota-textarea" placeholder="Nota 1 - Escribe aquí..."
-                        spellcheck="false"></textarea>
-                    <div class="nota-stats">
-                        <span id="nota-char-count">0 caracteres</span>
-                    </div>
-                </div>
-
-                <div class="nota-botones-container">
-                    <button class="nota-btn-numero activo" data-nota="1" title="Nota 1 (Ctrl+1)">1</button>
-                    <button class="nota-btn-numero" data-nota="2" title="Nota 2 (Ctrl+2)">2</button>
-                    <button class="nota-btn-numero" data-nota="3" title="Nota 3 (Ctrl+3)">3</button>
-                    <button class="nota-btn-numero" data-nota="4" title="Nota 4 (Ctrl+4)">4</button>
-                    <button class="nota-btn-numero" data-nota="5" title="Nota 5 (Ctrl+5)">5</button>
-                </div>
-            </div>
-            <div class="nota-modal-footer">
-                <div class="nota-footer-info">
-                    <span class="nota-sync-icon" id="nota-sync-icon">🔄</span>
-                    <span class="nota-sync-text" id="nota-sync-text">Listo</span>
-                </div>
-                <button class="nota-btn nota-btn-copiar" id="nota-btn-copiar">
-                    <span class="nota-btn-icono">📋</span>
-                    Copiar nota
-                </button>
-            </div>
-        </div>
+    <div class="agregar-icono">
+        <button id="btn-agregar" title="Agregar acceso directo">+</button>
     </div>
+
+    <button id="btn-personalizar" class="btn-personalizar" title="Personalizar fondo">
+        <span class="btn-personalizar-icono">🎨</span>
+    </button>
 
     <script src="script.js"></script>
 </body>
-
 </html>
