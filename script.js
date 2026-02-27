@@ -481,7 +481,7 @@ function mostrarIndicadorSync(estado) {
         indicator.style.cssText = `
             position: fixed;
             bottom: 18px;
-            right: 18px;
+            left: 18px;
             padding: 6px 14px;
             border-radius: 20px;
             font-size: 12px;
