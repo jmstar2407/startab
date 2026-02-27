@@ -333,6 +333,28 @@ async function cargarConfiguracionUsuario(uid) {
             if (doc.exists) {
                 const data = doc.data();
 
+                // ── Cambio originado en ESTE dispositivo ─────────────────────────────
+                // hasPendingWrites = true → el cliente aún no recibió confirmación del servidor.
+                // Significa que este snapshot es el eco de nuestra propia escritura, ya aplicada
+                // localmente. Solo actualizamos memoria y mostramos "Guardando...".
+                const esCambioLocal = doc.metadata.hasPendingWrites;
+
+                if (esCambioLocal) {
+                    // Sincronizar datos en memoria (sin tocar el DOM)
+                    if (data.categorias && data.categorias.length > 0) {
+                        categoriasPersonalizadas = data.categorias;
+                    }
+                    if (data.settings) {
+                        if (data.settings.buscadorActual) estado.buscadorActual = data.settings.buscadorActual;
+                        if (data.settings.filtroActual)   estado.filtroActual   = data.settings.filtroActual;
+                    }
+                    mostrarIndicadorSync('guardando');
+                    return; // Cambio ya aplicado localmente → no re-renderizar
+                }
+
+                // ── Confirmación del servidor (o cambio desde otro dispositivo) ─────
+                mostrarIndicadorSync('guardado');
+
                 // Cargar categorías
                 if (data.categorias && data.categorias.length > 0) {
                     categoriasPersonalizadas = data.categorias;
@@ -381,7 +403,7 @@ async function cargarConfiguracionUsuario(uid) {
                 renderizarCategorias();
                 actualizarBuscadorUI();
                 actualizarPlaceholder();
-                await aplicarFondoCategoria(estado.categoriaActual);
+                aplicarFondoCategoria(estado.categoriaActual);
                 await renderizarIconos();
 
                 // Actualizar notas si el modal está abierto
@@ -392,7 +414,7 @@ async function cargarConfiguracionUsuario(uid) {
                     cargarNota(notaEstado.notaActual, notaDOM);
                 }
 
-                console.log('Configuración cargada desde Firestore');
+                console.log('Configuración sincronizada desde Firestore');
             } else {
                 // Primer inicio de sesión - crear configuración por defecto
                 console.log('Creando configuración por defecto para nuevo usuario');
@@ -400,7 +422,7 @@ async function cargarConfiguracionUsuario(uid) {
             }
         }, (error) => {
             console.error('Error al escuchar configuración:', error);
-            // Si hay error, cargar configuración local
+            mostrarIndicadorSync('error');
             cargarConfiguracionLocal();
         });
 
@@ -448,21 +470,82 @@ async function cargarConfiguracionLocal() {
     console.log('Configuración local cargada');
 }
 
+// ===== INDICADOR DE SINCRONIZACIÓN =====
+let _syncHideTimeout = null;
+
+function mostrarIndicadorSync(estado) {
+    let indicator = document.getElementById('sync-indicator');
+    if (!indicator) {
+        indicator = document.createElement('div');
+        indicator.id = 'sync-indicator';
+        indicator.style.cssText = `
+            position: fixed;
+            bottom: 18px;
+            right: 18px;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.3px;
+            pointer-events: none;
+            z-index: 9999;
+            transition: opacity 0.35s ease, transform 0.35s ease;
+            opacity: 0;
+            transform: translateY(6px);
+        `;
+        document.body.appendChild(indicator);
+    }
+
+    clearTimeout(_syncHideTimeout);
+
+    if (estado === 'guardando') {
+        indicator.textContent = '⏳ Guardando...';
+        indicator.style.background = 'rgba(30,30,50,0.82)';
+        indicator.style.color = '#a5b4fc';
+        indicator.style.border = '1px solid rgba(165,180,252,0.25)';
+        indicator.style.opacity = '1';
+        indicator.style.transform = 'translateY(0)';
+    } else if (estado === 'guardado') {
+        indicator.textContent = '✓ Guardado';
+        indicator.style.background = 'rgba(20,40,30,0.82)';
+        indicator.style.color = '#6ee7b7';
+        indicator.style.border = '1px solid rgba(110,231,183,0.25)';
+        indicator.style.opacity = '1';
+        indicator.style.transform = 'translateY(0)';
+        _syncHideTimeout = setTimeout(() => {
+            indicator.style.opacity = '0';
+            indicator.style.transform = 'translateY(6px)';
+        }, 2000);
+    } else if (estado === 'error') {
+        indicator.textContent = '✗ Error al guardar';
+        indicator.style.background = 'rgba(50,20,20,0.82)';
+        indicator.style.color = '#fca5a5';
+        indicator.style.border = '1px solid rgba(252,165,165,0.25)';
+        indicator.style.opacity = '1';
+        indicator.style.transform = 'translateY(0)';
+        _syncHideTimeout = setTimeout(() => {
+            indicator.style.opacity = '0';
+            indicator.style.transform = 'translateY(6px)';
+        }, 4000);
+    }
+}
+
+// ===== GUARDADO EN FIREBASE =====
 async function guardarConfiguracionCompleta() {
+    if (!currentUser || !userConfigRef) return;
+    mostrarIndicadorSync('guardando');
     try {
-        if (currentUser && userConfigRef) {
-            // Guardar en Firestore para el usuario
-            await userConfigRef.set({
-                categorias: categoriasPersonalizadas,
-                metadata: {
-                    ultimaModificacion: firebase.firestore.FieldValue.serverTimestamp(),
-                    version: "1.0"
-                }
-            }, { merge: true });
-        }
-        // Si no hay usuario, no se guarda nada (solo se mantiene en memoria)
+        await userConfigRef.set({
+            categorias: categoriasPersonalizadas,
+            metadata: {
+                ultimaModificacion: firebase.firestore.FieldValue.serverTimestamp(),
+                version: '1.0'
+            }
+        }, { merge: true });
+        // El indicador "guardado" lo mostrará el onSnapshot cuando llegue la confirmación
     } catch (error) {
         console.error('Error al guardar configuración:', error);
+        mostrarIndicadorSync('error');
     }
 }
 
@@ -487,20 +570,21 @@ async function guardarConfiguracionNotas() {
 }
 
 async function guardarConfiguracionBuscador() {
+    if (!currentUser || !userConfigRef) return;
+    mostrarIndicadorSync('guardando');
     try {
-        if (currentUser && userConfigRef) {
-            await userConfigRef.set({
-                settings: {
-                    buscadorActual: estado.buscadorActual,
-                    filtroActual: estado.filtroActual
-                },
-                metadata: {
-                    ultimaModificacion: firebase.firestore.FieldValue.serverTimestamp()
-                }
-            }, { merge: true });
-        }
+        await userConfigRef.set({
+            settings: {
+                buscadorActual: estado.buscadorActual,
+                filtroActual: estado.filtroActual
+            },
+            metadata: {
+                ultimaModificacion: firebase.firestore.FieldValue.serverTimestamp()
+            }
+        }, { merge: true });
     } catch (error) {
         console.error('Error al guardar configuración de buscador:', error);
+        mostrarIndicadorSync('error');
     }
 }
 
@@ -613,12 +697,8 @@ async function cambiarCategoria(categoriaId) {
     estado.iconosActuales = nuevaCategoria?.accesos || [];
     
     actualizarCategoriasUI();
-
-    // Iniciar el cambio de fondo (el token interno de aplicarFondoCategoria garantiza
-    // que solo la llamada más reciente aplica el fondo al finalizar el preload)
+    // No await: el token interno cancela transiciones obsoletas si el usuario cambia rápido
     aplicarFondoCategoria(categoriaId);
-
-    // Renderizar iconos de la categoría activa en este momento
     await renderizarIconos();
 }
 
@@ -1032,29 +1112,28 @@ function mostrarMenuContextual(event, icono) {
 
 // ===== FUNCIONES DE FONDO =====
 
-// Token global para cancelar transiciones de fondo obsoletas
+// Token global para cancelar transiciones obsoletas al cambiar rápidamente de categoría
 let _fondoToken = 0;
 
 async function aplicarFondoCategoria(categoriaId) {
     const categoria = categoriasPersonalizadas.find(c => c.id === categoriaId);
     if (!categoria || !categoria.background) return;
 
-    // Incrementar token: cualquier llamada anterior con token distinto será ignorada
+    // Incrementar token — cualquier llamada anterior con token distinto quedará cancelada
     const miToken = ++_fondoToken;
 
     const fondoConfig = categoria.background;
 
-    // Pre-cargar según el tipo de fondo
+    // Pre-cargar el recurso según el tipo
     if (fondoConfig.tipo === 'imagen' && fondoConfig.url) {
         await precargarImagen(fondoConfig.url);
     } else if (fondoConfig.tipo === 'video' && fondoConfig.url) {
         await precargarVideo(fondoConfig.url);
     }
 
-    // Si el token ya no es el más reciente, esta llamada fue superada por una más nueva → cancelar
+    // Si mientras precargábamos llegó un cambio más reciente, cancelar esta transición
     if (miToken !== _fondoToken) return;
 
-    // Aplicar el fondo con efecto fade suave
     aplicarFondoConFade(fondoConfig);
 }
 
@@ -1088,16 +1167,16 @@ function precargarVideo(url) {
 function aplicarFondoConFade(fondoConfig) {
     const DURACION_FADE = 600; // ms - transición suave
 
-    // Capturar el token actual en este momento (sincrónicamente, sin await)
+    // Capturar token actual de forma síncrona (sin await)
     const tokenEsteFrame = _fondoToken;
 
-    // Limpiar TODOS los fondos temporales huérfanos de transiciones anteriores
-    document.querySelectorAll('[id^="fondo-temporal"]').forEach(el => el.remove());
+    // Limpiar fondos temporales huérfanos de transiciones anteriores
+    document.querySelectorAll('[id="fondo-temporal"]').forEach(el => el.remove());
 
     // Obtener el fondo activo actual
     let fondoActual = document.getElementById('fondo-activo');
 
-    // Crear nuevo fondo con efecto de transición suave
+    // Crear nuevo fondo
     const nuevoFondo = document.createElement('div');
     nuevoFondo.id = 'fondo-temporal';
     nuevoFondo.dataset.tipo = fondoConfig.tipo;
@@ -1113,7 +1192,7 @@ function aplicarFondoConFade(fondoConfig) {
         pointer-events: none;
     `;
 
-    // Insertar el nuevo fondo delante del actual
+    // Insertar delante del actual
     document.body.insertBefore(nuevoFondo, fondoActual || document.body.firstChild);
 
     // Aplicar estilos al nuevo fondo
@@ -1130,7 +1209,7 @@ function aplicarFondoConFade(fondoConfig) {
 
     // Iniciar transición de entrada del nuevo fondo
     requestAnimationFrame(() => {
-        // Si ya hubo otro cambio después de este, no animar (el siguiente lo hará)
+        // Si llegó otro cambio mientras esperábamos el frame, cancelar esta transición
         if (tokenEsteFrame !== _fondoToken) {
             nuevoFondo.remove();
             return;
@@ -1139,15 +1218,12 @@ function aplicarFondoConFade(fondoConfig) {
 
         // Renombrar y limpiar después de la transición
         setTimeout(() => {
-            // Verificar una vez más que este fondo sigue siendo el correcto
             if (tokenEsteFrame !== _fondoToken) {
                 nuevoFondo.remove();
                 return;
             }
             nuevoFondo.id = 'fondo-activo';
-            // Eliminar cualquier fondo antiguo que haya quedado
-            document.querySelectorAll('#fondo-activo ~ #fondo-activo').forEach(el => el.remove());
-            if (fondoActual && fondoActual.parentNode) {
+            if (fondoActual) {
                 fondoActual.remove();
             }
         }, DURACION_FADE);
@@ -1249,29 +1325,24 @@ function aplicarEstiloFondo(elemento, config, esTransicion = false) {
 }
 
 async function guardarFondoCategoria(nuevaConfiguracion) {
-    try {
-        const categoriaIndex = categoriasPersonalizadas.findIndex(c => c.id === estado.categoriaActual);
-        if (categoriaIndex === -1) return;
+    const categoriaIndex = categoriasPersonalizadas.findIndex(c => c.id === estado.categoriaActual);
+    if (categoriaIndex === -1) return;
 
-        // Actualizar el fondo de la categoría
-        categoriasPersonalizadas[categoriaIndex].background = {
-            tipo: nuevaConfiguracion.tipo,
-            url: nuevaConfiguracion.url,
-            opacidad: nuevaConfiguracion.opacidad,
-            desenblur: nuevaConfiguracion.desenblur,
-            colorInicio: nuevaConfiguracion.colorInicio,
-            colorFin: nuevaConfiguracion.colorFin
-        };
+    // Actualizar el fondo en memoria
+    categoriasPersonalizadas[categoriaIndex].background = {
+        tipo: nuevaConfiguracion.tipo,
+        url: nuevaConfiguracion.url,
+        opacidad: nuevaConfiguracion.opacidad,
+        desenfoque: nuevaConfiguracion.desenfoque,
+        colorInicio: nuevaConfiguracion.colorInicio,
+        colorFin: nuevaConfiguracion.colorFin
+    };
 
-        // Guardar toda la configuración en Firebase
-        await guardarConfiguracionCompleta();
+    // Aplicar visualmente de inmediato (feedback instantáneo)
+    aplicarFondoCategoria(estado.categoriaActual);
 
-        // Aplicar el fondo INMEDIATAMENTE (sin esperar a Firebase)
-        // Esto da feedback instantáneo al usuario
-        await aplicarFondoCategoria(estado.categoriaActual);
-    } catch (error) {
-        console.error('Error al guardar fondo:', error);
-    }
+    // Persistir en Firebase (mostrará indicador automáticamente)
+    await guardarConfiguracionCompleta();
 }
 
 // ===== BARRA DE BÚSQUEDA =====
@@ -1293,6 +1364,7 @@ function inicializarBarraBusqueda() {
             actualizarBuscadorUI();
             actualizarPlaceholder();
             DOM.barraBusqueda.focus();
+            guardarConfiguracionBuscador(); // Sincronizar con Firebase en tiempo real
         }
     });
 
@@ -1303,6 +1375,7 @@ function inicializarBarraBusqueda() {
             filtro.classList.add('activo');
             estado.filtroActual = filtro.dataset.filtro;
             DOM.barraBusqueda.focus();
+            guardarConfiguracionBuscador(); // Sincronizar con Firebase en tiempo real
         }
     });
 
