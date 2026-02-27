@@ -1,0 +1,178 @@
+<!-- StarTab.html -->
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StarTab - Tu página de inicio personalizada</title>
+    <link rel="stylesheet" href="styles.css">
+    <!-- Firebase -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+</head>
+
+<body>
+    <div class="box-master">
+        <!-- CONTENEDOR DE AUTENTICACIÓN -->
+        <div class="auth-container">
+            <!-- Botón de inicio de sesión -->
+            <div class="btn-login" id="btn-login">
+                <span class="btn-login-icono">👤</span>
+                <span>Iniciar sesión</span>
+            </div>
+            
+            <!-- Avatar de usuario (visible cuando está autenticado) -->
+            <div class="user-avatar" id="user-avatar">
+                <img src="https://via.placeholder.com/45" alt="Avatar">
+            </div>
+            
+            <!-- Menú de usuario -->
+            <div class="user-menu" id="user-menu"></div>
+        </div>
+
+        <!-- ICONO DE NOTA MODERNO -->
+        <div class="nota-icono-container" id="nota-icono">
+            <div class="nota-icono">
+                <span class="nota-icono-emoji">📝</span>
+            </div>
+            <span class="nota-icono-tooltip">Notas rápidas (Ctrl+N)</span>
+        </div>
+
+        <!-- SECCIÓN DE INFORMACIÓN (Dólar y Clima) -->
+        <div class="info-util-container" id="info-util">
+            <!-- Precio del Dólar -->
+            <div class="info-item" id="info-dolar" title="Click para buscar en Google">
+                <div class="info-icono">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" />
+                        <path d="M12 6v12M8 10h8M8 14h8" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                    </svg>
+                </div>
+                <div class="info-contenido">
+                    <span class="info-label">USD/DOP</span>
+                    <span class="info-valor" id="valor-dolar">Cargando...</span>
+                </div>
+            </div>
+
+            <!-- Clima Santo Domingo -->
+            <div class="info-item" id="info-clima" title="Click para buscar el clima en Google">
+                <div class="info-icono" id="icono-clima">
+                    <!-- Icono dinámico del clima -->
+                </div>
+                <div class="info-contenido">
+                    <span class="info-label">Santo Domingo</span>
+                    <span class="info-valor" id="valor-clima">Cargando...</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- BARRA DE BÚSQUEDA MODERNA -->
+        <div class="contenedor-busqueda">
+            <h1 class="titulo">StarTab</h1>
+
+            <!-- Selector de buscadores (círculos) -->
+            <div class="selectores-buscador">
+                <div class="circulo-buscador activo" data-buscador="google" title="Google">
+                    <img src="./img/icons/google_1.png" alt="Google">
+                </div>
+                <div class="circulo-buscador" data-buscador="bing" title="Bing">
+                    <img src="./img/icons/bing_1.png" alt="Bing">
+                </div>
+                <div class="circulo-buscador" data-buscador="duckduckgo" title="DuckDuckGo">
+                    <img src="./img/icons/duckduckgo_1.png" alt="DuckDuckGo">
+                </div>
+            </div>
+
+            <!-- Caja de búsqueda -->
+            <div class="caja-busqueda">
+                <input type="text" id="barra-busqueda" placeholder="Buscar en la web...">
+                <div class="iconos-busqueda">
+                    <button class="icono-busqueda" id="btn-limpiar" title="Limpiar">
+                        <img src="./img/icons/x_1.png" alt="Limpiar">
+                    </button>
+                    <button class="icono-busqueda" id="btn-microfono" title="Búsqueda por voz">
+                        <img src="./img/icons/microfono_1.png" alt="Micrófono">
+                    </button>
+                    <button class="icono-busqueda" id="btn-buscar" title="Buscar">
+                        <img src="./img/icons/lupa_1.png" alt="Buscar">
+                    </button>
+                </div>
+            </div>
+
+            <!-- Filtros de búsqueda -->
+            <div class="filtros-busqueda">
+                <div class="filtro-item activo" data-filtro="web">Web</div>
+                <div class="filtro-item" data-filtro="imagenes">Imágenes</div>
+                <div class="filtro-item" data-filtro="video">Videos</div>
+                <div class="filtro-item" data-filtro="noticias">Noticias</div>
+            </div>
+        </div>
+
+        <!-- CONTENEDOR DE ICONOS -->
+        <div class="contenedor-iconos-master">
+            <div class="contenedor-iconos" id="contenedor-iconos">
+                <!-- Los iconos se renderizan dinámicamente -->
+            </div>
+        </div>
+
+        <!-- CATEGORÍAS -->
+        <div class="categorias-container">
+            <!-- Se renderizan dinámicamente -->
+        </div>
+
+        <!-- BOTONES FLOTANTES -->
+        <div class="agregar-icono">
+            <button id="btn-agregar" title="Agregar acceso directo">+</button>
+        </div>
+
+        <button id="btn-personalizar" class="btn-personalizar" title="Personalizar fondo">
+            <span class="btn-personalizar-icono">🎨</span>
+        </button>
+    </div>
+
+    <!-- MODAL DE NOTA MODERNO -->
+    <div class="nota-modal" id="nota-modal">
+        <div class="nota-modal-contenido">
+            <div class="nota-modal-header">
+                <h2 class="nota-modal-titulo">
+                    <span class="nota-modal-icono">📝</span>
+                    Notas rápidas
+                </h2>
+                <button class="nota-modal-cerrar" id="nota-modal-cerrar">×</button>
+            </div>
+            <div class="nota-modal-body">
+                <div class="notes-box">
+                    <textarea class="nota-textarea" id="nota-textarea" placeholder="Nota 1 - Escribe aquí..."
+                        spellcheck="false"></textarea>
+                    <div class="nota-stats">
+                        <span id="nota-char-count">0 caracteres</span>
+                    </div>
+                </div>
+
+                <div class="nota-botones-container">
+                    <button class="nota-btn-numero activo" data-nota="1" title="Nota 1 (Ctrl+1)">1</button>
+                    <button class="nota-btn-numero" data-nota="2" title="Nota 2 (Ctrl+2)">2</button>
+                    <button class="nota-btn-numero" data-nota="3" title="Nota 3 (Ctrl+3)">3</button>
+                    <button class="nota-btn-numero" data-nota="4" title="Nota 4 (Ctrl+4)">4</button>
+                    <button class="nota-btn-numero" data-nota="5" title="Nota 5 (Ctrl+5)">5</button>
+                </div>
+            </div>
+            <div class="nota-modal-footer">
+                <div class="nota-footer-info">
+                    <span class="nota-sync-icon" id="nota-sync-icon">🔄</span>
+                    <span class="nota-sync-text" id="nota-sync-text">Listo</span>
+                </div>
+                <button class="nota-btn nota-btn-copiar" id="nota-btn-copiar">
+                    <span class="nota-btn-icono">📋</span>
+                    Copiar nota
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
