@@ -147,6 +147,21 @@ function cachearElementos() {
     DOM.logoutBtn = document.getElementById('logout-btn');
 }
 
+// ===== UTILIDADES =====
+const debounce = (fn, delay) => {
+    let timeoutId;
+    return (...args) => {
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(() => fn(...args), delay);
+    };
+};
+
+const convertirABase64 = file => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+});
 
 // ===== FUNCIONES DE AUTENTICACIÓN =====
 function inicializarAutenticacion() {
@@ -516,32 +531,16 @@ function habilitarEdicion(habilitar) {
     console.log('Edición', habilitar ? 'habilitada' : 'deshabilitada');
 }
 
-// ===== UTILIDADES =====
-const debounce = (fn, delay) => {
-    let timeoutId;
-    return (...args) => {
-        clearTimeout(timeoutId);
-        timeoutId = setTimeout(() => fn(...args), delay);
-    };
-};
-
-const convertirABase64 = file => new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-});
-
 // ===== FUNCIONES DE CATEGORÍAS =====
 function renderizarCategorias() {
     const container = document.querySelector('.categorias-container');
     if (!container) return;
-    
+
     let html = '';
-    
+
     categoriasPersonalizadas.forEach(cat => {
         const activo = cat.id === estado.categoriaActual ? 'activo' : '';
-        
+
         html += `
             <div class="categoria-wrapper" data-categoria-id="${cat.id}" data-categoria-editable="${cat.editable !== false}">
                 <button class="categoria-btn ${activo}" data-categoria="${cat.id}">
@@ -550,7 +549,7 @@ function renderizarCategorias() {
             </div>
         `;
     });
-    
+
     // Botón para agregar nueva categoría (si no se ha alcanzado el límite)
     if (categoriasPersonalizadas.length < MAX_CATEGORIAS) {
         html += `
@@ -559,35 +558,42 @@ function renderizarCategorias() {
             </button>
         `;
     }
-    
+
     container.innerHTML = html;
-    
-    // Event listeners para categorías (clic normal)
-    document.querySelectorAll('.categoria-btn[data-categoria]').forEach(btn => {
-        btn.addEventListener('click', (e) => {
+
+    // Delegar eventos al contenedor para categorías nuevas
+    // Esto evita el problema de eventos no asignados a elementos dinámicos
+    container.onclick = null; // Limpiar evento anterior
+    container.addEventListener('click', (e) => {
+        // Handle category button click
+        const btn = e.target.closest('.categoria-btn[data-categoria]');
+        if (btn) {
             const categoriaId = btn.dataset.categoria;
             cambiarCategoria(categoriaId);
-        });
+            return;
+        }
+
+        // Handle add category button
+        const addBtn = e.target.closest('#btn-agregar-categoria');
+        if (addBtn) {
+            agregarCategoria();
+        }
     });
-    
-    // Event listeners para menú contextual (clic derecho)
-    document.querySelectorAll('.categoria-wrapper').forEach(wrapper => {
-        wrapper.addEventListener('contextmenu', (e) => {
+
+    // Delegar evento de menú contextual
+    container.oncontextmenu = null;
+    container.addEventListener('contextmenu', (e) => {
+        const wrapper = e.target.closest('.categoria-wrapper');
+        if (wrapper) {
             e.preventDefault();
             const categoriaId = wrapper.dataset.categoriaId;
             const esEditable = wrapper.dataset.categoriaEditable === 'true';
-            
+
             if (esEditable) {
                 mostrarMenuContextualCategoria(e, categoriaId);
             }
-        });
+        }
     });
-    
-    // Event listener para agregar categoría
-    const btnAgregar = document.getElementById('btn-agregar-categoria');
-    if (btnAgregar) {
-        btnAgregar.addEventListener('click', agregarCategoria);
-    }
 }
 
 function actualizarCategoriasUI() {
@@ -1231,16 +1237,17 @@ async function guardarFondoCategoria(nuevaConfiguracion) {
             tipo: nuevaConfiguracion.tipo,
             url: nuevaConfiguracion.url,
             opacidad: nuevaConfiguracion.opacidad,
-            desenfoque: nuevaConfiguracion.desenfoque,
+            desenblur: nuevaConfiguracion.desenblur,
             colorInicio: nuevaConfiguracion.colorInicio,
             colorFin: nuevaConfiguracion.colorFin
         };
 
-        // Guardar toda la configuración
+        // Guardar toda la configuración en Firebase
         await guardarConfiguracionCompleta();
 
-        // Aplicar el fondo
-        aplicarFondoConFade(categoriasPersonalizadas[categoriaIndex].background);
+        // Aplicar el fondo INMEDIATAMENTE (sin esperar a Firebase)
+        // Esto da feedback instantáneo al usuario
+        await aplicarFondoCategoria(estado.categoriaActual);
     } catch (error) {
         console.error('Error al guardar fondo:', error);
     }
