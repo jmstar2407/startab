@@ -1,217 +1,240 @@
-<!-- login.html -->
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>StarTab - Iniciar Sesión</title>
-    <link rel="stylesheet" href="login.css">
-    <!-- Firebase LOCAL (descargado) -->
-    <script src="lib/firebase-app-compat.js"></script>
-    <script src="lib/firebase-auth-compat.js"></script>
+    <title>StarTab - Iniciar sesión</title>
+    <!-- Firebase desde CDN (necesario para HTTPS en GitHub Pages) -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            padding: 48px 40px;
+            text-align: center;
+            width: 360px;
+            box-shadow: 0 25px 60px rgba(0,0,0,0.3);
+            animation: fadeUp 0.4s ease;
+        }
+
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        .logo {
+            font-size: 2.5rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 6px;
+        }
+
+        .subtitle {
+            color: #888;
+            font-size: 0.9rem;
+            margin-bottom: 36px;
+        }
+
+        #btn-google {
+            width: 100%;
+            padding: 14px 20px;
+            border: 2px solid #e5e7eb;
+            border-radius: 12px;
+            background: white;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 600;
+            color: #374151;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            transition: all 0.2s ease;
+        }
+
+        #btn-google:hover {
+            border-color: #667eea;
+            background: #f5f3ff;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+        }
+
+        #btn-google:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .google-icon {
+            width: 22px;
+            height: 22px;
+        }
+
+        #status {
+            margin-top: 20px;
+            font-size: 0.875rem;
+            color: #6b7280;
+            min-height: 22px;
+        }
+
+        .success { color: #10b981 !important; font-weight: 600; }
+        .error-msg { color: #ef4444 !important; }
+
+        .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #e5e7eb;
+            border-top-color: #667eea;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+            vertical-align: middle;
+            margin-right: 6px;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .footer {
+            margin-top: 28px;
+            font-size: 0.78rem;
+            color: #bbb;
+        }
+    </style>
 </head>
 <body>
-    <div class="login-container">
-        <div class="login-card">
-            <div class="login-header">
-                <h1 class="login-titulo">StarTab</h1>
-                <p class="login-subtitulo">Inicia sesión para sincronizar tus accesos directos</p>
-            </div>
-            
-            <div class="login-content">
-                <div class="login-beneficios">
-                    <div class="beneficio-item">
-                        <span class="beneficio-icono">☁️</span>
-                        <span>Sincronización en la nube</span>
-                    </div>
-                    <div class="beneficio-item">
-                        <span class="beneficio-icono">📱</span>
-                        <span>Accede desde cualquier dispositivo</span>
-                    </div>
-                    <div class="beneficio-item">
-                        <span class="beneficio-icono">🔒</span>
-                        <span>Tus datos seguros con Google</span>
-                    </div>
-                </div>
+<div class="card">
+    <div class="logo">StarTab</div>
+    <div class="subtitle">Inicia sesión para sincronizar tu configuración</div>
 
-                <div class="login-mensaje" id="login-mensaje"></div>
-                
-                <button class="google-btn" id="google-login-btn">
-                    <img src="https://www.google.com/favicon.ico" alt="Google" class="google-icon">
-                    <span>Continuar con Google</span>
-                </button>
+    <button id="btn-google">
+        <svg class="google-icon" viewBox="0 0 48 48">
+            <path fill="#4285F4" d="M44.5 20H24v8.5h11.8C34.7 33.9 30.1 37 24 37c-7.2 0-13-5.8-13-13s5.8-13 13-13c3.1 0 5.9 1.1 8.1 2.9l6.4-6.4C34.6 4.1 29.6 2 24 2 11.8 2 2 11.8 2 24s9.8 22 22 22c11 0 21-8 21-22 0-1.3-.2-2.7-.5-4z"/>
+            <path fill="#34A853" d="M6.3 14.7l7 5.1C15 16.1 19.2 13 24 13c3.1 0 5.9 1.1 8.1 2.9l6.4-6.4C34.6 4.1 29.6 2 24 2 16.3 2 9.7 7.4 6.3 14.7z"/>
+            <path fill="#FBBC05" d="M24 46c5.5 0 10.5-1.9 14.3-5.1l-6.6-5.4C29.7 37 27 38 24 38c-6 0-10.7-3.1-11.8-8.5L5.1 35c3.5 7.1 10.3 11 18.9 11z"/>
+            <path fill="#EA4335" d="M44.5 20H24v8.5h11.8c-.9 2.6-2.6 4.8-5 6.1l6.6 5.4C41.4 36.5 46 30.7 46 24c0-1.3-.2-2.7-1.5-4z"/>
+        </svg>
+        Continuar con Google
+    </button>
 
-                <div class="login-nota">
-                    <p>⚠️ Serás redirigido a Google y luego regresarás automáticamente</p>
-                </div>
-            </div>
-            
-            <div class="login-footer">
-                <p>© 2024 StarTab. Todos los derechos reservados.</p>
-            </div>
-        </div>
+    <div id="status"></div>
+
+    <div class="footer">
+        Esta ventana se cerrará automáticamente al iniciar sesión
     </div>
+</div>
 
-    <script>
-        // Configuración de Firebase
-        const firebaseConfig = {
-            apiKey: "AIzaSyBU8DyN2kRcDq0fxB20qRUXWBHV0E-0d6A",
-            authDomain: "startab-44e48.firebaseapp.com",
-            projectId: "startab-44e48",
-            storageBucket: "startab-44e48.firebasestorage.app",
-            messagingSenderId: "874084877753",
-            appId: "1:874084877753:web:cf9cbe9a344356dc9be268"
-        };
+<script>
+    const firebaseConfig = {
+        apiKey: "AIzaSyBU8DyN2kRcDq0fxB20qRUXWBHV0E-0d6A",
+        authDomain: "startab-44e48.firebaseapp.com",
+        projectId: "startab-44e48",
+        storageBucket: "startab-44e48.firebasestorage.app",
+        messagingSenderId: "874084877753",
+        appId: "1:874084877753:web:cf9cbe9a344356dc9be268"
+    };
 
-        // Inicializar Firebase
-        firebase.initializeApp(firebaseConfig);
-        const auth = firebase.auth();
-        const googleProvider = new firebase.auth.GoogleAuthProvider();
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const provider = new firebase.auth.GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+    auth.useDeviceLanguage();
 
-        // Configurar persistencia LOCAL antes que nada - ESTO ES CRÍTICO
-        auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
-            .then(() => {
-                console.log('Persistencia LOCAL configurada en login.html');
-                
-                // Verificar si es un retorno de redirect
-                return auth.getRedirectResult();
-            })
-            .then((result) => {
-                if (result.user) {
-                    console.log('Redirect result successful:', result.user.email);
-                    
-                    // Guardar en localStorage como respaldo
-                    localStorage.setItem('lastUser', JSON.stringify({
-                        uid: result.user.uid,
-                        displayName: result.user.displayName,
-                        email: result.user.email,
-                        photoURL: result.user.photoURL
-                    }));
-                    
-                    mostrarMensajeExito();
-                    
-                    // Enviar mensaje a la ventana padre si existe
-                    if (window.opener) {
-                        window.opener.postMessage({
-                            type: 'AUTH_SUCCESS',
-                            user: {
-                                uid: result.user.uid,
-                                displayName: result.user.displayName,
-                                email: result.user.email,
-                                photoURL: result.user.photoURL
-                            }
-                        }, '*');
-                        
-                        setTimeout(() => {
-                            window.close();
-                        }, 1500);
-                    } else {
-                        // Si no hay opener, redirigir a index.html
-                        setTimeout(() => {
-                            window.location.href = 'index.html';
-                        }, 1500);
+    const btn = document.getElementById('btn-google');
+    const status = document.getElementById('status');
+
+    // Determinar el origen permitido (la ventana que abrió este popup)
+    // Acepta tanto file:// como localhost
+    function getOpener() {
+        try { return window.opener; } catch(e) { return null; }
+    }
+
+    function setStatus(msg, type = '') {
+        status.innerHTML = msg;
+        status.className = type;
+    }
+
+    btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        setStatus('<span class="spinner"></span> Conectando con Google...');
+
+        try {
+            const result = await auth.signInWithPopup(provider);
+            const user = result.user;
+            const token = await user.getIdToken();
+
+            setStatus('✅ ¡Sesión iniciada! Cerrando...', 'success');
+
+            // Enviar datos al opener (index.html local)
+            const opener = getOpener();
+            if (opener) {
+                opener.postMessage({
+                    type: 'STARTAB_AUTH_SUCCESS',
+                    token: token,
+                    user: {
+                        uid: user.uid,
+                        displayName: user.displayName,
+                        email: user.email,
+                        photoURL: user.photoURL
                     }
-                }
-            })
-            .catch((error) => {
-                console.error('Error en redirect result:', error);
-                // Ignorar errores de popup cerrado
-                if (error.code !== 'auth/popup-closed-by-user') {
-                    const mensajeDiv = document.getElementById('login-mensaje');
-                    if (mensajeDiv) {
-                        mensajeDiv.className = 'login-mensaje error';
-                        mensajeDiv.textContent = '❌ Error: ' + error.message;
+                }, '*'); // '*' para permitir file:// y localhost
+            }
+
+            // Cerrar la ventana después de un momento
+            setTimeout(() => window.close(), 1200);
+
+        } catch (error) {
+            console.error('Error login:', error);
+            btn.disabled = false;
+
+            const mensajes = {
+                'auth/popup-closed-by-user': 'Cerraste la ventana de Google.',
+                'auth/cancelled-popup-request': 'Solicitud cancelada.',
+                'auth/network-request-failed': 'Error de red. Verifica tu conexión.',
+            };
+
+            setStatus('❌ ' + (mensajes[error.code] || error.message), 'error-msg');
+        }
+    });
+
+    // Si ya hay una sesión activa, enviarla automáticamente
+    auth.onAuthStateChanged(async (user) => {
+        if (user) {
+            const token = await user.getIdToken(true); // force refresh
+            setStatus('<span class="spinner"></span> Sesión encontrada, cerrando...', 'success');
+
+            const opener = getOpener();
+            if (opener) {
+                opener.postMessage({
+                    type: 'STARTAB_AUTH_SUCCESS',
+                    token: token,
+                    user: {
+                        uid: user.uid,
+                        displayName: user.displayName,
+                        email: user.email,
+                        photoURL: user.photoURL
                     }
-                }
-            });
-
-        // Configuración del provider
-        googleProvider.setCustomParameters({
-            prompt: 'select_account'
-        });
-
-        const loginBtn = document.getElementById('google-login-btn');
-        const mensajeDiv = document.getElementById('login-mensaje');
-
-        // Verificar si ya hay sesión activa al cargar
-        auth.onAuthStateChanged((user) => {
-            if (user) {
-                console.log('Usuario ya autenticado en login.html:', user.email);
-                
-                // Guardar en localStorage como respaldo
-                localStorage.setItem('lastUser', JSON.stringify({
-                    uid: user.uid,
-                    displayName: user.displayName,
-                    email: user.email,
-                    photoURL: user.photoURL
-                }));
-                
-                mostrarMensajeExito();
-                
-                // Intentar cerrar esta ventana y notificar a la ventana padre
-                if (window.opener) {
-                    window.opener.postMessage({
-                        type: 'AUTH_SUCCESS',
-                        user: {
-                            uid: user.uid,
-                            displayName: user.displayName,
-                            email: user.email,
-                            photoURL: user.photoURL
-                        }
-                    }, '*');
-                    
-                    setTimeout(() => {
-                        window.close();
-                    }, 1000);
-                } else {
-                    // Si no hay opener, redirigir a index.html
-                    setTimeout(() => {
-                        window.location.href = 'index.html';
-                    }, 1000);
-                }
+                }, '*');
             }
-        });
 
-        function mostrarMensajeExito() {
-            if (mensajeDiv) {
-                mensajeDiv.className = 'login-mensaje success';
-                mensajeDiv.textContent = '✅ Inicio de sesión exitoso!';
-            }
-            if (loginBtn) {
-                loginBtn.disabled = true;
-                loginBtn.innerHTML = '<span>✅ Sesión iniciada</span>';
-            }
+            setTimeout(() => window.close(), 800);
         }
-
-        async function iniciarSesion() {
-            try {
-                loginBtn.disabled = true;
-                loginBtn.innerHTML = '<span class="spinner"></span><span>Redirigiendo a Google...</span>';
-                
-                if (mensajeDiv) {
-                    mensajeDiv.className = 'login-mensaje info';
-                    mensajeDiv.textContent = 'Serás redirigido a Google para iniciar sesión...';
-                }
-
-                // Usar redirect con la persistencia ya configurada
-                await auth.signInWithRedirect(googleProvider);
-                
-            } catch (error) {
-                console.error('Error en autenticación:', error);
-                
-                loginBtn.disabled = false;
-                loginBtn.innerHTML = '<img src="https://www.google.com/favicon.ico" alt="Google" class="google-icon"><span>Continuar con Google</span>';
-                
-                if (mensajeDiv) {
-                    mensajeDiv.className = 'login-mensaje error';
-                    mensajeDiv.textContent = '❌ Error: ' + error.message;
-                }
-            }
-        }
-
-        if (loginBtn) {
-            loginBtn.addEventListener('click', iniciarSesion);
-        }
-    </script>
+    });
+</script>
 </body>
 </html>
