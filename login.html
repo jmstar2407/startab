@@ -68,13 +68,61 @@
         const auth = firebase.auth();
         const googleProvider = new firebase.auth.GoogleAuthProvider();
 
-        // Configurar persistencia LOCAL antes que nada
+        // Configurar persistencia LOCAL antes que nada - ESTO ES CRÍTICO
         auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
             .then(() => {
                 console.log('Persistencia LOCAL configurada en login.html');
+                
+                // Verificar si es un retorno de redirect
+                return auth.getRedirectResult();
+            })
+            .then((result) => {
+                if (result.user) {
+                    console.log('Redirect result successful:', result.user.email);
+                    
+                    // Guardar en localStorage como respaldo
+                    localStorage.setItem('lastUser', JSON.stringify({
+                        uid: result.user.uid,
+                        displayName: result.user.displayName,
+                        email: result.user.email,
+                        photoURL: result.user.photoURL
+                    }));
+                    
+                    mostrarMensajeExito();
+                    
+                    // Enviar mensaje a la ventana padre si existe
+                    if (window.opener) {
+                        window.opener.postMessage({
+                            type: 'AUTH_SUCCESS',
+                            user: {
+                                uid: result.user.uid,
+                                displayName: result.user.displayName,
+                                email: result.user.email,
+                                photoURL: result.user.photoURL
+                            }
+                        }, '*');
+                        
+                        setTimeout(() => {
+                            window.close();
+                        }, 1500);
+                    } else {
+                        // Si no hay opener, redirigir a index.html
+                        setTimeout(() => {
+                            window.location.href = 'index.html';
+                        }, 1500);
+                    }
+                }
             })
             .catch((error) => {
-                console.error('Error configurando persistencia:', error);
+                console.error('Error en redirect result:', error);
+                // Ignorar errores de popup cerrado
+                if (error.code !== 'auth/popup-closed-by-user') {
+                    const mensajeDiv = document.getElementById('login-mensaje');
+                    if (mensajeDiv) {
+                        mensajeDiv.className = 'login-mensaje error';
+                        mensajeDiv.textContent = '❌ Error: ' + error.message;
+                    }
+                }
             });
 
         // Configuración del provider
@@ -89,8 +137,16 @@
         auth.onAuthStateChanged((user) => {
             if (user) {
                 console.log('Usuario ya autenticado en login.html:', user.email);
-                mensajeDiv.className = 'login-mensaje success';
-                mensajeDiv.textContent = '✅ Ya tienes sesión iniciada. Redirigiendo...';
+                
+                // Guardar en localStorage como respaldo
+                localStorage.setItem('lastUser', JSON.stringify({
+                    uid: user.uid,
+                    displayName: user.displayName,
+                    email: user.email,
+                    photoURL: user.photoURL
+                }));
+                
+                mostrarMensajeExito();
                 
                 // Intentar cerrar esta ventana y notificar a la ventana padre
                 if (window.opener) {
@@ -116,17 +172,29 @@
             }
         });
 
+        function mostrarMensajeExito() {
+            if (mensajeDiv) {
+                mensajeDiv.className = 'login-mensaje success';
+                mensajeDiv.textContent = '✅ Inicio de sesión exitoso!';
+            }
+            if (loginBtn) {
+                loginBtn.disabled = true;
+                loginBtn.innerHTML = '<span>✅ Sesión iniciada</span>';
+            }
+        }
+
         async function iniciarSesion() {
             try {
                 loginBtn.disabled = true;
                 loginBtn.innerHTML = '<span class="spinner"></span><span>Redirigiendo a Google...</span>';
-                mensajeDiv.className = 'login-mensaje info';
-                mensajeDiv.textContent = 'Serás redirigido a Google para iniciar sesión...';
-
-                // Usar redirect en lugar de popup para mejor compatibilidad
-                await auth.signInWithRedirect(googleProvider);
                 
-                // Nota: El código después de esto no se ejecutará porque hay una redirección
+                if (mensajeDiv) {
+                    mensajeDiv.className = 'login-mensaje info';
+                    mensajeDiv.textContent = 'Serás redirigido a Google para iniciar sesión...';
+                }
+
+                // Usar redirect con la persistencia ya configurada
+                await auth.signInWithRedirect(googleProvider);
                 
             } catch (error) {
                 console.error('Error en autenticación:', error);
@@ -134,50 +202,16 @@
                 loginBtn.disabled = false;
                 loginBtn.innerHTML = '<img src="https://www.google.com/favicon.ico" alt="Google" class="google-icon"><span>Continuar con Google</span>';
                 
-                mensajeDiv.className = 'login-mensaje error';
-                mensajeDiv.textContent = '❌ Error: ' + error.message;
+                if (mensajeDiv) {
+                    mensajeDiv.className = 'login-mensaje error';
+                    mensajeDiv.textContent = '❌ Error: ' + error.message;
+                }
             }
         }
 
-        loginBtn.addEventListener('click', iniciarSesion);
-
-        // Procesar el resultado del redirect cuando se vuelve a esta página
-        auth.getRedirectResult().then((result) => {
-            if (result.user) {
-                console.log('Redirect result successful:', result.user.email);
-                mensajeDiv.className = 'login-mensaje success';
-                mensajeDiv.textContent = '✅ Inicio de sesión exitoso!';
-                
-                // Enviar mensaje a la ventana padre si existe
-                if (window.opener) {
-                    window.opener.postMessage({
-                        type: 'AUTH_SUCCESS',
-                        user: {
-                            uid: result.user.uid,
-                            displayName: result.user.displayName,
-                            email: result.user.email,
-                            photoURL: result.user.photoURL
-                        }
-                    }, '*');
-                    
-                    setTimeout(() => {
-                        window.close();
-                    }, 1500);
-                } else {
-                    // Si no hay opener, redirigir a index.html
-                    setTimeout(() => {
-                        window.location.href = 'index.html';
-                    }, 1500);
-                }
-            }
-        }).catch((error) => {
-            console.error('Error en redirect result:', error);
-            // Ignorar errores de popup cerrado
-            if (error.code !== 'auth/popup-closed-by-user') {
-                mensajeDiv.className = 'login-mensaje error';
-                mensajeDiv.textContent = '❌ Error: ' + error.message;
-            }
-        });
+        if (loginBtn) {
+            loginBtn.addEventListener('click', iniciarSesion);
+        }
     </script>
 </body>
 </html>
