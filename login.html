@@ -85,32 +85,39 @@
 
                 // Usar popup en lugar de redirect
                 const result = await auth.signInWithPopup(googleProvider);
-                
-                if (result.user) {
-                    mensajeDiv.className = 'login-mensaje success';
-                    mensajeDiv.textContent = '✅ Inicio de sesión exitoso!';
+               
+if (result.user) {
+    mensajeDiv.className = 'login-mensaje success';
+    mensajeDiv.textContent = '✅ Inicio de sesión exitoso!';
 
-                    // Enviar mensaje a la ventana padre (extensión)
-                    if (window.opener) {
-                        window.opener.postMessage({
-                            type: 'AUTH_SUCCESS',
-                            user: {
-                                uid: result.user.uid,
-                                displayName: result.user.displayName,
-                                email: result.user.email,
-                                photoURL: result.user.photoURL
-                            }
-                        }, '*');
-                        
-                        // Cerrar esta ventana después de 2 segundos
-                        setTimeout(() => {
-                            window.close();
-                        }, 2000);
-                    } else {
-                        // Si no hay opener, mostrar mensaje para cerrar manualmente
-                        mensajeDiv.textContent = '✅ Sesión iniciada. Puedes cerrar esta ventana.';
-                    }
-                }
+    // Enviar mensaje a la ventana padre (extensión)
+    if (window.opener) {
+        window.opener.postMessage({
+            type: 'AUTH_SUCCESS',
+            user: {
+                uid: result.user.uid,
+                displayName: result.user.displayName,
+                email: result.user.email,
+                photoURL: result.user.photoURL
+            }
+        }, '*');
+        
+        // No cerramos inmediatamente, esperamos un poco
+        setTimeout(() => {
+            window.close();
+        }, 1500);
+    } else {
+        // Si no hay opener, intentar con localStorage
+        localStorage.setItem('auth_user', JSON.stringify({
+            uid: result.user.uid,
+            displayName: result.user.displayName,
+            email: result.user.email,
+            photoURL: result.user.photoURL
+        }));
+        
+        mensajeDiv.textContent = '✅ Sesión iniciada. Puedes cerrar esta ventana.';
+    }
+}
             } catch (error) {
                 console.error('Error en autenticación:', error);
                 
