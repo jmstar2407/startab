@@ -1,240 +1,325 @@
+<!-- login.html - Alojar en GitHub Pages (https://jmstar2407.github.io/startab/login.html) -->
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>StarTab - Iniciar sesión</title>
-    <!-- Firebase desde CDN (necesario para HTTPS en GitHub Pages) -->
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
         body {
-            font-family: 'Segoe UI', system-ui, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             display: flex;
-            align-items: center;
             justify-content: center;
+            align-items: center;
+            padding: 20px;
         }
 
-        .card {
+        .login-container {
             background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(20px);
-            border-radius: 20px;
-            padding: 48px 40px;
+            backdrop-filter: blur(10px);
+            border-radius: 24px;
+            padding: 40px;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
             text-align: center;
-            width: 360px;
-            box-shadow: 0 25px 60px rgba(0,0,0,0.3);
-            animation: fadeUp 0.4s ease;
+            animation: aparecer 0.5s ease;
         }
 
-        @keyframes fadeUp {
-            from { opacity: 0; transform: translateY(20px); }
-            to   { opacity: 1; transform: translateY(0); }
+        @keyframes aparecer {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
-        .logo {
-            font-size: 2.5rem;
-            font-weight: 800;
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            margin-bottom: 6px;
+        h1 {
+            color: #333;
+            font-size: 2rem;
+            margin-bottom: 10px;
         }
 
         .subtitle {
-            color: #888;
-            font-size: 0.9rem;
-            margin-bottom: 36px;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 0.95rem;
         }
 
-        #btn-google {
-            width: 100%;
-            padding: 14px 20px;
-            border: 2px solid #e5e7eb;
-            border-radius: 12px;
-            background: white;
-            cursor: pointer;
-            font-size: 1rem;
-            font-weight: 600;
-            color: #374151;
+        .auth-btn {
             display: flex;
             align-items: center;
             justify-content: center;
             gap: 12px;
-            transition: all 0.2s ease;
+            width: 100%;
+            padding: 14px 24px;
+            background: white;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            font-size: 1rem;
+            font-weight: 500;
+            color: #333;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-bottom: 20px;
         }
 
-        #btn-google:hover {
+        .auth-btn:hover {
+            background: #f5f5f5;
             border-color: #667eea;
-            background: #f5f3ff;
-            transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.2);
         }
 
-        #btn-google:disabled {
-            opacity: 0.6;
+        .auth-btn:disabled {
+            opacity: 0.7;
             cursor: not-allowed;
             transform: none;
         }
 
-        .google-icon {
-            width: 22px;
-            height: 22px;
+        .auth-btn img {
+            width: 24px;
+            height: 24px;
         }
 
-        #status {
+        .info-text {
+            color: #888;
+            font-size: 0.85rem;
             margin-top: 20px;
-            font-size: 0.875rem;
-            color: #6b7280;
-            min-height: 22px;
+            padding: 15px;
+            background: #f5f5f5;
+            border-radius: 10px;
+            border-left: 3px solid #667eea;
+            text-align: left;
         }
 
-        .success { color: #10b981 !important; font-weight: 600; }
-        .error-msg { color: #ef4444 !important; }
+        .info-text p {
+            margin: 5px 0;
+        }
 
         .spinner {
             display: inline-block;
-            width: 16px;
-            height: 16px;
-            border: 2px solid #e5e7eb;
-            border-top-color: #667eea;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(102, 126, 234, 0.3);
             border-radius: 50%;
-            animation: spin 0.7s linear infinite;
-            vertical-align: middle;
-            margin-right: 6px;
+            border-top-color: #667eea;
+            animation: spin 1s ease-in-out infinite;
         }
 
-        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
 
-        .footer {
-            margin-top: 28px;
-            font-size: 0.78rem;
-            color: #bbb;
+        .error-message {
+            color: #dc2626;
+            background: #fee2e2;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-size: 0.9rem;
+            display: none;
+        }
+
+        .error-message.visible {
+            display: block;
+        }
+
+        .back-link {
+            display: inline-block;
+            margin-top: 20px;
+            color: #667eea;
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: color 0.3s ease;
+        }
+
+        .back-link:hover {
+            color: #764ba2;
+            text-decoration: underline;
         }
     </style>
+    <!-- Firebase LOCAL (descargado) -->
+    <script src="lib/firebase-app-compat.js"></script>
+    <script src="lib/firebase-auth-compat.js"></script>
+    <script src="lib/firebase-firestore-compat.js"></script>
 </head>
 <body>
-<div class="card">
-    <div class="logo">StarTab</div>
-    <div class="subtitle">Inicia sesión para sincronizar tu configuración</div>
+    <div class="login-container">
+        <h1>🔐 StarTab</h1>
+        <div class="subtitle">Inicia sesión para sincronizar tus accesos directos</div>
 
-    <button id="btn-google">
-        <svg class="google-icon" viewBox="0 0 48 48">
-            <path fill="#4285F4" d="M44.5 20H24v8.5h11.8C34.7 33.9 30.1 37 24 37c-7.2 0-13-5.8-13-13s5.8-13 13-13c3.1 0 5.9 1.1 8.1 2.9l6.4-6.4C34.6 4.1 29.6 2 24 2 11.8 2 2 11.8 2 24s9.8 22 22 22c11 0 21-8 21-22 0-1.3-.2-2.7-.5-4z"/>
-            <path fill="#34A853" d="M6.3 14.7l7 5.1C15 16.1 19.2 13 24 13c3.1 0 5.9 1.1 8.1 2.9l6.4-6.4C34.6 4.1 29.6 2 24 2 16.3 2 9.7 7.4 6.3 14.7z"/>
-            <path fill="#FBBC05" d="M24 46c5.5 0 10.5-1.9 14.3-5.1l-6.6-5.4C29.7 37 27 38 24 38c-6 0-10.7-3.1-11.8-8.5L5.1 35c3.5 7.1 10.3 11 18.9 11z"/>
-            <path fill="#EA4335" d="M44.5 20H24v8.5h11.8c-.9 2.6-2.6 4.8-5 6.1l6.6 5.4C41.4 36.5 46 30.7 46 24c0-1.3-.2-2.7-1.5-4z"/>
-        </svg>
-        Continuar con Google
-    </button>
+        <div class="error-message" id="error-message"></div>
 
-    <div id="status"></div>
+        <button class="auth-btn" id="google-login">
+            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google">
+            Continuar con Google
+        </button>
 
-    <div class="footer">
-        Esta ventana se cerrará automáticamente al iniciar sesión
+        <div class="info-text">
+            <p><strong>📌 Nota importante:</strong></p>
+            <p>• Tu sesión se mantendrá activa incluso después de cerrar el navegador</p>
+            <p>• Serás redirigido automáticamente a StarTab al iniciar sesión</p>
+            <p>• Tus accesos directos se sincronizarán en la nube</p>
+        </div>
+
+        <a href="#" class="back-link" id="back-link">← Volver a StarTab</a>
     </div>
-</div>
 
-<script>
-    const firebaseConfig = {
-        apiKey: "AIzaSyBU8DyN2kRcDq0fxB20qRUXWBHV0E-0d6A",
-        authDomain: "startab-44e48.firebaseapp.com",
-        projectId: "startab-44e48",
-        storageBucket: "startab-44e48.firebasestorage.app",
-        messagingSenderId: "874084877753",
-        appId: "1:874084877753:web:cf9cbe9a344356dc9be268"
-    };
+    <script>
+        // Configuración de Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSyBU8DyN2kRcDq0fxB20qRUXWBHV0E-0d6A",
+            authDomain: "startab-44e48.firebaseapp.com",
+            projectId: "startab-44e48",
+            storageBucket: "startab-44e48.firebasestorage.app",
+            messagingSenderId: "874084877753",
+            appId: "1:874084877753:web:cf9cbe9a344356dc9be268"
+        };
 
-    firebase.initializeApp(firebaseConfig);
-    const auth = firebase.auth();
-    const provider = new firebase.auth.GoogleAuthProvider();
-    provider.setCustomParameters({ prompt: 'select_account' });
-    auth.useDeviceLanguage();
+        // Inicializar Firebase
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const googleProvider = new firebase.auth.GoogleAuthProvider();
 
-    const btn = document.getElementById('btn-google');
-    const status = document.getElementById('status');
+        // Configurar persistencia LOCAL
+        auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
 
-    // Determinar el origen permitido (la ventana que abrió este popup)
-    // Acepta tanto file:// como localhost
-    function getOpener() {
-        try { return window.opener; } catch(e) { return null; }
-    }
+        // Elementos DOM
+        const googleBtn = document.getElementById('google-login');
+        const errorMessage = document.getElementById('error-message');
+        const backLink = document.getElementById('back-link');
 
-    function setStatus(msg, type = '') {
-        status.innerHTML = msg;
-        status.className = type;
-    }
+        // Configurar URL de retorno (tu página local)
+        const RETURN_URL = 'http://localhost:5500/index.html'; // Ajusta el puerto según tu configuración
+        // O usa esta versión más genérica:
+        // const RETURN_URL = document.referrer || 'http://localhost:5500/index.html';
 
-    btn.addEventListener('click', async () => {
-        btn.disabled = true;
-        setStatus('<span class="spinner"></span> Conectando con Google...');
+        // Función para mostrar error
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorMessage.classList.add('visible');
+            setTimeout(() => {
+                errorMessage.classList.remove('visible');
+            }, 5000);
+        }
 
-        try {
-            const result = await auth.signInWithPopup(provider);
-            const user = result.user;
-            const token = await user.getIdToken();
-
-            setStatus('✅ ¡Sesión iniciada! Cerrando...', 'success');
-
-            // Enviar datos al opener (index.html local)
-            const opener = getOpener();
-            if (opener) {
-                opener.postMessage({
-                    type: 'STARTAB_AUTH_SUCCESS',
-                    token: token,
-                    user: {
-                        uid: user.uid,
-                        displayName: user.displayName,
-                        email: user.email,
-                        photoURL: user.photoURL
-                    }
-                }, '*'); // '*' para permitir file:// y localhost
-            }
-
-            // Cerrar la ventana después de un momento
-            setTimeout(() => window.close(), 1200);
-
-        } catch (error) {
-            console.error('Error login:', error);
-            btn.disabled = false;
-
-            const mensajes = {
-                'auth/popup-closed-by-user': 'Cerraste la ventana de Google.',
-                'auth/cancelled-popup-request': 'Solicitud cancelada.',
-                'auth/network-request-failed': 'Error de red. Verifica tu conexión.',
+        // Función para guardar la sesión en localStorage antes del redirect
+        function guardarSesionLocal(user) {
+            const sesionData = {
+                uid: user.uid,
+                displayName: user.displayName,
+                email: user.email,
+                photoURL: user.photoURL,
+                lastLogin: new Date().toISOString()
             };
-
-            setStatus('❌ ' + (mensajes[error.code] || error.message), 'error-msg');
+            localStorage.setItem('startab_session', JSON.stringify(sesionData));
         }
-    });
 
-    // Si ya hay una sesión activa, enviarla automáticamente
-    auth.onAuthStateChanged(async (user) => {
-        if (user) {
-            const token = await user.getIdToken(true); // force refresh
-            setStatus('<span class="spinner"></span> Sesión encontrada, cerrando...', 'success');
+        // Manejar inicio de sesión con Google
+        googleBtn.addEventListener('click', async () => {
+            try {
+                googleBtn.disabled = true;
+                googleBtn.innerHTML = '<span class="spinner"></span> Iniciando sesión...';
 
-            const opener = getOpener();
-            if (opener) {
-                opener.postMessage({
-                    type: 'STARTAB_AUTH_SUCCESS',
-                    token: token,
-                    user: {
-                        uid: user.uid,
-                        displayName: user.displayName,
-                        email: user.email,
-                        photoURL: user.photoURL
-                    }
-                }, '*');
+                // Configurar parámetros para forzar selección de cuenta
+                googleProvider.setCustomParameters({
+                    prompt: 'select_account'
+                });
+
+                // Iniciar sesión con popup (más confiable que redirect para este flujo)
+                const result = await auth.signInWithPopup(googleProvider);
+                
+                if (result.user) {
+                    // Guardar información de sesión en localStorage
+                    guardarSesionLocal(result.user);
+
+                    // Sincronizar perfil en Firestore
+                    const db = firebase.firestore();
+                    await db.collection('users').doc(result.user.uid).set({
+                        profile: {
+                            displayName: result.user.displayName,
+                            email: result.user.email,
+                            photoURL: result.user.photoURL
+                        },
+                        lastLogin: firebase.firestore.FieldValue.serverTimestamp()
+                    }, { merge: true });
+
+                    // Redirigir de vuelta a la página local
+                    window.location.href = RETURN_URL;
+                }
+            } catch (error) {
+                console.error('Error de autenticación:', error);
+                googleBtn.disabled = false;
+                googleBtn.innerHTML = `
+                    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google">
+                    Continuar con Google
+                `;
+
+                let mensajeError = 'Error al iniciar sesión. ';
+                switch (error.code) {
+                    case 'auth/popup-closed-by-user':
+                        mensajeError += 'Ventana cerrada por el usuario.';
+                        break;
+                    case 'auth/popup-blocked':
+                        mensajeError += 'El navegador bloqueó la ventana emergente. Permite ventanas emergentes para este sitio.';
+                        break;
+                    case 'auth/cancelled-popup-request':
+                        mensajeError += 'Solicitud cancelada.';
+                        break;
+                    case 'auth/network-request-failed':
+                        mensajeError += 'Error de conexión. Verifica tu internet.';
+                        break;
+                    default:
+                        mensajeError += error.message;
+                }
+                showError(mensajeError);
             }
+        });
 
-            setTimeout(() => window.close(), 800);
-        }
-    });
-</script>
+        // Enlace para volver
+        backLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            window.location.href = RETURN_URL;
+        });
+
+        // Verificar si ya hay una sesión activa al cargar la página
+        auth.onAuthStateChanged((user) => {
+            if (user) {
+                // Si ya hay sesión activa, actualizar localStorage y redirigir
+                guardarSesionLocal(user);
+                window.location.href = RETURN_URL;
+            }
+        });
+
+        // Manejar mensajes desde la ventana principal (opcional)
+        window.addEventListener('message', (event) => {
+            if (event.data === 'check-auth') {
+                auth.currentUser?.getIdToken().then((token) => {
+                    window.opener?.postMessage({
+                        type: 'auth-success',
+                        user: {
+                            uid: auth.currentUser.uid,
+                            displayName: auth.currentUser.displayName,
+                            email: auth.currentUser.email,
+                            photoURL: auth.currentUser.photoURL
+                        },
+                        token: token
+                    }, '*');
+                });
+            }
+        });
+    </script>
 </body>
 </html>
