@@ -1,0 +1,162 @@
+<!-- login.html -->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StarTab - Iniciar Sesión</title>
+    <link rel="stylesheet" href="login.css">
+    <!-- Firebase LOCAL (descargado) -->
+    <script src="lib/firebase-app-compat.js"></script>
+    <script src="lib/firebase-auth-compat.js"></script>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-card">
+            <div class="login-header">
+                <h1 class="login-titulo">StarTab</h1>
+                <p class="login-subtitulo">Inicia sesión para sincronizar tus accesos directos</p>
+            </div>
+            
+            <div class="login-content">
+                <div class="login-beneficios">
+                    <div class="beneficio-item">
+                        <span class="beneficio-icono">☁️</span>
+                        <span>Sincronización en la nube</span>
+                    </div>
+                    <div class="beneficio-item">
+                        <span class="beneficio-icono">📱</span>
+                        <span>Accede desde cualquier dispositivo</span>
+                    </div>
+                    <div class="beneficio-item">
+                        <span class="beneficio-icono">🔒</span>
+                        <span>Tus datos seguros con Google</span>
+                    </div>
+                </div>
+
+                <div class="login-mensaje" id="login-mensaje"></div>
+                
+                <button class="google-btn" id="google-login-btn">
+                    <img src="https://www.google.com/favicon.ico" alt="Google" class="google-icon">
+                    <span>Continuar con Google</span>
+                </button>
+
+                <div class="login-nota">
+                    <p>⚠️ Esta ventana se cerrará automáticamente después de iniciar sesión</p>
+                </div>
+            </div>
+            
+            <div class="login-footer">
+                <p>© 2024 StarTab. Todos los derechos reservados.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuración de Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSyBU8DyN2kRcDq0fxB20qRUXWBHV0E-0d6A",
+            authDomain: "startab-44e48.firebaseapp.com",
+            projectId: "startab-44e48",
+            storageBucket: "startab-44e48.firebasestorage.app",
+            messagingSenderId: "874084877753",
+            appId: "1:874084877753:web:cf9cbe9a344356dc9be268"
+        };
+
+        // Inicializar Firebase
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const googleProvider = new firebase.auth.GoogleAuthProvider();
+
+        // Configuración del provider
+        googleProvider.setCustomParameters({
+            prompt: 'select_account'
+        });
+
+        const loginBtn = document.getElementById('google-login-btn');
+        const mensajeDiv = document.getElementById('login-mensaje');
+
+        async function iniciarSesion() {
+            try {
+                loginBtn.disabled = true;
+                loginBtn.innerHTML = '<span class="spinner"></span><span>Cargando...</span>';
+                mensajeDiv.className = 'login-mensaje info';
+                mensajeDiv.textContent = 'Abriendo ventana de Google...';
+
+                // Usar popup en lugar de redirect
+                const result = await auth.signInWithPopup(googleProvider);
+                
+                if (result.user) {
+                    mensajeDiv.className = 'login-mensaje success';
+                    mensajeDiv.textContent = '✅ Inicio de sesión exitoso!';
+
+                    // Enviar mensaje a la ventana padre (extensión)
+                    if (window.opener) {
+                        window.opener.postMessage({
+                            type: 'AUTH_SUCCESS',
+                            user: {
+                                uid: result.user.uid,
+                                displayName: result.user.displayName,
+                                email: result.user.email,
+                                photoURL: result.user.photoURL
+                            }
+                        }, '*');
+                        
+                        // Cerrar esta ventana después de 2 segundos
+                        setTimeout(() => {
+                            window.close();
+                        }, 2000);
+                    } else {
+                        // Si no hay opener, mostrar mensaje para cerrar manualmente
+                        mensajeDiv.textContent = '✅ Sesión iniciada. Puedes cerrar esta ventana.';
+                    }
+                }
+            } catch (error) {
+                console.error('Error en autenticación:', error);
+                
+                loginBtn.disabled = false;
+                loginBtn.innerHTML = '<img src="https://www.google.com/favicon.ico" alt="Google" class="google-icon"><span>Continuar con Google</span>';
+                
+                mensajeDiv.className = 'login-mensaje error';
+                
+                // Manejar errores específicos
+                switch (error.code) {
+                    case 'auth/popup-closed-by-user':
+                        mensajeDiv.textContent = '❌ La ventana fue cerrada. Intenta de nuevo.';
+                        break;
+                    case 'auth/popup-blocked':
+                        mensajeDiv.textContent = '❌ El popup fue bloqueado. Permite popups para este sitio.';
+                        break;
+                    case 'auth/cancelled-popup-request':
+                        mensajeDiv.textContent = '⚠️ Solicitud cancelada. Intenta de nuevo.';
+                        break;
+                    default:
+                        mensajeDiv.textContent = '❌ Error: ' + error.message;
+                }
+            }
+        }
+
+        loginBtn.addEventListener('click', iniciarSesion);
+
+        // Verificar si ya hay sesión activa
+        auth.onAuthStateChanged((user) => {
+            if (user && window.opener) {
+                // Si ya hay sesión y tenemos opener, notificar y cerrar
+                window.opener.postMessage({
+                    type: 'AUTH_SUCCESS',
+                    user: {
+                        uid: user.uid,
+                        displayName: user.displayName,
+                        email: user.email,
+                        photoURL: user.photoURL
+                    }
+                }, '*');
+                
+                setTimeout(() => {
+                    window.close();
+                }, 1000);
+            }
+        });
+    </script>
+</body>
+</html>
