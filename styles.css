@@ -1855,3 +1855,226 @@ body.fondo-video {
 
 
 
+/* login.css */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.login-container {
+    width: 100%;
+    max-width: 450px;
+    animation: aparecer 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.login-card {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border-radius: 24px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    overflow: hidden;
+}
+
+.login-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    padding: 40px 30px;
+    text-align: center;
+}
+
+.login-titulo {
+    color: white;
+    font-size: 2.5rem;
+    margin-bottom: 10px;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.login-subtitulo {
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 1rem;
+}
+
+.login-content {
+    padding: 40px 30px;
+}
+
+.login-beneficios {
+    margin-bottom: 30px;
+}
+
+.beneficio-item {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 12px;
+    background: rgba(102, 126, 234, 0.1);
+    border-radius: 12px;
+    margin-bottom: 10px;
+    transition: transform 0.3s ease;
+}
+
+.beneficio-item:hover {
+    transform: translateX(5px);
+    background: rgba(102, 126, 234, 0.15);
+}
+
+.beneficio-icono {
+    font-size: 1.5rem;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 50%;
+    color: white;
+}
+
+.beneficio-item span:last-child {
+    color: #333;
+    font-weight: 500;
+}
+
+.login-mensaje {
+    margin: 20px 0;
+    padding: 15px;
+    border-radius: 12px;
+    font-size: 0.95rem;
+    text-align: center;
+    display: none;
+}
+
+.login-mensaje.info {
+    display: block;
+    background: rgba(102, 126, 234, 0.1);
+    color: #667eea;
+    border: 1px solid rgba(102, 126, 234, 0.3);
+}
+
+.login-mensaje.success {
+    display: block;
+    background: rgba(76, 175, 80, 0.1);
+    color: #4caf50;
+    border: 1px solid rgba(76, 175, 80, 0.3);
+}
+
+.login-mensaje.error {
+    display: block;
+    background: rgba(244, 67, 54, 0.1);
+    color: #f44336;
+    border: 1px solid rgba(244, 67, 54, 0.3);
+}
+
+.google-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 15px;
+    padding: 16px 24px;
+    background: white;
+    border: 2px solid rgba(102, 126, 234, 0.3);
+    border-radius: 16px;
+    cursor: pointer;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #333;
+    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    margin: 20px 0;
+}
+
+.google-btn:hover:not(:disabled) {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+    border-color: #667eea;
+}
+
+.google-btn:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+.google-icon {
+    width: 24px;
+    height: 24px;
+    object-fit: contain;
+}
+
+.spinner {
+    width: 24px;
+    height: 24px;
+    border: 3px solid rgba(102, 126, 234, 0.3);
+    border-top-color: #667eea;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.login-nota {
+    background: #f5f5f5;
+    padding: 15px;
+    border-radius: 12px;
+    margin-top: 20px;
+}
+
+.login-nota p {
+    color: #666;
+    font-size: 0.9rem;
+    text-align: center;
+    line-height: 1.5;
+}
+
+.login-footer {
+    background: #f8f9fa;
+    padding: 20px 30px;
+    text-align: center;
+    border-top: 1px solid #eee;
+}
+
+.login-footer p {
+    color: #999;
+    font-size: 0.85rem;
+}
+
+@keyframes aparecer {
+    0% {
+        opacity: 0;
+        transform: translateY(30px) scale(0.9);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+@media (max-width: 480px) {
+    .login-header {
+        padding: 30px 20px;
+    }
+    
+    .login-titulo {
+        font-size: 2rem;
+    }
+    
+    .login-content {
+        padding: 30px 20px;
+    }
+    
+    .google-btn {
+        padding: 14px 20px;
+        font-size: 1rem;
+    }
+}
