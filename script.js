@@ -1,5 +1,5 @@
-// script.js - VERSIÓN COMPLETA OPTIMIZADA PARA EXTENSIÓN SIN PARPADEOS
-// ===== CONFIGURACIÓN DE FIREBASE (diferida) =====
+// script.js - VERSIÓN CORREGIDA CON CATEGORÍAS EDITABLES Y ARRASTRABLES
+// ===== CONFIGURACIÓN DE FIREBASE =====
 const firebaseConfig = {
     apiKey: "AIzaSyBU8DyN2kRcDq0fxB20qRUXWBHV0E-0d6A",
     authDomain: "startab-44e48.firebaseapp.com",
@@ -9,16 +9,14 @@ const firebaseConfig = {
     appId: "1:874084877753:web:cf9cbe9a344356dc9be268"
 };
 
-// Variables de Firebase (inicialización diferida)
+// Variables de Firebase
 let db = null;
 let auth = null;
-
-// ===== VARIABLES DE AUTENTICACIÓN =====
 let currentUser = null;
-let userConfigRef = null;
-let unsubscribeUserConfig = null;
+let userDocRef = null;
+let unsubscribeCategories = null;
 
-// URL de autenticación (TU GITHUB PAGES)
+// URL de autenticación
 const AUTH_PAGE = 'https://jmstar2407.github.io/startab/auth.html';
 
 // ===== CONSTANTES =====
@@ -57,34 +55,13 @@ const FONDO_DEFAULT = {
     colorFin: '#764ba2'
 };
 
+// Configuración de la categoría General - AHORA EDITABLE
 const CATEGORIA_GENERAL = {
     id: 'general',
     nombre: 'General',
-    editable: false,
-    background: { ...FONDO_DEFAULT },
-    accesos: []
-};
-
-// Configuración por defecto para nuevos usuarios
-const CONFIG_DEFAULT = {
-    categorias: [
-        {
-            ...CATEGORIA_GENERAL,
-            accesos: obtenerIconosPorDefecto()
-        }
-    ],
-    notas: {
-        nota1: '',
-        nota2: '',
-        nota3: '',
-        nota4: '',
-        nota5: ''
-    },
-    settings: {},
-    metadata: {
-        ultimaModificacion: null,
-        version: "1.0"
-    }
+    editable: true, // Cambiado de false a true
+    orden: 1,
+    background: { ...FONDO_DEFAULT }
 };
 
 // ===== NOTAS =====
@@ -102,7 +79,8 @@ let notaEstado = {
 };
 
 // ===== ESTADO DE LA APLICACIÓN =====
-let categoriasPersonalizadas = [];
+let categorias = [];
+let iconosCache = new Map();
 
 const estado = {
     categoriaActual: localStorage.getItem('categoriaSeleccionada') || 'general',
@@ -122,7 +100,7 @@ const estado = {
 let _renderizando = false;
 let _iconosCache = null;
 let _ultimoRenderizado = 0;
-const DEBOUNCE_TIME = 100; // ms
+const DEBOUNCE_TIME = 100;
 
 // ===== CACHÉ DE ELEMENTOS DOM =====
 const DOM = {};
@@ -137,8 +115,6 @@ function cachearElementos() {
     DOM.btnPersonalizar = document.getElementById('btn-personalizar');
     DOM.modalIconos = document.getElementById('modal-iconos');
     DOM.modalPersonalizar = document.getElementById('modal-personalizar');
-
-    // Elementos de autenticación
     DOM.authContainer = document.getElementById('auth-container');
     DOM.authBtn = document.getElementById('auth-btn');
     DOM.userMenu = document.getElementById('user-menu');
@@ -149,7 +125,7 @@ function cachearElementos() {
     DOM.logoutBtn = document.getElementById('logout-btn');
 }
 
-// ===== INICIALIZACIÓN DE FIREBASE (DIFERIDA) =====
+// ===== INICIALIZACIÓN DE FIREBASE =====
 function initFirebase() {
     if (estado.firebaseInicializado) return true;
     
@@ -176,25 +152,16 @@ const convertirABase64 = file => new Promise((resolve, reject) => {
     reader.readAsDataURL(file);
 });
 
-
-// ===== UTILIDADES DE COMPRESIÓN DE IMÁGENES =====
-// ===== UTILIDADES DE COMPRESIÓN DE IMÁGENES (MODIFICADA PARA GIFs) =====
 const comprimirYRedimensionarImagen = async (file, maxHeight = 256) => {
     return new Promise((resolve, reject) => {
-        // Si es GIF, NO procesar con canvas, devolver como Data URL directamente
         if (file.type === 'image/gif') {
             const reader = new FileReader();
-            reader.onload = () => {
-                const tamañoKB = Math.round((reader.result.length * 3/4) / 1024);
-                console.log(`GIF procesado: ${tamañoKB}KB (sin compresión para mantener animación)`);
-                resolve(reader.result);
-            };
+            reader.onload = () => resolve(reader.result);
             reader.onerror = reject;
             reader.readAsDataURL(file);
             return;
         }
 
-        // Para imágenes no-GIF, proceder con el procesamiento normal
         const url = URL.createObjectURL(file);
         const img = new Image();
         
@@ -244,21 +211,13 @@ const comprimirYRedimensionarImagen = async (file, maxHeight = 256) => {
             }
             
             const base64 = canvas.toDataURL(mimeType, calidad);
-            const tamañoKB = Math.round((base64.length * 3/4) / 1024);
-            console.log(`Imagen procesada: ${width}x${height}, ${tamañoKB}KB, formato: ${mimeType}`);
-            
             resolve(base64);
         };
         
-        img.onerror = (error) => {
-            URL.revokeObjectURL(url);
-            reject(error);
-        };
-        
+        img.onerror = reject;
         img.src = url;
     });
 };
-
 
 // ===== FUNCIONES DE AUTENTICACIÓN =====
 async function iniciarSesionGoogle() {
@@ -286,14 +245,9 @@ async function iniciarSesionGoogle() {
 
             if (event.data?.type === 'STAR_TAB_AUTH_SUCCESS') {
                 window.removeEventListener('message', messageHandler);
-                
-                try {
-                    await procesarAutenticacionExitosa(event.data.user);
-                    if (authWindow && !authWindow.closed) {
-                        setTimeout(() => authWindow.close(), 1000);
-                    }
-                } catch (error) {
-                    console.error('Error al procesar usuario:', error);
+                await procesarAutenticacionExitosa(event.data.user);
+                if (authWindow && !authWindow.closed) {
+                    setTimeout(() => authWindow.close(), 1000);
                 }
             }
         };
@@ -306,12 +260,9 @@ async function iniciarSesionGoogle() {
                 if (authData) {
                     clearInterval(checkInterval);
                     window.removeEventListener('message', messageHandler);
-                    
                     localStorage.removeItem('starTab_auth_data');
                     const userData = JSON.parse(authData);
-                    
                     procesarAutenticacionExitosa(userData);
-                    
                     if (authWindow && !authWindow.closed) {
                         authWindow.close();
                     }
@@ -324,7 +275,6 @@ async function iniciarSesionGoogle() {
         setTimeout(() => {
             clearInterval(checkInterval);
             window.removeEventListener('message', messageHandler);
-            
             if (!estado.isAuthenticated) {
                 DOM.authBtn.disabled = false;
                 DOM.authBtn.innerHTML = '<span class="auth-btn-text">Iniciar sesión</span>';
@@ -347,10 +297,9 @@ async function procesarAutenticacionExitosa(user) {
     
     actualizarUIAutenticacion(user);
     
-    // Inicializar Firebase si es necesario
     if (initFirebase()) {
         await sincronizarPerfilUsuario(user);
-        await cargarConfiguracionUsuario(user.uid);
+        await cargarCategoriasUsuario(user.uid);
     }
     
     habilitarEdicion(true);
@@ -372,7 +321,6 @@ function actualizarUIAutenticacion(user) {
     if (user && DOM.authBtn && DOM.userMenu) {
         DOM.authBtn.style.display = 'none';
         DOM.userMenu.style.display = 'flex';
-
         DOM.userAvatar.src = user.photoURL || 'data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\' fill=\'%23667eea\'%3E%3Ccircle cx=\'12\' cy=\'12\' r=\'10\'/%3E%3C/svg%3E';
         DOM.userName.textContent = user.displayName || 'Usuario';
         DOM.userEmail.textContent = user.email || '';
@@ -391,15 +339,15 @@ function cerrarSesion() {
     
     actualizarUIAutenticacion(null);
     
-    if (unsubscribeUserConfig) {
-        unsubscribeUserConfig();
-        unsubscribeUserConfig = null;
+    if (unsubscribeCategories) {
+        unsubscribeCategories();
+        unsubscribeCategories = null;
     }
     
     localStorage.removeItem('starTab_lastUser');
     localStorage.removeItem('starTab_auth_data');
     
-    cargarConfiguracionLocal();
+    cargarCategoriasLocales();
     habilitarEdicion(false);
 }
 
@@ -407,7 +355,7 @@ async function sincronizarPerfilUsuario(user) {
     if (!user || !user.uid || !db) return;
 
     try {
-        const userDocRef = db.collection('users').doc(user.uid);
+        userDocRef = db.collection('users').doc(user.uid);
         const doc = await userDocRef.get();
 
         if (doc.exists) {
@@ -426,12 +374,39 @@ async function sincronizarPerfilUsuario(user) {
                 profile: {
                     displayName: user.displayName,
                     email: user.email,
-                    photoURL: user.photoURL
+                    photoURL: user.photoURL,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                },
+                metadata: {
+                    ultimaModificacion: firebase.firestore.FieldValue.serverTimestamp(),
+                    version: "1.0"
                 }
-            }, { merge: true });
+            });
+            
+            // Crear categoría General automáticamente
+            await crearCategoriaGeneralEnFirebase();
         }
     } catch (error) {
         console.error('Error al sincronizar perfil:', error);
+    }
+}
+
+// ===== FUNCIÓN: Crear categoría General en Firebase =====
+async function crearCategoriaGeneralEnFirebase() {
+    if (!currentUser || !db) return;
+
+    try {
+        const categoriaRef = userDocRef.collection('categorias').doc('general');
+        await categoriaRef.set({
+            nombre: 'General',
+            editable: true, // Cambiado de false a true
+            orden: 1,
+            background: { ...FONDO_DEFAULT },
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        console.log('Categoría General creada en Firebase');
+    } catch (error) {
+        console.error('Error creando categoría General:', error);
     }
 }
 
@@ -441,17 +416,17 @@ function inicializarAutenticacion() {
         if (savedUser) {
             const userData = JSON.parse(savedUser);
             if (Date.now() - userData.timestamp < 7 * 24 * 60 * 60 * 1000) {
-                // Restaurar sesión sin Firebase inmediatamente
                 currentUser = userData;
                 estado.isAuthenticated = true;
                 actualizarUIAutenticacion(userData);
                 habilitarEdicion(true);
                 
-                // Inicializar Firebase en segundo plano
                 requestIdleCallback(() => {
                     if (initFirebase()) {
-                        cargarConfiguracionUsuario(userData.uid);
+                        cargarCategoriasUsuario(userData.uid);
                     }
+                    // Inicializar drag & drop de categorías después de cargar
+                    setTimeout(() => inicializarDragAndDropCategorias(), 500);
                 }, { timeout: 2000 });
             }
         }
@@ -482,19 +457,30 @@ function inicializarAutenticacion() {
     }
 }
 
-// ===== CONFIGURACIÓN POR USUARIO CON RESPALDO LOCAL =====
-let _ultimaCategoriaFondo = null;
-
-// Función para guardar backup local
-function guardarBackupLocal(data) {
+// ===== FUNCIONES DE RESPALDO LOCAL =====
+function guardarBackupLocal() {
     try {
         const backupData = {
-            ...data,
+            categorias: categorias.map(c => ({
+                id: c.id,
+                nombre: c.nombre,
+                editable: c.editable,
+                orden: c.orden !== undefined ? c.orden : 999,
+                background: c.background
+            })),
+            notas: {
+                nota1: notaEstado.notas[1].contenido,
+                nota2: notaEstado.notas[2].contenido,
+                nota3: notaEstado.notas[3].contenido,
+                nota4: notaEstado.notas[4].contenido,
+                nota5: notaEstado.notas[5].contenido
+            },
             metadata: {
-                ...data.metadata,
-                ultimaModificacionLocal: Date.now() / 1000
+                ultimaModificacionLocal: Date.now() / 1000,
+                version: "1.0"
             }
         };
+        
         const backupActual = localStorage.getItem('starTab_config_backup');
         const nuevoBackup = JSON.stringify(backupData);
         
@@ -507,7 +493,6 @@ function guardarBackupLocal(data) {
     }
 }
 
-// Función para cargar backup local
 function cargarBackupLocal() {
     try {
         const backupRaw = localStorage.getItem('starTab_config_backup');
@@ -520,194 +505,290 @@ function cargarBackupLocal() {
     return null;
 }
 
-// Función para aplicar configuración sin parpadeos
-function aplicarConfiguracion(data) {
-    if (!data) return;
-    
-    // Guardar backup local
-    guardarBackupLocal(data);
-
-    // Verificar si realmente hay cambios en categorías
-    const categoriasCambiaron = JSON.stringify(categoriasPersonalizadas) !== JSON.stringify(data.categorias);
-    
-    if (categoriasCambiaron) {
-        if (data.categorias && data.categorias.length > 0) {
-            categoriasPersonalizadas = data.categorias;
-        } else {
-            categoriasPersonalizadas = [
-                {
-                    ...CATEGORIA_GENERAL,
-                    accesos: obtenerIconosPorDefecto()
-                }
-            ];
-        }
-
-        renderizarCategorias();
-        
-        if (!categoriasPersonalizadas.some(c => c.id === estado.categoriaActual)) {
-            estado.categoriaActual = 'general';
-            localStorage.setItem('categoriaSeleccionada', 'general');
-        }
-    }
-
-    // Verificar si hay cambios en notas
-    if (data.notas) {
-        let notasCambiaron = false;
-        for (let i = 1; i <= 5; i++) {
-            if (data.notas[`nota${i}`] !== undefined && 
-                notaEstado.notas[i].contenido !== data.notas[`nota${i}`]) {
-                notaEstado.notas[i].contenido = data.notas[`nota${i}`];
-                notasCambiaron = true;
-            }
-        }
-        
-        if (notasCambiaron) {
-            const notaDOM = {
-                textarea: document.getElementById('nota-textarea')
-            };
-            if (notaDOM.textarea && document.getElementById('nota-modal')?.classList.contains('nota-modal-abierto')) {
-                cargarNota(notaEstado.notaActual, notaDOM);
-            }
-        }
-    }
-
-    // Obtener iconos de la categoría actual
-    const categoriaActual = categoriasPersonalizadas.find(c => c.id === estado.categoriaActual);
-    const nuevosIconos = categoriaActual?.accesos || [];
-    
-    const iconosCambiaron = JSON.stringify(estado.iconosActuales) !== JSON.stringify(nuevosIconos);
-    
-    if (iconosCambiaron) {
-        estado.iconosActuales = nuevosIconos;
-        renderizarIconos(true);
-    }
-
-    if (categoriaActual && categoriaActual.background) {
-        const fondoActual = window.fondoActualCategoria;
-        const nuevoFondo = categoriaActual.background;
-        
-        if (!fondoActual || JSON.stringify(fondoActual) !== JSON.stringify(nuevoFondo)) {
-            aplicarFondoCategoria(estado.categoriaActual);
-        }
-    }
-}
-
-async function cargarConfiguracionUsuario(uid) {
+// ===== FUNCIONES DE CATEGORÍAS CORREGIDAS =====
+async function cargarCategoriasUsuario(uid) {
     if (!db) {
-        console.log('Firebase no inicializado, usando configuración local');
-        cargarConfiguracionLocal();
+        console.log('Firebase no inicializado, usando categorías locales');
+        cargarCategoriasLocales();
         return;
     }
     
     try {
-        if (unsubscribeUserConfig) {
-            unsubscribeUserConfig();
+        if (unsubscribeCategories) {
+            unsubscribeCategories();
         }
 
-        userConfigRef = db.collection('users').doc(uid);
-
+        userDocRef = db.collection('users').doc(uid);
+        
+        // Cargar backup local primero
         const localBackup = cargarBackupLocal();
-        let localTimestamp = localBackup?.metadata?.ultimaModificacionLocal || 0;
-
-        try {
-            const doc = await userConfigRef.get();
-            
-            if (doc.exists) {
-                const firebaseData = doc.data();
-                const firebaseTimestamp = firebaseData.metadata?.ultimaModificacion?.seconds || 0;
-                
-                if (localTimestamp > firebaseTimestamp && localBackup) {
-                    console.log('Configuración local más nueva, actualizando Firebase');
-                    await userConfigRef.set(localBackup, { merge: true });
-                    aplicarConfiguracion(localBackup);
-                } else {
-                    console.log('Usando configuración de Firebase');
-                    aplicarConfiguracion(firebaseData);
-                }
-            } else {
-                if (localBackup) {
-                    console.log('No hay datos en Firebase, usando backup local');
-                    await userConfigRef.set(localBackup);
-                    aplicarConfiguracion(localBackup);
-                } else {
-                    await crearConfiguracionPorDefecto(uid);
-                }
-            }
-        } catch (firebaseError) {
-            console.log('Error conectando a Firebase, usando backup local:', firebaseError);
-            
-            if (localBackup) {
-                console.log('Usando configuración de backup local');
-                aplicarConfiguracion(localBackup);
-            } else {
-                cargarConfiguracionLocal();
-            }
+        if (localBackup && localBackup.categorias) {
+            categorias = localBackup.categorias;
+            await cargarIconosCategoriaActual();
+            renderizarCategorias();
+            aplicarFondoCategoria(estado.categoriaActual);
         }
 
-        // Snapshot optimizado sin parpadeos
-        unsubscribeUserConfig = userConfigRef.onSnapshot(async (doc) => {
+        // Escuchar cambios en las categorías
+        unsubscribeCategories = userDocRef.collection('categorias').onSnapshot(async (snapshot) => {
             const isOnline = navigator.onLine;
             
-            if (!isOnline || doc.metadata.hasPendingWrites) {
+            if (!isOnline || snapshot.metadata.hasPendingWrites) {
                 return;
             }
 
-            if (doc.exists) {
-                const firebaseData = doc.data();
-                const firebaseTimestamp = firebaseData.metadata?.ultimaModificacion?.seconds || 0;
-                
-                const currentLocalBackup = cargarBackupLocal();
-                let currentLocalTimestamp = currentLocalBackup?.metadata?.ultimaModificacionLocal || 0;
+            const firestoreCategorias = [];
+            
+            // Procesar categorías de Firebase
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                firestoreCategorias.push({
+                    id: doc.id,
+                    nombre: data.nombre || 'Sin nombre',
+                    editable: data.editable !== undefined ? data.editable : true,
+                    orden: data.orden !== undefined ? data.orden : 999,
+                    background: data.background || { ...FONDO_DEFAULT }
+                });
+            });
 
-                if (firebaseTimestamp > currentLocalTimestamp || !currentLocalBackup) {
-                    const categoriasActuales = JSON.stringify(categoriasPersonalizadas);
-                    const categoriasNuevas = JSON.stringify(firebaseData.categorias || []);
-                    
-                    const notasActuales = JSON.stringify({
-                        nota1: notaEstado.notas[1].contenido,
-                        nota2: notaEstado.notas[2].contenido,
-                        nota3: notaEstado.notas[3].contenido,
-                        nota4: notaEstado.notas[4].contenido,
-                        nota5: notaEstado.notas[5].contenido
+            // Ordenar categorías
+            firestoreCategorias.sort((a, b) => (a.orden || 999) - (b.orden || 999));
+
+            // VERIFICAR Y CREAR CATEGORÍA GENERAL SI NO EXISTE
+            const tieneGeneral = firestoreCategorias.some(c => c.id === 'general');
+            if (!tieneGeneral) {
+                console.log('Creando categoría General en Firebase');
+                firestoreCategorias.unshift({
+                    ...CATEGORIA_GENERAL,
+                    id: 'general'
+                });
+                
+                // Guardar en Firebase
+                try {
+                    await userDocRef.collection('categorias').doc('general').set({
+                        nombre: 'General',
+                        editable: true, // Cambiado de false a true
+                        orden: 1,
+                        background: { ...FONDO_DEFAULT }
                     });
-                    
-                    const notasNuevas = JSON.stringify(firebaseData.notas || {});
-                    
-                    if (categoriasActuales !== categoriasNuevas || notasActuales !== notasNuevas) {
-                        console.log('Snapshot: aplicando cambios de Firebase');
-                        aplicarConfiguracion(firebaseData);
-                    }
+                } catch (e) {
+                    console.error('Error creando General en Firebase:', e);
+                }
+            }
+
+            // Comparar con categorías actuales
+            const categoriasActualesStr = JSON.stringify(categorias.map(c => ({
+                id: c.id,
+                nombre: c.nombre,
+                editable: c.editable,
+                orden: c.orden,
+                background: c.background
+            })));
+            
+            const categoriasNuevasStr = JSON.stringify(firestoreCategorias.map(c => ({
+                id: c.id,
+                nombre: c.nombre,
+                editable: c.editable,
+                orden: c.orden,
+                background: c.background
+            })));
+
+            if (categoriasActualesStr !== categoriasNuevasStr) {
+                console.log('Categorías actualizadas desde Firebase');
+                categorias = firestoreCategorias;
+                
+                // Validar categoría actual
+                if (!categorias.some(c => c.id === estado.categoriaActual)) {
+                    estado.categoriaActual = 'general';
+                    localStorage.setItem('categoriaSeleccionada', 'general');
+                }
+                
+                await cargarIconosCategoriaActual();
+                renderizarCategorias();
+                aplicarFondoCategoria(estado.categoriaActual);
+                guardarBackupLocal();
+                
+                // Reinicializar drag & drop
+                if (estado.isAuthenticated) {
+                    setTimeout(() => inicializarDragAndDropCategorias(), 100);
                 }
             }
         }, (error) => {
-            console.error('Error en snapshot de Firebase:', error);
+            console.error('Error en snapshot de categorías:', error);
         });
 
     } catch (error) {
-        console.error('Error general en cargarConfiguracionUsuario:', error);
-        cargarConfiguracionLocal();
+        console.error('Error al cargar categorías:', error);
+        cargarCategoriasLocales();
     }
 }
 
-async function crearConfiguracionPorDefecto(uid) {
-    if (!db) return;
+async function cargarIconosCategoriaActual() {
+    if (!estado.categoriaActual) return;
     
+    const categoria = categorias.find(c => c.id === estado.categoriaActual);
+    if (!categoria) return;
+
+    // Si está autenticado y online, cargar desde Firebase
+    if (currentUser && db && navigator.onLine) {
+        try {
+            const iconosSnapshot = await userDocRef
+                .collection('categorias')
+                .doc(estado.categoriaActual)
+                .collection('iconos')
+                .orderBy('orden')
+                .get();
+
+            const iconos = [];
+            iconosSnapshot.forEach(doc => {
+                iconos.push({
+                    id: doc.id,
+                    ...doc.data()
+                });
+            });
+
+            estado.iconosActuales = iconos;
+            iconosCache.set(estado.categoriaActual, iconos);
+            
+            try {
+                localStorage.setItem(`iconos_${estado.categoriaActual}`, JSON.stringify(iconos));
+            } catch (e) {}
+            
+            return;
+        } catch (error) {
+            console.error('Error cargando iconos de Firebase:', error);
+        }
+    }
+    
+    // Fallback: cargar desde localStorage
     try {
-        const configInicial = { ...CONFIG_DEFAULT };
-        configInicial.profile = {
-            displayName: currentUser?.displayName || 'Usuario',
-            email: currentUser?.email || '',
-            photoURL: currentUser?.photoURL || ''
-        };
-        await db.collection('users').doc(uid).set(configInicial);
-        guardarBackupLocal(configInicial);
-    } catch (error) {
-        console.error('Error al crear configuración:', error);
+        const iconosGuardados = localStorage.getItem(`iconos_${estado.categoriaActual}`);
+        if (iconosGuardados) {
+            estado.iconosActuales = JSON.parse(iconosGuardados);
+        } else if (estado.categoriaActual === 'general') {
+            estado.iconosActuales = obtenerIconosPorDefecto();
+        } else {
+            estado.iconosActuales = [];
+        }
+    } catch (e) {
+        estado.iconosActuales = estado.categoriaActual === 'general' ? obtenerIconosPorDefecto() : [];
     }
 }
 
-async function cargarConfiguracionLocal() {
-    console.log('Cargando configuración local...');
+async function guardarIconosEnFirebase(iconos) {
+    if (!currentUser || !db || !navigator.onLine) {
+        guardarIconosLocalmente(iconos);
+        return;
+    }
+
+    try {
+        const batch = db.batch();
+        const iconosRef = userDocRef
+            .collection('categorias')
+            .doc(estado.categoriaActual)
+            .collection('iconos');
+
+        const existing = await iconosRef.get();
+        existing.forEach(doc => {
+            batch.delete(doc.ref);
+        });
+
+        iconos.forEach((icono, index) => {
+            const newDocRef = iconosRef.doc();
+            batch.set(newDocRef, {
+                nombre: icono.nombre,
+                url: icono.url,
+                icono: icono.icono,
+                estilos: icono.estilos || ESTILOS_DEFAULT,
+                orden: index,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        });
+
+        await batch.commit();
+        console.log('Iconos guardados en Firebase');
+
+        await userDocRef
+            .collection('categorias')
+            .doc(estado.categoriaActual)
+            .set({
+                ultimaModificacion: firebase.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+
+        guardarIconosLocalmente(iconos);
+        
+    } catch (error) {
+        console.error('Error guardando iconos:', error);
+        guardarIconosLocalmente(iconos);
+    }
+}
+
+function guardarIconosLocalmente(iconos) {
+    try {
+        localStorage.setItem(`iconos_${estado.categoriaActual}`, JSON.stringify(iconos));
+        estado.iconosActuales = iconos;
+        guardarBackupLocal();
+    } catch (e) {
+        console.error('Error guardando iconos localmente:', e);
+    }
+}
+
+async function crearCategoriaEnFirebase(categoriaData) {
+    if (!currentUser || !db) return null;
+
+    try {
+        const categoriaRef = userDocRef.collection('categorias').doc(categoriaData.id);
+        await categoriaRef.set({
+            nombre: categoriaData.nombre,
+            editable: true,
+            orden: categoriaData.orden,
+            background: categoriaData.background,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
+        return categoriaData.id;
+    } catch (error) {
+        console.error('Error creando categoría:', error);
+        return null;
+    }
+}
+
+async function actualizarCategoriaEnFirebase(categoriaId, data) {
+    if (!currentUser || !db) return;
+
+    try {
+        await userDocRef
+            .collection('categorias')
+            .doc(categoriaId)
+            .set(data, { merge: true });
+    } catch (error) {
+        console.error('Error actualizando categoría:', error);
+    }
+}
+
+async function eliminarCategoriaDeFirebase(categoriaId) {
+    if (!currentUser || !db) return;
+
+    try {
+        const batch = db.batch();
+        const categoriaRef = userDocRef.collection('categorias').doc(categoriaId);
+        
+        const iconos = await categoriaRef.collection('iconos').get();
+        iconos.forEach(doc => {
+            batch.delete(doc.ref);
+        });
+
+        batch.delete(categoriaRef);
+        await batch.commit();
+        console.log('Categoría eliminada de Firebase');
+    } catch (error) {
+        console.error('Error eliminando categoría:', error);
+    }
+}
+
+// ===== FUNCIONES DE CATEGORÍAS LOCALES =====
+function cargarCategoriasLocales() {
+    console.log('Cargando categorías locales...');
     
     const backup = cargarBackupLocal();
     let fondoGuardado = null;
@@ -716,184 +797,218 @@ async function cargarConfiguracionLocal() {
         fondoGuardado = JSON.parse(localStorage.getItem('starTab_fondo_rapido') || 'null');
     } catch (e) {}
 
-    if (backup) {
-        console.log('Cargando configuración desde backup local');
-        
-        categoriasPersonalizadas = backup.categorias || [
-            {
-                ...CATEGORIA_GENERAL,
-                accesos: obtenerIconosPorDefecto(),
-                background: fondoGuardado ? {
-                    tipo: fondoGuardado.tipo || 'gradiente',
-                    url: fondoGuardado.url || null,
-                    opacidad: fondoGuardado.opacidad || 0.2,
-                    desenfoque: fondoGuardado.desenfoque || 0,
-                    colorInicio: fondoGuardado.colorInicio || '#667eea',
-                    colorFin: fondoGuardado.colorFin || '#764ba2'
-                } : { ...FONDO_DEFAULT }
-            }
-        ];
-
-        if (backup.notas) {
-            for (let i = 1; i <= 5; i++) {
-                if (backup.notas[`nota${i}`]) {
-                    notaEstado.notas[i].contenido = backup.notas[`nota${i}`];
-                }
-            }
-        }
-
-        renderizarCategorias();
-        aplicarFondoCategoria(estado.categoriaActual);
-        renderizarIconos(true);
-        
-        const notaDOM = {
-            textarea: document.getElementById('nota-textarea')
-        };
-        if (notaDOM.textarea) {
-            cargarNota(notaEstado.notaActual, notaDOM);
-        }
-        
-        return;
+    if (backup && backup.categorias && backup.categorias.length > 0) {
+        categorias = backup.categorias;
+    } else {
+        categorias = [{
+            ...CATEGORIA_GENERAL,
+            background: fondoGuardado || { ...FONDO_DEFAULT }
+        }];
     }
 
-    console.log('No hay backup, usando configuración por defecto');
-    categoriasPersonalizadas = [
-        {
-            ...CATEGORIA_GENERAL,
-            accesos: obtenerIconosPorDefecto(),
-            background: fondoGuardado ? {
-                tipo: fondoGuardado.tipo || 'gradiente',
-                url: fondoGuardado.url || null,
-                opacidad: fondoGuardado.opacidad || 0.2,
-                desenfoque: fondoGuardado.desenfoque || 0,
-                colorInicio: fondoGuardado.colorInicio || '#667eea',
-                colorFin: fondoGuardado.colorFin || '#764ba2'
-            } : { ...FONDO_DEFAULT }
+    // Asegurar que la categoría General tiene todos los campos
+    const generalIndex = categorias.findIndex(c => c.id === 'general');
+    if (generalIndex === -1) {
+        categorias.unshift({ ...CATEGORIA_GENERAL });
+    } else {
+        // Asegurar que tiene orden 1
+        if (categorias[generalIndex].orden === undefined) {
+            categorias[generalIndex].orden = 1; // Cambiado de 0 a 1
         }
-    ];
+        // Asegurar que es editable
+        if (categorias[generalIndex].editable === undefined) {
+            categorias[generalIndex].editable = true;
+        }
+    }
 
-    for (let i = 1; i <= 5; i++) {
-        notaEstado.notas[i].contenido = `📝 Nota ${i}\n\n• Inicia sesión para sincronizar\n• Tus notas se guardarán en la nube`;
+    // Validar categoría actual
+    if (!categorias.some(c => c.id === estado.categoriaActual)) {
+        estado.categoriaActual = 'general';
+        localStorage.setItem('categoriaSeleccionada', 'general');
+    }
+
+    // Cargar iconos
+    const iconosGuardados = localStorage.getItem(`iconos_${estado.categoriaActual}`);
+    if (iconosGuardados) {
+        estado.iconosActuales = JSON.parse(iconosGuardados);
+    } else if (estado.categoriaActual === 'general') {
+        estado.iconosActuales = obtenerIconosPorDefecto();
+        guardarIconosLocalmente(estado.iconosActuales);
+    } else {
+        estado.iconosActuales = [];
+    }
+
+    // Cargar notas
+    if (backup && backup.notas) {
+        for (let i = 1; i <= 5; i++) {
+            if (backup.notas[`nota${i}`]) {
+                notaEstado.notas[i].contenido = backup.notas[`nota${i}`];
+            }
+        }
     }
 
     renderizarCategorias();
+    aplicarFondoCategoria(estado.categoriaActual);
+    renderizarIconos(true);
     
-    if (fondoGuardado) {
-        const fondoConfig = {
-            tipo: fondoGuardado.tipo || 'gradiente',
-            url: fondoGuardado.url || null,
-            opacidad: fondoGuardado.opacidad || 0.2,
-            desenfoque: fondoGuardado.desenfoque || 0,
-            colorInicio: fondoGuardado.colorInicio || '#667eea',
-            colorFin: fondoGuardado.colorFin || '#764ba2'
-        };
-        
-        const fondoElement = document.getElementById('fondo-activo') || document.createElement('div');
-        if (!fondoElement.id) {
-            fondoElement.id = 'fondo-activo';
-            fondoElement.style.cssText = `
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                z-index: -1;
-                pointer-events: none;
-            `;
-            document.body.insertBefore(fondoElement, document.body.firstChild);
-        }
-        
-        aplicarEstiloFondo(fondoElement, fondoConfig, false);
-        fondoElement.style.opacity = '1';
-        
-        categoriasPersonalizadas[0].background = fondoConfig;
-        window.fondoActualCategoria = fondoConfig;
-    } else {
-        await aplicarFondoCategoria(estado.categoriaActual);
-    }
-    
-    await renderizarIconos(true);
-}
-
-// ===== GUARDADO EN FIREBASE CON RESPALDO LOCAL =====
-async function guardarConfiguracionCompleta() {
-    const datosAGuardar = {
-        categorias: categoriasPersonalizadas,
-        notas: {
-            nota1: notaEstado.notas[1].contenido,
-            nota2: notaEstado.notas[2].contenido,
-            nota3: notaEstado.notas[3].contenido,
-            nota4: notaEstado.notas[4].contenido,
-            nota5: notaEstado.notas[5].contenido
-        }
+    const notaDOM = {
+        textarea: document.getElementById('nota-textarea')
     };
-
-    guardarBackupLocal(datosAGuardar);
-
-    if (!currentUser || !userConfigRef || !db || !navigator.onLine) {
-        console.log('Offline o no autenticado: cambios guardados solo localmente');
-        return;
-    }
-    
-    try {
-        await userConfigRef.set({
-            categorias: categoriasPersonalizadas,
-            notas: {
-                nota1: notaEstado.notas[1].contenido,
-                nota2: notaEstado.notas[2].contenido,
-                nota3: notaEstado.notas[3].contenido,
-                nota4: notaEstado.notas[4].contenido,
-                nota5: notaEstado.notas[5].contenido
-            },
-            metadata: {
-                ultimaModificacion: firebase.firestore.FieldValue.serverTimestamp(),
-                version: '1.0'
-            }
-        }, { merge: true });
-        console.log('Configuración guardada en Firebase');
-    } catch (error) {
-        console.error('Error al guardar configuración en Firebase:', error);
+    if (notaDOM.textarea) {
+        cargarNota(notaEstado.notaActual, notaDOM);
     }
 }
 
-// ===== HABILITAR/DESABILITAR EDICIÓN =====
-function habilitarEdicion(habilitar) {
-    if (DOM.btnAgregar) {
-        DOM.btnAgregar.style.display = habilitar ? 'flex' : 'none';
-    }
-
-    if (DOM.btnPersonalizar) {
-        DOM.btnPersonalizar.style.display = habilitar ? 'flex' : 'none';
-    }
-
-    const btnAgregarCategoria = document.getElementById('btn-agregar-categoria');
-    if (btnAgregarCategoria) {
-        btnAgregarCategoria.style.display = habilitar ? 'inline-flex' : 'none';
-    }
-
-    estado.isAuthenticated = habilitar;
-}
-
-// ===== FUNCIONES DE CATEGORÍAS COMPLETAS =====
-let _categoriasListenersInit = false;
-let _agregarCategoriaEnProceso = false;
-
-function inicializarListenersCategorias() {
-    if (_categoriasListenersInit) return;
-    
+function renderizarCategorias() {
     const container = document.querySelector('.categorias-container');
     if (!container) return;
 
-    // Delegación de eventos para clicks
+    let html = '';
+
+    // Ordenar categorías antes de renderizar
+    const categoriasOrdenadas = [...categorias].sort((a, b) => (a.orden || 999) - (b.orden || 999));
+
+    categoriasOrdenadas.forEach(cat => {
+        const activo = cat.id === estado.categoriaActual ? 'activo' : '';
+        const editable = cat.editable ? 'true' : 'false';
+
+        html += `
+            <div class="categoria-wrapper" data-categoria-id="${cat.id}" data-categoria-editable="${editable}" draggable="${estado.isAuthenticated}">
+                <button class="categoria-btn ${activo}" data-categoria="${cat.id}">
+                    <span class="categoria-nombre">${cat.nombre || 'Sin nombre'}</span>
+                </button>
+            </div>
+        `;
+    });
+
+    if (categorias.length < MAX_CATEGORIAS && estado.isAuthenticated) {
+        html += `
+            <button class="categoria-btn agregar-categoria-btn" id="btn-agregar-categoria">
+                <span class="agregar-categoria">+</span>
+            </button>
+        `;
+    }
+
+    if (container.innerHTML !== html) {
+        container.innerHTML = html;
+        inicializarListenersCategorias();
+        
+        // Inicializar drag & drop después de renderizar
+        if (estado.isAuthenticated) {
+            setTimeout(() => inicializarDragAndDropCategorias(), 50);
+        }
+    }
+}
+
+// ===== DRAG AND DROP DE CATEGORÍAS =====
+function inicializarDragAndDropCategorias() {
+    const container = document.querySelector('.categorias-container');
+    if (!container || !estado.isAuthenticated) return;
+
+    let draggedItem = null;
+
+    container.querySelectorAll('.categoria-wrapper').forEach(wrapper => {
+        wrapper.draggable = true;
+        wrapper.addEventListener('dragstart', (e) => {
+            draggedItem = wrapper;
+            wrapper.classList.add('arrastrando');
+            e.dataTransfer.setData('text/plain', wrapper.dataset.categoriaId);
+            e.dataTransfer.effectAllowed = 'move';
+        });
+
+        wrapper.addEventListener('dragend', () => {
+            wrapper.classList.remove('arrastrando');
+            container.querySelectorAll('.categoria-wrapper').forEach(w => w.classList.remove('drag-over'));
+        });
+
+        wrapper.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+        });
+
+        wrapper.addEventListener('dragenter', (e) => {
+            e.preventDefault();
+            if (wrapper !== draggedItem) {
+                wrapper.classList.add('drag-over');
+            }
+        });
+
+        wrapper.addEventListener('dragleave', () => {
+            wrapper.classList.remove('drag-over');
+        });
+
+        wrapper.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    wrapper.classList.remove('drag-over');
+    
+    if (wrapper === draggedItem) return;
+
+    const fromId = e.dataTransfer.getData('text/plain');
+    const toId = wrapper.dataset.categoriaId;
+
+    if (fromId === toId) return;
+
+    // Reordenar categorías
+    const fromIndex = categorias.findIndex(c => c.id === fromId);
+    const toIndex = categorias.findIndex(c => c.id === toId);
+
+    if (fromIndex === -1 || toIndex === -1) return;
+
+    // Mover el elemento
+    const [movedCategory] = categorias.splice(fromIndex, 1);
+    categorias.splice(toIndex, 0, movedCategory);
+
+    // Actualizar órdenes empezando desde 1
+    categorias.forEach((cat, index) => {
+        cat.orden = index + 1; // Cambiado de index a index + 1
+    });
+
+    // Guardar cambios en Firebase
+    if (currentUser && db) {
+        try {
+            const batch = db.batch();
+            for (const cat of categorias) {
+                const catRef = userDocRef.collection('categorias').doc(cat.id);
+                batch.set(catRef, {
+                    nombre: cat.nombre,
+                    editable: cat.editable,
+                    orden: cat.orden,
+                    background: cat.background
+                }, { merge: true });
+            }
+            await batch.commit();
+        } catch (error) {
+            console.error('Error guardando orden de categorías:', error);
+        }
+    }
+
+    // Guardar backup local
+    guardarBackupLocal();
+
+    // Actualizar UI
+    renderizarCategorias();
+    
+    // Si la categoría actual cambió de posición, mantenerla seleccionada
+    if (estado.categoriaActual === fromId || estado.categoriaActual === toId) {
+        actualizarCategoriasUI();
+    }
+});
+    });
+
+    container.addEventListener('dragover', (e) => e.preventDefault());
+}
+
+function inicializarListenersCategorias() {
+    const container = document.querySelector('.categorias-container');
+    if (!container) return;
+
     container.addEventListener('click', async (e) => {
-        // Botón de categoría normal
         const btn = e.target.closest('.categoria-btn[data-categoria]');
         if (btn) {
-            cambiarCategoria(btn.dataset.categoria);
+            await cambiarCategoria(btn.dataset.categoria);
             return;
         }
         
-        // Botón de agregar categoría
         const addBtn = e.target.closest('#btn-agregar-categoria');
         if (addBtn && estado.isAuthenticated) {
             e.preventDefault();
@@ -903,7 +1018,6 @@ function inicializarListenersCategorias() {
         }
     });
 
-    // Menú contextual en categorías editables
     container.addEventListener('contextmenu', (e) => {
         const wrapper = e.target.closest('.categoria-wrapper');
         if (wrapper && estado.isAuthenticated) {
@@ -915,40 +1029,19 @@ function inicializarListenersCategorias() {
             }
         }
     });
-
-    _categoriasListenersInit = true;
 }
 
-function renderizarCategorias() {
-    const container = document.querySelector('.categorias-container');
-    if (!container) return;
+async function cambiarCategoria(categoriaId) {
+    if (!categorias.some(c => c.id === categoriaId) || categoriaId === estado.categoriaActual) return;
 
-    let html = '';
-
-    categoriasPersonalizadas.forEach(cat => {
-        const activo = cat.id === estado.categoriaActual ? 'activo' : '';
-
-        html += `
-            <div class="categoria-wrapper" data-categoria-id="${cat.id}" data-categoria-editable="${cat.editable !== false}">
-                <button class="categoria-btn ${activo}" data-categoria="${cat.id}">
-                    <span class="categoria-nombre">${cat.nombre}</span>
-                </button>
-            </div>
-        `;
-    });
-
-    if (categoriasPersonalizadas.length < MAX_CATEGORIAS && estado.isAuthenticated) {
-        html += `
-            <button class="categoria-btn agregar-categoria-btn" id="btn-agregar-categoria">
-                <span class="agregar-categoria">+</span>
-            </button>
-        `;
-    }
-
-    if (container.innerHTML !== html) {
-        container.innerHTML = html;
-        inicializarListenersCategorias();
-    }
+    estado.categoriaActual = categoriaId;
+    localStorage.setItem('categoriaSeleccionada', categoriaId);
+    
+    await cargarIconosCategoriaActual();
+    
+    actualizarCategoriasUI();
+    renderizarIconos(true);
+    aplicarFondoCategoria(categoriaId);
 }
 
 function actualizarCategoriasUI() {
@@ -957,92 +1050,66 @@ function actualizarCategoriasUI() {
     });
 }
 
-async function cambiarCategoria(categoriaId) {
-    if (!categoriasPersonalizadas.some(c => c.id === categoriaId) || categoriaId === estado.categoriaActual) return;
-
-    estado.categoriaActual = categoriaId;
-    localStorage.setItem('categoriaSeleccionada', categoriaId);
-    
-    const nuevaCategoria = categoriasPersonalizadas.find(c => c.id === categoriaId);
-    estado.iconosActuales = nuevaCategoria?.accesos || [];
-    
-    actualizarCategoriasUI();
-    aplicarFondoCategoria(categoriaId);
-    await renderizarIconos(true);
-}
-
-// FUNCIÓN AGREGAR CATEGORÍA
 async function agregarCategoria() {
-    if (_agregarCategoriaEnProceso) return;
-    _agregarCategoriaEnProceso = true;
-
-    try {
-        const nombre = prompt('Nombre de la nueva categoría (máx 20 caracteres):', 'Nueva categoría');
-        if (nombre === null) {
-            _agregarCategoriaEnProceso = false;
-            return;
-        }
-
-        const nombreTrim = nombre.trim();
-        if (!nombreTrim) {
-            alert('El nombre no puede estar vacío');
-            _agregarCategoriaEnProceso = false;
-            return;
-        }
-
-        if (nombreTrim.length > 20) {
-            alert('El nombre no puede tener más de 20 caracteres');
-            _agregarCategoriaEnProceso = false;
-            return;
-        }
-
-        if (categoriasPersonalizadas.some(c => c.nombre.toLowerCase() === nombreTrim.toLowerCase())) {
-            alert('Ya existe una categoría con ese nombre');
-            _agregarCategoriaEnProceso = false;
-            return;
-        }
-
-        const nuevoId = 'cat_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-        
-        // Usar el fondo de la categoría actual como base
-        const categoriaActual = categoriasPersonalizadas.find(c => c.id === estado.categoriaActual);
-        const fondoBase = categoriaActual && categoriaActual.background ? categoriaActual.background : FONDO_DEFAULT;
-
-        const nuevaCategoria = {
-            id: nuevoId,
-            nombre: nombreTrim,
-            editable: true,
-            background: { ...fondoBase },
-            accesos: []
-        };
-
-        categoriasPersonalizadas.push(nuevaCategoria);
-        
-        await guardarConfiguracionCompleta();
-        
-        renderizarCategorias();
-        
-        // Cambiar automáticamente a la nueva categoría
-        estado.categoriaActual = nuevoId;
-        localStorage.setItem('categoriaSeleccionada', nuevoId);
-        estado.iconosActuales = [];
-        await renderizarIconos(true);
-        aplicarFondoCategoria(nuevoId);
-        
-    } catch (error) {
-        console.error('Error al agregar categoría:', error);
-        alert('Error al crear la categoría');
-    } finally {
-        _agregarCategoriaEnProceso = false;
+    if (!estado.isAuthenticated) {
+        alert('Debes iniciar sesión para crear categorías');
+        return;
     }
+
+    const nombre = prompt('Nombre de la nueva categoría (máx 20 caracteres):', 'Nueva categoría');
+    if (nombre === null) return;
+
+    const nombreTrim = nombre.trim();
+    if (!nombreTrim) {
+        alert('El nombre no puede estar vacío');
+        return;
+    }
+
+    if (nombreTrim.length > 20) {
+        alert('El nombre no puede tener más de 20 caracteres');
+        return;
+    }
+
+    if (categorias.some(c => c.nombre.toLowerCase() === nombreTrim.toLowerCase())) {
+        alert('Ya existe una categoría con ese nombre');
+        return;
+    }
+
+    const nuevoId = 'cat_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    const orden = categorias.length + 1; // Cambiado de categorias.length a categorias.length + 1
+    
+    const categoriaActual = categorias.find(c => c.id === estado.categoriaActual);
+    const fondoBase = categoriaActual && categoriaActual.background ? categoriaActual.background : FONDO_DEFAULT;
+
+    const nuevaCategoria = {
+        id: nuevoId,
+        nombre: nombreTrim,
+        editable: true,
+        orden: orden,
+        background: { ...fondoBase }
+    };
+
+    categorias.push(nuevaCategoria);
+    
+    if (currentUser && db) {
+        await crearCategoriaEnFirebase(nuevaCategoria);
+    }
+    
+    guardarBackupLocal();
+    renderizarCategorias();
+    
+    estado.categoriaActual = nuevoId;
+    localStorage.setItem('categoriaSeleccionada', nuevoId);
+    estado.iconosActuales = [];
+    guardarIconosLocalmente([]);
+    await renderizarIconos(true);
+    aplicarFondoCategoria(nuevoId);
 }
 
-// FUNCIÓN MOSTRAR MENÚ CONTEXTUAL DE CATEGORÍA
 function mostrarMenuContextualCategoria(event, categoriaId) {
-    // Eliminar menú existente
     document.querySelector('.menu-contextual-categoria')?.remove();
     
-    const categoria = categoriasPersonalizadas.find(c => c.id === categoriaId);
+    const categoria = categorias.find(c => c.id === categoriaId);
     if (!categoria || !categoria.editable) return;
     
     const menu = document.createElement('div');
@@ -1059,7 +1126,6 @@ function mostrarMenuContextualCategoria(event, categoriaId) {
 
     document.body.appendChild(menu);
     
-    // Posicionar el menú
     const menuWidth = menu.offsetWidth;
     const menuHeight = menu.offsetHeight;
     
@@ -1081,7 +1147,6 @@ function mostrarMenuContextualCategoria(event, categoriaId) {
     
     menu.style.cssText = `left:${left}px;top:${top}px;position:fixed;z-index:2000;`;
 
-    // Event listeners del menú
     menu.querySelector('[data-action="editar-categoria"]').addEventListener('click', async () => {
         menu.remove();
         await editarCategoria(categoriaId);
@@ -1092,7 +1157,6 @@ function mostrarMenuContextualCategoria(event, categoriaId) {
         await eliminarCategoria(categoriaId);
     });
     
-    // Cerrar al hacer click fuera
     setTimeout(() => {
         const cerrarMenu = (e) => {
             if (!menu.contains(e.target)) {
@@ -1106,13 +1170,8 @@ function mostrarMenuContextualCategoria(event, categoriaId) {
     }, 100);
 }
 
-// FUNCIÓN EDITAR CATEGORÍA
 async function editarCategoria(categoriaId) {
-    const categoria = categoriasPersonalizadas.find(c => c.id === categoriaId);
-    if (!categoria || categoria.editable === false) {
-        alert('No puedes editar la categoría General');
-        return;
-    }
+    const categoria = categorias.find(c => c.id === categoriaId);
     
     const nuevoNombre = prompt('Renombrar categoría (máx 20 caracteres):', categoria.nombre);
     
@@ -1129,46 +1188,47 @@ async function editarCategoria(categoriaId) {
         return;
     }
     
-    if (categoriasPersonalizadas.some(c => c.id !== categoriaId && c.nombre.toLowerCase() === nombreTrim.toLowerCase())) {
+    if (categorias.some(c => c.id !== categoriaId && c.nombre.toLowerCase() === nombreTrim.toLowerCase())) {
         alert('Ya existe otra categoría con ese nombre');
         return;
     }
     
     categoria.nombre = nombreTrim;
     
-    await guardarConfiguracionCompleta();
+    if (currentUser && db) {
+        await actualizarCategoriaEnFirebase(categoriaId, { nombre: nombreTrim });
+    }
+    
+    guardarBackupLocal();
     renderizarCategorias();
 }
 
-// FUNCIÓN ELIMINAR CATEGORÍA
 async function eliminarCategoria(categoriaId) {
-    const categoria = categoriasPersonalizadas.find(c => c.id === categoriaId);
+    const categoria = categorias.find(c => c.id === categoriaId);
     
-    if (!categoria || categoria.editable === false) {
-        alert('No puedes eliminar la categoría General');
-        return;
-    }
-    
-    const mensaje = categoria.accesos && categoria.accesos.length > 0
-        ? `¿Eliminar la categoría "${categoria.nombre}" y todos sus ${categoria.accesos.length} accesos directos?`
+    const mensaje = estado.iconosActuales.length > 0
+        ? `¿Eliminar la categoría "${categoria.nombre}" y todos sus ${estado.iconosActuales.length} accesos directos?`
         : `¿Eliminar la categoría "${categoria.nombre}"?`;
     
     if (!confirm(mensaje)) return;
     
-    const index = categoriasPersonalizadas.findIndex(c => c.id === categoriaId);
+    const index = categorias.findIndex(c => c.id === categoriaId);
     if (index !== -1) {
-        categoriasPersonalizadas.splice(index, 1);
+        categorias.splice(index, 1);
         
-        await guardarConfiguracionCompleta();
+        if (currentUser && db) {
+            await eliminarCategoriaDeFirebase(categoriaId);
+        }
         
-        // Si la categoría actual fue eliminada, ir a 'general'
+        localStorage.removeItem(`iconos_${categoriaId}`);
+        
+        guardarBackupLocal();
+        
         if (estado.categoriaActual === categoriaId) {
             estado.categoriaActual = 'general';
             localStorage.setItem('categoriaSeleccionada', 'general');
-            
-            const categoriaGeneral = categoriasPersonalizadas.find(c => c.id === 'general');
-            estado.iconosActuales = categoriaGeneral?.accesos || [];
-            await aplicarFondoCategoria('general');
+            await cargarIconosCategoriaActual();
+            aplicarFondoCategoria('general');
             await renderizarIconos(true);
         }
         
@@ -1176,32 +1236,7 @@ async function eliminarCategoria(categoriaId) {
     }
 }
 
-// ===== FUNCIONES DE ICONOS OPTIMIZADAS =====
-async function guardarIconosEnFirebase(iconos) {
-    try {
-        const categoriaIndex = categoriasPersonalizadas.findIndex(c => c.id === estado.categoriaActual);
-        if (categoriaIndex !== -1) {
-            categoriasPersonalizadas[categoriaIndex].accesos = iconos;
-            estado.iconosActuales = iconos;
-            await guardarConfiguracionCompleta();
-        }
-    } catch (error) {
-        console.error('Error al guardar iconos:', error);
-    }
-}
-
-async function cargarIconosDeFirebase() {
-    const categoriaActual = categoriasPersonalizadas.find(c => c.id === estado.categoriaActual);
-    estado.iconosActuales = categoriaActual?.accesos || [];
-    
-    if (estado.categoriaActual === 'general' && estado.iconosActuales.length === 0) {
-        estado.iconosActuales = obtenerIconosPorDefecto();
-        await guardarIconosEnFirebase(estado.iconosActuales);
-    }
-    
-    return estado.iconosActuales;
-}
-
+// ===== FUNCIONES DE ICONOS =====
 function obtenerIconosPorDefecto() {
     return [
         {
@@ -1225,7 +1260,6 @@ function obtenerIconosPorDefecto() {
     ];
 }
 
-// ===== FUNCIONES DE RENDERIZADO OPTIMIZADAS SIN PARPADEOS =====
 async function renderizarIconos(ignorarCache = false) {
     const ahora = Date.now();
     if (ahora - _ultimoRenderizado < DEBOUNCE_TIME && !ignorarCache) {
@@ -1235,7 +1269,7 @@ async function renderizarIconos(ignorarCache = false) {
     if (_renderizando) return;
     _renderizando = true;
     
-    const iconos = await cargarIconosDeFirebase();
+    const iconos = estado.iconosActuales;
     
     if (!ignorarCache && _iconosCache && JSON.stringify(_iconosCache) === JSON.stringify(iconos)) {
         console.log('Iconos sin cambios, omitiendo renderizado');
@@ -1245,52 +1279,26 @@ async function renderizarIconos(ignorarCache = false) {
     
     _iconosCache = iconos;
     
-    const iconosActuales = DOM.contenedorIconos.children;
-    if (iconosActuales.length === iconos.length && !ignorarCache) {
-        let sonIguales = true;
-        for (let i = 0; i < iconosActuales.length; i++) {
-            const iconoActual = iconosActuales[i];
-            const iconoNuevo = iconos[i];
-            
-            const hrefActual = iconoActual.getAttribute('href');
-            const imgActual = iconoActual.querySelector('img')?.src;
-            const spanActual = iconoActual.querySelector('span')?.textContent;
-            
-            if (hrefActual !== iconoNuevo.url || 
-                imgActual !== iconoNuevo.icono || 
-                spanActual !== iconoNuevo.nombre) {
-                sonIguales = false;
-                break;
-            }
-        }
-        
-        if (sonIguales) {
-            console.log('Iconos visualmente iguales, omitiendo renderizado');
-            _renderizando = false;
-            return;
-        }
-    }
-
     requestAnimationFrame(() => {
-const nuevoHTML = iconos.map((icono, index) => {
-    const estilos = { ...ESTILOS_DEFAULT, ...(icono.estilos || {}) };
-    const bgColor = estilos.tieneFondo && estilos.colorFondo ? estilos.colorFondo : 'transparent';
-    const boxShadow = estilos.tieneFondo ? '0 4px 15px rgba(0,0,0,0.2)' : 'none';
+        const nuevoHTML = iconos.map((icono, index) => {
+            const estilos = { ...ESTILOS_DEFAULT, ...(icono.estilos || {}) };
+            const bgColor = estilos.tieneFondo && estilos.colorFondo ? estilos.colorFondo : 'transparent';
+            const boxShadow = estilos.tieneFondo ? '0 4px 15px rgba(0,0,0,0.2)' : 'none';
 
-    return `
-        <a href="${icono.url}" class="icono-item" target="_blank" data-index="${index}" style="animation: aparecerIcono 0.3s cubic-bezier(0.2, 0, 0, 1) ${index * 0.03}s both">
-            <div class="icono-contenedor" style="background-color:${bgColor};border-radius:${estilos.radioBorde}%;display:flex;align-items:center;justify-content:center;margin-bottom:0.5rem;transition:all 0.3s ease;box-shadow:${boxShadow}">
-                <img src="${icono.icono}" alt="${icono.nombre}" style="width:${estilos.tamanoIcono}%;height:${estilos.tamanoIcono}%;object-fit:contain" loading="lazy">
-            </div>
-            
-            <div class="btn-incognito-small" title="Abrir en incógnito" data-url="${icono.url}">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-hat-glasses-icon lucide-hat-glasses"><path d="M14 18a2 2 0 0 0-4 0"/><path d="m19 11-2.11-6.657a2 2 0 0 0-2.752-1.148l-1.276.61A2 2 0 0 1 12 4H8.5a2 2 0 0 0-1.925 1.456L5 11"/><path d="M2 11h20"/><circle cx="17" cy="18" r="3"/><circle cx="7" cy="18" r="3"/></svg>
-            </div>
+            return `
+                <a href="${icono.url}" class="icono-item" target="_blank" data-index="${index}" style="animation: aparecerIcono 0.3s cubic-bezier(0.2, 0, 0, 1) ${index * 0.03}s both">
+                    <div class="icono-contenedor" style="background-color:${bgColor};border-radius:${estilos.radioBorde}%;display:flex;align-items:center;justify-content:center;margin-bottom:0.5rem;transition:all 0.3s ease;box-shadow:${boxShadow}">
+                        <img src="${icono.icono}" alt="${icono.nombre}" style="width:${estilos.tamanoIcono}%;height:${estilos.tamanoIcono}%;object-fit:contain" loading="lazy">
+                    </div>
+                    
+                    <div class="btn-incognito-small" title="Abrir en incógnito" data-url="${icono.url}">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-hat-glasses-icon lucide-hat-glasses"><path d="M14 18a2 2 0 0 0-4 0"/><path d="m19 11-2.11-6.657a2 2 0 0 0-2.752-1.148l-1.276.61A2 2 0 0 1 12 4H8.5a2 2 0 0 0-1.925 1.456L5 11"/><path d="M2 11h20"/><circle cx="17" cy="18" r="3"/><circle cx="7" cy="18" r="3"/></svg>
+                    </div>
 
-            <span>${icono.nombre}</span>
-        </a>
-    `;
-}).join('');
+                    <span>${icono.nombre}</span>
+                </a>
+            `;
+        }).join('');
 
         if (DOM.contenedorIconos.innerHTML !== nuevoHTML) {
             DOM.contenedorIconos.innerHTML = nuevoHTML;
@@ -1349,7 +1357,7 @@ async function eliminarIcono(index) {
     }
 }
 
-// ===== DRAG AND DROP =====
+// ===== DRAG AND DROP DE ICONOS =====
 function inicializarDragAndDrop() {
     DOM.contenedorIconos?.querySelectorAll('.icono-item').forEach(item => {
         item.draggable = estado.isAuthenticated;
@@ -1431,20 +1439,19 @@ function mostrarMenuContextual(event, icono) {
     }, 100);
 }
 
-// ===== FUNCIONES DE FONDO OPTIMIZADAS =====
+// ===== FUNCIONES DE FONDO CORREGIDAS =====
 let _fondoToken = 0;
+let _ultimaCategoriaFondo = null;
 
 async function aplicarFondoCategoria(categoriaId) {
-    if (_ultimaCategoriaFondo === categoriaId) {
-        return;
-    }
-    
-    const categoria = categoriasPersonalizadas.find(c => c.id === categoriaId);
+    // Permitir aplicar incluso si es la misma categoría (para cambios inmediatos)
+    const categoria = categorias.find(c => c.id === categoriaId);
     if (!categoria || !categoria.background) return;
 
     const miToken = ++_fondoToken;
     const fondoConfig = categoria.background;
 
+    // Precargar si es necesario
     if (fondoConfig.tipo === 'imagen' && fondoConfig.url) {
         await precargarImagen(fondoConfig.url);
     } else if (fondoConfig.tipo === 'video' && fondoConfig.url) {
@@ -1483,28 +1490,10 @@ function aplicarFondoConFade(fondoConfig) {
     const DURACION_FADE = 400;
     const tokenEsteFrame = _fondoToken;
 
+    // Eliminar fondos temporales anteriores
     document.querySelectorAll('[id="fondo-temporal"]').forEach(el => el.remove());
 
     let fondoActual = document.getElementById('fondo-activo');
-
-    if (fondoActual && fondoActual.dataset.fondoRapido === 'true') {
-        const savedRaw = localStorage.getItem('starTab_fondo_rapido');
-        const saved = savedRaw ? JSON.parse(savedRaw) : null;
-        const mismoFondo = saved &&
-            saved.tipo === fondoConfig.tipo &&
-            saved.url === (fondoConfig.url || null) &&
-            saved.colorInicio === (fondoConfig.colorInicio || null) &&
-            saved.colorFin === (fondoConfig.colorFin || null);
-
-        if (mismoFondo) {
-            fondoActual.dataset.fondoRapido = 'false';
-            window.fondoActualCategoria = fondoConfig;
-            _guardarFondoLocalStorage(fondoConfig);
-            return;
-        } else {
-            fondoActual.dataset.fondoRapido = 'false';
-        }
-    }
 
     const nuevoFondo = document.createElement('div');
     nuevoFondo.id = 'fondo-temporal';
@@ -1522,7 +1511,9 @@ function aplicarFondoConFade(fondoConfig) {
     `;
 
     document.body.insertBefore(nuevoFondo, fondoActual || document.body.firstChild);
-    aplicarEstiloFondo(nuevoFondo, fondoConfig, true);
+    aplicarEstiloFondo(nuevoFondo, fondoConfig);
+    
+    // Forzar reflow
     nuevoFondo.offsetHeight;
 
     if (fondoActual) {
@@ -1550,10 +1541,10 @@ function aplicarFondoConFade(fondoConfig) {
     });
 
     window.fondoActualCategoria = fondoConfig;
-    _guardarFondoLocalStorage(fondoConfig);
+    guardarFondoLocalStorage(fondoConfig);
 }
 
-function _guardarFondoLocalStorage(fondoConfig) {
+function guardarFondoLocalStorage(fondoConfig) {
     try {
         const fondoActual = localStorage.getItem('starTab_fondo_rapido');
         const nuevoFondo = JSON.stringify({
@@ -1573,11 +1564,10 @@ function _guardarFondoLocalStorage(fondoConfig) {
     }
 }
 
-// ===== FUNCIÓN DE FONDO SIMPLIFICADA =====
 function aplicarEstiloFondo(elemento, config) {
     const { tipo, url, colorInicio, colorFin, opacidad, desenfoque } = config;
     
-    // Limpiar estilos
+    // Limpiar estilos anteriores
     elemento.style.cssText = `
         position: fixed;
         top: 0;
@@ -1588,25 +1578,33 @@ function aplicarEstiloFondo(elemento, config) {
         pointer-events: none;
     `;
     
-    // Aplicar desenfoque SIEMPRE de la misma manera
+    // Aplicar desenfoque si es necesario
     if (desenfoque > 0) {
         elemento.style.filter = `blur(${desenfoque}px)`;
+    } else {
+        elemento.style.filter = 'none';
     }
     
-    // Aplicar fondo según tipo
     if (tipo === 'gradiente') {
         elemento.style.background = `linear-gradient(135deg, ${colorInicio}, ${colorFin})`;
+        elemento.style.backgroundSize = 'cover';
     } 
     else if (tipo === 'imagen' && url) {
         const op = opacidad || 0.2;
         elemento.style.background = `linear-gradient(rgba(0,0,0,${op}), rgba(0,0,0,${op})), url('${url}')`;
         elemento.style.backgroundSize = 'cover';
         elemento.style.backgroundPosition = 'center';
+        
+        // Eliminar video si existía
+        const oldVideo = elemento.querySelector('video');
+        if (oldVideo) oldVideo.remove();
     } 
     else if (tipo === 'video' && url) {
         elemento.style.background = '#000';
         
-        // Video simple
+        // Limpiar fondo de imagen
+        elemento.style.backgroundImage = 'none';
+        
         let video = elemento.querySelector('video');
         if (!video) {
             video = document.createElement('video');
@@ -1626,36 +1624,38 @@ function aplicarEstiloFondo(elemento, config) {
         video.loop = true;
         video.muted = true;
         video.playsInline = true;
-        video.play().catch(() => {});
+        video.load();
+        video.play().catch(e => console.log('Error reproduciendo video:', e));
     }
 }
 
 async function guardarFondoCategoria(nuevaConfiguracion) {
-    const categoriaIndex = categoriasPersonalizadas.findIndex(c => c.id === estado.categoriaActual);
-    if (categoriaIndex === -1) return;
+    const categoria = categorias.find(c => c.id === estado.categoriaActual);
+    if (!categoria) return;
 
-    categoriasPersonalizadas[categoriaIndex].background = {
+    categoria.background = {
         tipo: nuevaConfiguracion.tipo,
         url: nuevaConfiguracion.url,
         opacidad: nuevaConfiguracion.opacidad,
-        desenfoque: nuevaConfiguracion.desenfoque, // Esto ya se guarda
+        desenfoque: nuevaConfiguracion.desenfoque,
         colorInicio: nuevaConfiguracion.colorInicio,
         colorFin: nuevaConfiguracion.colorFin
     };
 
+    // Guardar en Firebase
+    if (currentUser && db) {
+        await actualizarCategoriaEnFirebase(estado.categoriaActual, {
+            background: categoria.background
+        });
+    }
+
+    // APLICAR INMEDIATAMENTE
     aplicarFondoCategoria(estado.categoriaActual);
-    await guardarConfiguracionCompleta();
     
-    // Guardar en localStorage para fondo-rapido.js
-    localStorage.setItem('starTab_fondo_rapido', JSON.stringify({
-        tipo: nuevaConfiguracion.tipo,
-        url: nuevaConfiguracion.url,
-        opacidad: nuevaConfiguracion.opacidad,
-        desenfoque: nuevaConfiguracion.desenfoque, // ¡Importante!
-        colorInicio: nuevaConfiguracion.colorInicio,
-        colorFin: nuevaConfiguracion.colorFin
-    }));
+    guardarFondoLocalStorage(categoria.background);
+    guardarBackupLocal();
 }
+
 // ===== BARRA DE BÚSQUEDA =====
 function inicializarBarraBusqueda() {
     if (!DOM.barraBusqueda) return;
@@ -1791,18 +1791,18 @@ function inicializarModalIconos() {
         fileInput: document.getElementById('icono-file'),
         fileName: document.getElementById('file-name'),
         fileLabel: document.querySelector('.file-label'),
-        fileText: document.querySelector('.file-text')
+        fileText: document.querySelector('.file-text'),
+        colorValor: document.getElementById('color-valor')
     };
 
-const inputNombre = document.getElementById('nombre-sitio');
-const previewNombre = document.getElementById('preview-nombre');
+    const inputNombre = document.getElementById('nombre-sitio');
+    const previewNombre = document.getElementById('preview-nombre');
 
-if (inputNombre && previewNombre) {
-    inputNombre.addEventListener('input', (e) => {
-        // Actualiza el texto de la previsualización con el valor del input
-        previewNombre.textContent = e.target.value;
-    });
-}
+    if (inputNombre && previewNombre) {
+        inputNombre.addEventListener('input', (e) => {
+            previewNombre.textContent = e.target.value;
+        });
+    }
 
     elementos.tieneFondo?.addEventListener('change', () => {
         elementos.colorFondoContainer.style.display = elementos.tieneFondo.checked ? 'flex' : 'none';
@@ -1810,16 +1810,19 @@ if (inputNombre && previewNombre) {
     });
 
     elementos.colorFondo?.addEventListener('input', () => {
+        if (elementos.colorValor) elementos.colorValor.textContent = elementos.colorFondo.value;
         actualizarPreviewDesdeModal(elementos);
     });
 
     elementos.radioBorde?.addEventListener('input', () => {
         elementos.radioValor.textContent = `${elementos.radioBorde.value}%`;
+        actualizarProgresoRange(elementos.radioBorde);
         actualizarPreviewDesdeModal(elementos);
     });
 
     elementos.tamanoIcono?.addEventListener('input', () => {
         elementos.tamanoValor.textContent = `${elementos.tamanoIcono.value}%`;
+        actualizarProgresoRange(elementos.tamanoIcono);
         actualizarPreviewDesdeModal(elementos);
     });
 
@@ -1828,47 +1831,37 @@ if (inputNombre && previewNombre) {
         actualizarPreviewDesdeModal(elementos);
     });
 
-elementos.fileInput?.addEventListener('change', async e => {
-    const file = e.target.files[0];
-    if (!file) return;
-    
-    // Verificar que sea una imagen
-    if (!file.type.startsWith('image/')) {
-        alert('Por favor, selecciona un archivo de imagen válido.');
-        return;
-    }
-    
-    elementos.fileName.textContent = file.name;
-    elementos.fileLabel?.classList.add('seleccionado');
-    if (elementos.fileText) elementos.fileText.textContent = '⏳';
-    
-    try {
-        // Mostrar mensaje de proceso
-        const previewNombre = document.getElementById('preview-nombre');
-        if (previewNombre) previewNombre.textContent = 'Procesando...';
+    elementos.fileInput?.addEventListener('change', async e => {
+        const file = e.target.files[0];
+        if (!file) return;
         
-        // Comprimir y redimensionar la imagen (manteniendo transparencia)
-        const base64Procesada = await comprimirYRedimensionarImagen(file, 256);
+        if (!file.type.startsWith('image/')) {
+            alert('Por favor, selecciona un archivo de imagen válido.');
+            return;
+        }
         
-        // Actualizar campos
-        elementos.icono.value = base64Procesada;
-        elementos.previewImg.src = base64Procesada;
+        elementos.fileName.textContent = file.name;
+        elementos.fileLabel?.classList.add('seleccionado');
+        if (elementos.fileText) elementos.fileText.textContent = '⏳';
         
-        // Restaurar texto del botón
-        if (elementos.fileText) elementos.fileText.textContent = '✔';
-        if (previewNombre) previewNombre.textContent = elementos.nombre.value || '';
-        
-    } catch (error) {
-        console.error('Error al procesar imagen:', error);
-        alert('Error al procesar la imagen. Intenta con otra imagen.');
-        if (elementos.fileText) elementos.fileText.textContent = '+';
-        
-        // Limpiar el input en caso de error
-        elementos.fileInput.value = '';
-        elementos.fileName.textContent = '';
-        elementos.fileLabel?.classList.remove('seleccionado');
-    }
-});
+        try {
+            const base64Procesada = await comprimirYRedimensionarImagen(file, 256);
+            
+            elementos.icono.value = base64Procesada;
+            elementos.previewImg.src = base64Procesada;
+            
+            if (elementos.fileText) elementos.fileText.textContent = '✔';
+            
+        } catch (error) {
+            console.error('Error al procesar imagen:', error);
+            alert('Error al procesar la imagen. Intenta con otra imagen.');
+            if (elementos.fileText) elementos.fileText.textContent = '+';
+            
+            elementos.fileInput.value = '';
+            elementos.fileName.textContent = '';
+            elementos.fileLabel?.classList.remove('seleccionado');
+        }
+    });
 
     elementos.guardarBtn?.addEventListener('click', async () => {
         if (!estado.isAuthenticated) {
@@ -1893,7 +1886,7 @@ elementos.fileInput?.addEventListener('change', async e => {
             tamanoIcono: parseInt(elementos.tamanoIcono.value)
         };
 
-        if (index !== null && index >= 0) {
+        if (index !== null && index >= 0 && index < estado.iconosActuales.length) {
             estado.iconosActuales[index] = { 
                 ...estado.iconosActuales[index],
                 nombre, url, icono, estilos
@@ -1925,8 +1918,7 @@ elementos.fileInput?.addEventListener('change', async e => {
         modal.classList.add('modal-abierto');
         modal.style.display = 'flex';
 
-            document.querySelectorAll('.control-range').forEach(input => actualizarProgresoRange(input));
-
+        document.querySelectorAll('.control-range').forEach(input => actualizarProgresoRange(input));
     });
 }
 
@@ -1936,7 +1928,7 @@ function actualizarPreviewDesdeModal(elementos) {
     Object.assign(elementos.previewIcono.style, {
         backgroundColor: elementos.tieneFondo.checked ? elementos.colorFondo.value : 'transparent',
         borderRadius: `${elementos.radioBorde.value}%`,
-        boxShadow: elementos.tieneFondo.checked ? 'none' : 'none'
+        boxShadow: elementos.tieneFondo.checked ? '0 4px 15px rgba(0,0,0,0.2)' : 'none'
     });
     
     Object.assign(elementos.previewImg.style, {
@@ -1964,7 +1956,8 @@ function abrirModalEdicion(index, icono) {
         tamanoIcono: document.getElementById('tamano-icono'),
         tamanoValor: document.getElementById('tamano-valor'),
         previewIcono: document.getElementById('preview-icono'),
-        previewImg: document.getElementById('preview-img')
+        previewImg: document.getElementById('preview-img'),
+        colorValor: document.getElementById('color-valor')
     };
 
     const estilos = { ...ESTILOS_DEFAULT, ...(icono.estilos || {}) };
@@ -1975,6 +1968,7 @@ function abrirModalEdicion(index, icono) {
     elementos.icono.value = icono.icono || '';
     elementos.tieneFondo.checked = estilos.tieneFondo || false;
     elementos.colorFondo.value = estilos.colorFondo || '#667eea';
+    if (elementos.colorValor) elementos.colorValor.textContent = estilos.colorFondo || '#667eea';
     elementos.radioBorde.value = estilos.radioBorde || 50;
     elementos.radioValor.textContent = `${elementos.radioBorde.value}%`;
     elementos.tamanoIcono.value = estilos.tamanoIcono || 74;
@@ -1985,11 +1979,9 @@ function abrirModalEdicion(index, icono) {
     
     modal.classList.add('modal-abierto');
     modal.style.display = 'flex';
-        document.querySelectorAll('.control-range').forEach(input => actualizarProgresoRange(input));
-
+    document.querySelectorAll('.control-range').forEach(input => actualizarProgresoRange(input));
 }
 
-// En la función resetearModalIconos, agregar la línea para reiniciar preview-nombre
 function resetearModalIconos(elementos) {
     elementos.nombre.value = '';
     elementos.url.value = '';
@@ -1997,12 +1989,12 @@ function resetearModalIconos(elementos) {
     elementos.tieneFondo.checked = false;
     elementos.colorFondoContainer.style.display = 'none';
     elementos.colorFondo.value = '#667eea';
+    if (elementos.colorValor) elementos.colorValor.textContent = '#667eea';
     elementos.radioBorde.value = '50';
     elementos.radioValor.textContent = '50%';
     elementos.tamanoIcono.value = '74';
     elementos.tamanoValor.textContent = '74%';
     
-    // REINICIAR PREVIEW-NOMBRE
     const previewNombre = document.getElementById('preview-nombre');
     if (previewNombre) {
         previewNombre.textContent = '';
@@ -2022,12 +2014,10 @@ function resetearModalIconos(elementos) {
     elementos.previewImg.src = './img/icons/interrogacion.png';
 }
 
-// También agregar en la función cerrarModalIconos para asegurar que se reinicie
 function cerrarModalIconos(elementos) {
     const modal = DOM.modalIconos;
     if (!modal) return;
     
-    // Reiniciar preview-nombre al cerrar
     const previewNombre = document.getElementById('preview-nombre');
     if (previewNombre) {
         previewNombre.textContent = '';
@@ -2039,7 +2029,6 @@ function cerrarModalIconos(elementos) {
     }, 300);
 }
 
-
 function actualizarProgresoRange(input) {
     if (!input) return;
     
@@ -2047,24 +2036,10 @@ function actualizarProgresoRange(input) {
     const max = parseFloat(input.max) || 100;
     const value = parseFloat(input.value) || min;
     
-    // Calcular porcentaje
     const porcentaje = ((value - min) / (max - min)) * 100;
     
-    // Aplicar color blanco hasta el porcentaje
     input.style.background = `linear-gradient(to right, white, white ${porcentaje}%, rgba(255,255,255,0.2) ${porcentaje}%, rgba(255,255,255,0.2))`;
 }
-
-// Configurar los listeners para todos los inputs con esa clase
-document.querySelectorAll('.control-range').forEach(input => {
-    // Actualizar al cargar
-    actualizarProgresoRange(input);
-    
-    // Actualizar al mover
-    input.addEventListener('input', () => {
-        actualizarProgresoRange(input);
-    });
-});
-
 
 // ===== MODAL DE PERSONALIZACIÓN =====
 function inicializarModalPersonalizar() {
@@ -2072,7 +2047,7 @@ function inicializarModalPersonalizar() {
     if (!modal) return;
 
     const elementos = {
-        tipo: document.getElementById('fondo-tipo'), // input hidden
+        tipo: document.getElementById('fondo-tipo'),
         url: document.getElementById('fondo-url-input'),
         opacidad: document.getElementById('fondo-opacidad'),
         opacidadValor: document.getElementById('opacidad-valor'),
@@ -2089,26 +2064,18 @@ function inicializarModalPersonalizar() {
         cancelarBtn: document.getElementById('cancelar-personalizacion')
     };
 
-    // ===== BUTTON SELECT TIPO FONDO =====
     const botonesTipo = document.querySelectorAll('#fondo-tipo-buttons .btn-tipo');
 
     botonesTipo.forEach(boton => {
         boton.addEventListener('click', () => {
-            // Quitar activo a todos
             botonesTipo.forEach(b => b.classList.remove('activo'));
-
-            // Activar el actual
             boton.classList.add('activo');
-
-            // Actualizar input hidden
             elementos.tipo.value = boton.dataset.value;
-
             actualizarSeccionesFondo(elementos);
             actualizarPreviewFondo(elementos);
         });
     });
 
-    // ===== OPCIONES PREDEFINIDAS =====
     document.querySelectorAll('.opcion-fondo').forEach(opcion => {
         opcion.addEventListener('click', () => {
             const tipo = opcion.dataset.tipo;
@@ -2117,7 +2084,6 @@ function inicializarModalPersonalizar() {
             elementos.tipo.value = tipo;
             elementos.url.value = url;
 
-            // Sincronizar botones visualmente
             botonesTipo.forEach(b => {
                 b.classList.toggle('activo', b.dataset.value === tipo);
             });
@@ -2127,75 +2093,50 @@ function inicializarModalPersonalizar() {
         });
     });
 
-    // ===== LISTENERS GENERALES =====
     elementos.url?.addEventListener('input', () => actualizarPreviewFondo(elementos));
     elementos.colorInicio?.addEventListener('input', () => actualizarPreviewFondo(elementos));
     elementos.colorFin?.addEventListener('input', () => actualizarPreviewFondo(elementos));
 
     elementos.opacidad?.addEventListener('input', () => {
         elementos.opacidadValor.textContent = `${elementos.opacidad.value}%`;
+        actualizarProgresoRange(elementos.opacidad);
         actualizarPreviewFondo(elementos);
     });
 
     elementos.desenfoque?.addEventListener('input', () => {
         elementos.desenfoqueValor.textContent = `${elementos.desenfoque.value}px`;
+        actualizarProgresoRange(elementos.desenfoque);
         actualizarPreviewFondo(elementos);
     });
 
-    // ===== GUARDAR =====
-   elementos.guardarBtn?.addEventListener('click', () => {
-    if (!estado.isAuthenticated) {
-        alert('Debes iniciar sesión para personalizar el fondo');
-        return;
-    }
+    elementos.guardarBtn?.addEventListener('click', () => {
+        if (!estado.isAuthenticated) {
+            alert('Debes iniciar sesión para personalizar el fondo');
+            return;
+        }
 
-    const opacidadSlider = parseInt(elementos.opacidad.value);
-    const opacidadGuardar = (opacidadSlider / 100) * 0.5;
+        const opacidadSlider = parseInt(elementos.opacidad.value);
+        const opacidadGuardar = (opacidadSlider / 100) * 0.5;
 
-    const config = {
-        tipo: elementos.tipo.value,
-        url: elementos.url.value || null,
-        opacidad: opacidadGuardar,
-        desenfoque: parseInt(elementos.desenfoque.value),
-        colorInicio: elementos.colorInicio.value,
-        colorFin: elementos.colorFin.value
-    };
+        const config = {
+            tipo: elementos.tipo.value,
+            url: elementos.url.value || null,
+            opacidad: opacidadGuardar,
+            desenfoque: parseInt(elementos.desenfoque.value),
+            colorInicio: elementos.colorInicio.value,
+            colorFin: elementos.colorFin.value
+        };
 
-    // 1️⃣ Guardar en sistema
-    guardarFondoCategoria(config);
+        guardarFondoCategoria(config);
+        cerrarModalPersonalizar(modal);
+    });
 
-    // 2️⃣ Aplicar inmediatamente al fondo visible
-    let fondoActual = document.getElementById('fondo-activo');
-
-    if (!fondoActual) {
-        fondoActual = document.createElement('div');
-        fondoActual.id = 'fondo-activo';
-        fondoActual.style.cssText = `
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: -1;
-            pointer-events: none;
-            transition: opacity 0.3s ease, filter 0.3s ease;
-        `;
-        document.body.insertBefore(fondoActual, document.body.firstChild);
-    }
-
-    aplicarEstiloFondo(fondoActual, config, false);
-
-    cerrarModalPersonalizar(modal);
-});
-
-    // ===== CANCELAR =====
     elementos.cancelarBtn?.addEventListener('click', () => cerrarModalPersonalizar(modal));
 
     modal.addEventListener('click', e => {
         if (e.target === modal) cerrarModalPersonalizar(modal);
     });
 
-    // ===== ABRIR MODAL =====
     DOM.btnPersonalizar?.addEventListener('click', () => {
         if (!estado.isAuthenticated) {
             alert('Debes iniciar sesión para personalizar el fondo');
@@ -2204,22 +2145,21 @@ function inicializarModalPersonalizar() {
 
         cargarValoresActualesEnModal(elementos);
 
-        // Sincronizar botones con valor actual
         botonesTipo.forEach(b => {
             b.classList.toggle('activo', b.dataset.value === elementos.tipo.value);
         });
 
         modal.classList.add('modal-personalizar-abierto');
         modal.style.display = 'flex';
-    // 🔥 SOLO AGREGA ESTAS LÍNEAS:
-    setTimeout(() => {
-        document.querySelectorAll('.control-range').forEach(input => actualizarProgresoRange(input));
-    }, 50);
-});
+        
+        setTimeout(() => {
+            document.querySelectorAll('.control-range').forEach(input => actualizarProgresoRange(input));
+        }, 50);
+    });
 }
 
 function cargarValoresActualesEnModal(elementos) {
-    const categoria = categoriasPersonalizadas.find(c => c.id === estado.categoriaActual);
+    const categoria = categorias.find(c => c.id === estado.categoriaActual);
     const fondoActual = categoria && categoria.background ? categoria.background : FONDO_DEFAULT;
 
     const { tipo, opacidad, desenfoque, colorInicio, colorFin, url } = fondoActual;
@@ -2239,12 +2179,11 @@ function cargarValoresActualesEnModal(elementos) {
 
     actualizarSeccionesFondo(elementos);
     actualizarPreviewFondo(elementos);
-    // 🔥 SOLO AGREGA ESTAS LÍNEAS:
+    
     if (elementos.opacidad) actualizarProgresoRange(elementos.opacidad);
     if (elementos.desenfoque) actualizarProgresoRange(elementos.desenfoque);
 }
 
-// En la función actualizarSeccionesFondo, agrega la lógica para ocultar/mostrar el campo URL
 function actualizarSeccionesFondo(elementos) {
     const tipo = elementos.tipo.value;
     
@@ -2252,14 +2191,11 @@ function actualizarSeccionesFondo(elementos) {
     elementos.imagenesSection.style.display = tipo === 'imagen' ? 'block' : 'none';
     elementos.videosSection.style.display = tipo === 'video' ? 'block' : 'none';
     
-    // 🔥 NUEVO: Ocultar/mostrar el contenedor de URL personalizada
     const urlInputGroup = document.querySelector('.personalizar-input-group:has(#fondo-url-input)');
     if (urlInputGroup) {
         urlInputGroup.style.display = tipo === 'gradiente' ? 'none' : 'inline-flex';
     }
 }
-
-// script.js - Función actualizada para vistas previas diferenciadas
 
 function actualizarPreviewFondo(elementos) {
     const tipo = elementos.tipo.value;
@@ -2269,10 +2205,8 @@ function actualizarPreviewFondo(elementos) {
     const opacidadCapa = (parseInt(elementos.opacidad.value) / 100) * 0.5;
     const desenfoquePx = parseInt(elementos.desenfoque.value);
 
-    // *** ELEMENTO: La caja que solo mostrará la imagen limpia ***
     const previerMasterBox = document.querySelector('.previer-master-box');
 
-    // --- ACTUALIZAR VISTA PREVIA COMPLETA (#preview-fondo) ---
     if (tipo === 'video' && url) {
         elementos.previewFondo.style.display = 'none';
         elementos.previewVideo.style.display = 'block';
@@ -2296,55 +2230,41 @@ function actualizarPreviewFondo(elementos) {
         } else if (tipo === 'gradiente') {
             backgroundStyle = `linear-gradient(135deg, ${colorInicio}, ${colorFin})`;
             elementos.previewFondo.style.backgroundImage = backgroundStyle;
-            elementos.previewFondo.style.backgroundSize = 'auto';
-            elementos.previewFondo.style.backgroundPosition = '0% 0%';
+            elementos.previewFondo.style.backgroundSize = 'cover';
+            elementos.previewFondo.style.backgroundPosition = 'center';
         } else {
             elementos.previewFondo.style.backgroundImage = 'none';
             elementos.previewFondo.style.backgroundColor = '#f0f0f0';
         }
 
-        // Aplicar desenfoque SOLO a preview-fondo
         elementos.previewFondo.style.filter = `blur(${desenfoquePx}px)`;
     }
 
-    // --- ACTUALIZAR PREVIER-MASTER-BOX (solo imagen limpia, sin blur ni opacidad) ---
     if (previerMasterBox) {
-        // Resetear cualquier filtro o estilo adicional
         previerMasterBox.style.filter = 'none';
         
         if (tipo === 'imagen' && url) {
-            // SOLO la imagen, sin capa de opacidad ni blur
             previerMasterBox.style.backgroundImage = `url('${url}')`;
             previerMasterBox.style.backgroundSize = 'cover';
             previerMasterBox.style.backgroundPosition = 'center';
         } else if (tipo === 'video' && url) {
-            // Para video, usamos un frame representativo (el primer frame o una imagen por defecto)
-            // O podrías dejar el fondo negro, pero mejor ponemos una imagen representativa
-            previerMasterBox.style.backgroundImage = `url('img/backgrounds/video-placeholder.jpg')`; // Idealmente una imagen del video
+            previerMasterBox.style.backgroundImage = `url('img/backgrounds/video-placeholder.jpg')`;
             previerMasterBox.style.backgroundSize = 'cover';
             previerMasterBox.style.backgroundPosition = 'center';
-            console.log('Modo video seleccionado - considera usar un placeholder');
         } else if (tipo === 'gradiente') {
-            // Para gradiente, mostramos el gradiente limpio
             previerMasterBox.style.backgroundImage = `linear-gradient(135deg, ${colorInicio}, ${colorFin})`;
-            previerMasterBox.style.backgroundSize = 'auto';
-            previerMasterBox.style.backgroundPosition = '0% 0%';
+            previerMasterBox.style.backgroundSize = 'cover';
+            previerMasterBox.style.backgroundPosition = 'center';
         } else {
-            // Fallback
             previerMasterBox.style.backgroundImage = `url('img/backgrounds/img_background_2.jpg')`;
             previerMasterBox.style.backgroundSize = 'cover';
             previerMasterBox.style.backgroundPosition = 'center';
         }
         
-        // Asegurar que no tenga blur ni otros efectos
         previerMasterBox.style.backdropFilter = 'none';
         previerMasterBox.style.webkitBackdropFilter = 'none';
     }
-
-
 }
-
-
 
 function cerrarModalPersonalizar(modal) {
     modal.classList.remove('modal-personalizar-abierto');
@@ -2432,10 +2352,10 @@ function cargarNotasIniciales(notaDOM) {
 }
 
 async function cargarNotasDeFirebase(notaDOM) {
-    if (!currentUser || !userConfigRef || !db) return;
+    if (!currentUser || !userDocRef || !db) return;
 
     try {
-        const doc = await userConfigRef.get();
+        const doc = await userDocRef.get();
         if (doc.exists && doc.data() && doc.data().notas) {
             const data = doc.data();
             for (let i = 1; i <= 5; i++) {
@@ -2467,12 +2387,12 @@ function guardarNotaEnTiempoReal(notaNum, texto, notaDOM) {
     
     notaTimeouts[notaNum] = setTimeout(async () => {
         try {
-            if (!currentUser || !userConfigRef || !db) return;
+            if (!currentUser || !userDocRef || !db) return;
             
             const updateData = {};
             updateData[`notas.nota${notaNum}`] = texto;
             updateData['metadata.ultimaModificacion'] = firebase.firestore.FieldValue.serverTimestamp();
-            await userConfigRef.set(updateData, { merge: true });
+            await userDocRef.set(updateData, { merge: true });
         } catch (error) {
             console.error('Error al guardar nota:', error);
         }
@@ -2530,31 +2450,45 @@ function cambiarNota(notaNum, notaDOM) {
     notaDOM.textarea.placeholder = `Nota ${notaNum} - Escribe aquí...`;
 }
 
-// ===== INICIALIZACIÓN PRINCIPAL OPTIMIZADA =====
+function habilitarEdicion(habilitar) {
+    if (DOM.btnAgregar) {
+        DOM.btnAgregar.style.display = habilitar ? 'flex' : 'none';
+    }
+
+    if (DOM.btnPersonalizar) {
+        DOM.btnPersonalizar.style.display = habilitar ? 'flex' : 'none';
+    }
+
+    const btnAgregarCategoria = document.getElementById('btn-agregar-categoria');
+    if (btnAgregarCategoria) {
+        btnAgregarCategoria.style.display = habilitar ? 'inline-flex' : 'none';
+    }
+
+    estado.isAuthenticated = habilitar;
+    
+    // Reinicializar drag & drop de categorías cuando cambia el estado de autenticación
+    if (habilitar) {
+        setTimeout(() => inicializarDragAndDropCategorias(), 100);
+    }
+}
+
+// ===== INICIALIZACIÓN PRINCIPAL =====
 document.addEventListener('DOMContentLoaded', () => {
-    // Desactivar animaciones temporalmente
     document.body.classList.add('no-animation');
     
-    // 1. Cachear elementos DOM primero
     cachearElementos();
     
-    // 2. Inicializar UI inmediata (sin Firebase)
     inicializarBarraBusqueda();
     inicializarAutenticacion();
     inicializarNota();
     
-    // 3. Cargar iconos rápidos SIN animación
     cargarIconosRapidos(true);
+    cargarCategoriasLocales();
     
-    // 4. Cargar configuración local primero
-    cargarConfiguracionLocal();
-    
-    // 5. Reactivar animaciones después de la carga inicial
     setTimeout(() => {
         document.body.classList.remove('no-animation');
     }, 100);
     
-    // 6. Inicializar Firebase y modales en segundo plano
     if ('requestIdleCallback' in window) {
         requestIdleCallback(() => {
             initFirebase();
@@ -2562,7 +2496,7 @@ document.addEventListener('DOMContentLoaded', () => {
             inicializarModalPersonalizar();
             
             if (currentUser && currentUser.uid && estado.firebaseInicializado) {
-                cargarConfiguracionUsuario(currentUser.uid);
+                cargarCategoriasUsuario(currentUser.uid);
             }
         }, { timeout: 2000 });
     } else {
@@ -2572,16 +2506,38 @@ document.addEventListener('DOMContentLoaded', () => {
             inicializarModalPersonalizar();
             
             if (currentUser && currentUser.uid && estado.firebaseInicializado) {
-                cargarConfiguracionUsuario(currentUser.uid);
+                cargarCategoriasUsuario(currentUser.uid);
             }
         }, 1000);
     }
 
-    // 7. Listener para cuando vuelve la conexión
     window.addEventListener('online', () => {
         console.log('Conexión restaurada, sincronizando...');
         if (currentUser && currentUser.uid && estado.firebaseInicializado) {
-            cargarConfiguracionUsuario(currentUser.uid);
+            cargarCategoriasUsuario(currentUser.uid);
+        }
+    });
+
+    // Manejador de clics para el botón de incógnito
+    document.getElementById('contenedor-iconos')?.addEventListener('click', (e) => {
+        const btnIncognito = e.target.closest('.btn-incognito-small');
+        
+        if (btnIncognito) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const url = btnIncognito.dataset.url;
+            
+            if (typeof chrome !== 'undefined' && chrome.windows) {
+                chrome.windows.create({
+                    url: url,
+                    incognito: true,
+                    type: 'normal'
+                });
+            } else {
+                window.open(url, '_blank', 'noopener,noreferrer');
+                console.warn("El modo incógnito real solo funciona si esto corre como Extensión de Chrome.");
+            }
         }
     });
 });
@@ -2600,33 +2556,4 @@ window.addEventListener('load', () => {
     });
 });
 
-
-
-
-
-// Manejador de clics para el botón de incógnito
-document.getElementById('contenedor-iconos').addEventListener('click', (e) => {
-    const btnIncognito = e.target.closest('.btn-incognito-small');
-    
-    if (btnIncognito) {
-        e.preventDefault(); // Evita que el <a> padre se active
-        e.stopPropagation(); // Evita que el evento suba
-        
-        const url = btnIncognito.dataset.url;
-        
-        // Intentar usar la API de Chrome si es una extensión
-        if (typeof chrome !== 'undefined' && chrome.windows) {
-            chrome.windows.create({
-                url: url,
-                incognito: true,
-                type: 'normal'
-            });
-        } else {
-            // Si se usa como web normal (no extensión), el modo incógnito real 
-            // no es accesible por JS por seguridad, pero abrimos en nueva ventana.
-            window.open(url, '_blank', 'noopener,noreferrer');
-            console.warn("El modo incógnito real solo funciona si esto corre como Extensión de Chrome.");
-        }
-    }
-});
-/* 5 */
+/* 1 */

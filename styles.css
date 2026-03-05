@@ -102,7 +102,11 @@ body {
     color: #333;
     transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+    transform: translateY(-70px);
+    animation: aparecerTitulo 1s 0.7s ease forwards;
 }
+
+
 
 .auth-btn:hover {
     transform: translateY(-2px);
@@ -488,7 +492,7 @@ body {
     padding: 10px;
     align-items: center;
     transform: translateY(50px);
-    animation: aparecerCategorias 1s 1.4s forwards;
+    animation: aparecerCategorias 1s 0.8s forwards;
 
 }
 
@@ -2476,5 +2480,65 @@ body.fondo-video {
     .recurso-enlace {
         padding: 0.4rem 1rem;
         font-size: 0.85rem;
+    }
+}
+
+
+
+
+
+/* ===== DRAG AND DROP DE CATEGORÍAS ===== */
+.categoria-wrapper[draggable="true"] {
+    cursor: grab;
+    transition: transform 0.2s ease;
+}
+
+.categoria-wrapper[draggable="true"]:active {
+    cursor: grabbing;
+}
+
+.categoria-wrapper.arrastrando {
+    opacity: 0.5;
+    transform: scale(0.95);
+    cursor: grabbing;
+    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
+    z-index: 1000;
+}
+
+.categoria-wrapper.drag-over {
+    transform: scale(1.05);
+    position: relative;
+}
+
+.categoria-wrapper.drag-over::before {
+    content: '';
+    position: absolute;
+    top: -2px;
+    left: -2px;
+    right: -2px;
+    bottom: -2px;
+    border: 2px dashed white;
+    border-radius: 50px;
+    pointer-events: none;
+    animation: borderPulse 1s infinite;
+}
+
+@keyframes borderPulse {
+    0%, 100% {
+        border-color: rgba(255, 255, 255, 0.5);
+    }
+    50% {
+        border-color: rgba(255, 255, 255, 1);
+    }
+}
+
+/* Transición suave al soltar */
+.categoria-wrapper {
+    transition: all 0.3s cubic-bezier(0.2, 0, 0, 1);
+}
+
+@media (max-width: 768px) {
+    .categoria-wrapper[draggable="true"] {
+        cursor: default; /* Deshabilitar drag en móvil */
     }
 }
