@@ -1,16 +1,22 @@
 <!-- StarTab.html -->
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>StarTab</title>
     <link rel="stylesheet" href="styles.css">
-    <!-- Firebase -->
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <!-- Firebase LOCAL (descargado) - CARGAR TEMPRANO -->
+    <script src="lib/firebase-app-compat.js" defer></script>
+    <script src="lib/firebase-firestore-compat.js" defer></script>
+    <script src="lib/firebase-auth-compat.js" defer></script>
+    <!-- Script principal con carga diferida -->
+    <script src="script.js" defer></script>
+    <!-- Script rápido del fondo (inline pero con hash en CSP) -->
+    <script src="fondo-rapido.js" defer></script>
 </head>
+
 <body>
     <!-- BOTÓN DE AUTENTICACIÓN -->
     <div class="auth-container" id="auth-container">
@@ -18,7 +24,7 @@
             <span class="auth-btn-text">Iniciar sesión</span>
         </button>
         <div class="user-menu" id="user-menu" style="display: none;">
-            <img src="" alt="Perfil" class="user-avatar" id="user-avatar">
+            <img src="" alt="Perfil" class="user-avatar" id="user-avatar" loading="lazy">
             <div class="user-dropdown" id="user-dropdown">
                 <div class="user-info">
                     <span class="user-name" id="user-name"></span>
@@ -53,7 +59,8 @@
             </div>
             <div class="nota-modal-body">
                 <div class="notes-box">
-                    <textarea class="nota-textarea" id="nota-textarea" placeholder="Nota 1 - Escribe aquí..." spellcheck="false"></textarea>
+                    <textarea class="nota-textarea" id="nota-textarea" placeholder="Nota 1 - Escribe aquí..."
+                        spellcheck="false"></textarea>
                     <div class="nota-stats">
                         <span id="nota-char-count">0 caracteres</span>
                     </div>
@@ -83,18 +90,68 @@
     <div class="modal-moderno" id="modal-iconos">
         <div class="modal-moderno-contenido">
             <div class="modal-header">
-                <h2>Agregar acceso directo</h2>
-                <button class="modal-cerrar" id="cerrar-modal-iconos">×</button>
+                <h2 style="display: none;">Agregar acceso directo</h2>
+                <button class="modal-cerrar" id="cerrar-modal-iconos" style="display: none;">×</button>
+
+
+                <div class="modal-preview">
+                    <h3>Vista previa</h3>
+                    <div class="preview-container">
+                        <div class="preview-icono" id="preview-icono"
+                            style="background-color:transparent; border-radius:12%; width:150px; height:150px; display:flex; align-items:center; justify-content:center; margin:0 auto;box-shadow: 0px 12px 27px 12px rgb(0 0 0 / 24%);">
+                            <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 24 24' fill='%23666'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3C/svg%3E"
+                                alt="Preview" id="preview-img" style="width:74%; height:74%; object-fit:contain;"
+                                loading="lazy">
+                        </div>
+                        <span id="preview-nombre" style="display: block;text-align: center;margin-top: 10px;font-size: 1rem;font-weight: 400;color: white;min-height: 22px;min-height: 22px;pointer-events: none;white-space: nowrap;overflow: hidden;text-overflow: ellipsis;max-width: 140px;"></span>
+                    </div>
+
+                </div>
+
+
+
             </div>
+
             <div class="modal-contenido-scroll">
                 <div class="modal-grid">
-                    <div class="modal-preview">
-                        <h3>Vista previa</h3>
-                        <div class="preview-container">
-                            <div class="preview-icono" id="preview-icono" style="background-color:transparent; border-radius:50%; width:150px; height:150px; display:flex; align-items:center; justify-content:center; margin:0 auto;">
-                                <img src="https://via.placeholder.com/64" alt="Preview" id="preview-img" style="width:74%; height:74%; object-fit:contain;">
+
+                    <div class="modal-controles">
+                        <h3>Acceso directo</h3>
+
+                        <!-- <div class="control-separador"></div> -->
+                        <div
+                            style="display: inline-flex;gap: 1.5rem;width: 100%;justify-content: space-between;margin-bottom: 2rem;">
+                            <div class="control-grupo">
+                                <label><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-type w-3 h-3" aria-hidden="true"><path d="M12 4v16"></path><path d="M4 7V5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2"></path><path d="M9 20h6"></path></svg>Nombre del sitio</label>
+                                <input type="text" id="nombre-sitio" placeholder="Ej: Google" class="control-input">
+                            </div>
+                            <div class="control-grupo">
+                                <label><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-globe w-3 h-3" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path><path d="M2 12h20"></path></svg>URL (Link)</label>
+                                <input type="url" id="url-sitio" placeholder="https://ejemplo.com"
+                                    class="control-input">
                             </div>
                         </div>
+
+                        <div style="display: inline-flex;gap: 1.5rem;width: 100%;justify-content: space-between;">
+                            <div class="control-grupo">
+                                <label><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-palette w-3 h-3" aria-hidden="true"><path d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z"></path><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"></circle><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"></circle><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"></circle><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"></circle></svg>Icono (URL o Subir imagen)</label>
+                                <input type="url" id="icono-sitio" placeholder="https://ejemplo.com/icono.png"
+                                    class="control-input">
+                            </div>
+                            <div class="control-grupo" style="width: 80px;">
+                                <label>upload</label>
+                                <div class="file-upload-container">
+                                    <input type="file" id="icono-file" accept="image/*" class="file-input">
+                                    <label for="icono-file" class="file-label">
+                                        <span class="file-text">+</span>
+                                    </label>
+                                    <div class="file-name" id="file-name"></div>
+                                </div>
+                            </div>
+                        </div>
+
+
+
                         <div class="control-grupo">
                             <div class="checkbox-container">
                                 <input type="checkbox" id="tiene-fondo-icono">
@@ -108,153 +165,193 @@
                                 <span class="color-valor" id="color-valor">#667eea</span>
                             </div>
                         </div>
-                        <div class="control-grupo">
-                            <div class="control-label">
-                                <label>Borde redondeado</label>
-                                <span class="control-valor" id="radio-valor">50%</span>
+
+
+                        <div
+                            style="display: inline-flex;gap: 1.5rem;width: 100%;justify-content: space-between;margin-bottom: 3rem;">
+                            <div class="control-grupo">
+                                <div class="control-label">
+                                    <label id="barras_1"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-panels-top-left w-3 h-3" aria-hidden="true" style="color: #6d6d6d;"><rect width="18" height="18" x="3" y="3" rx="2"></rect><path d="M3 9h18"></path><path d="M9 21V9"></path></svg>Borde redondeado</label>
+                                    <span class="control-valor" id="radio-valor">50%</span>
+                                </div>
+                                <input type="range" id="radio-borde-icono" min="0" max="100" value="50"
+                                    class="control-range">
+                                <!-- <div class="range-marks"><span>0%</span><span>50%</span><span>100%</span></div> -->
                             </div>
-                            <input type="range" id="radio-borde-icono" min="0" max="100" value="50" class="control-range">
-                            <div class="range-marks"><span>0%</span><span>50%</span><span>100%</span></div>
-                        </div>
-                        <div class="control-grupo">
-                            <div class="control-label">
-                                <label>Tamaño del icono</label>
-                                <span class="control-valor" id="tamano-valor">74%</span>
-                            </div>
-                            <input type="range" id="tamano-icono" min="30" max="100" value="74" class="control-range">
-                            <div class="range-marks"><span>30%</span><span>65%</span><span>100%</span></div>
-                        </div>
-                    </div>
-                    <div class="modal-controles">
-                        <h3>DETALLES DEL SITIO</h3>
-                        <div class="control-separador"></div>
-                        <div class="control-grupo">
-                            <label>Nombre del sitio</label>
-                            <input type="text" id="nombre-sitio" placeholder="Ej: Google" class="control-input">
-                        </div>
-                        <div class="control-grupo">
-                            <label>URL</label>
-                            <input type="url" id="url-sitio" placeholder="https://ejemplo.com" class="control-input">
-                        </div>
-                        <div class="control-grupo">
-                            <label>URL del icono (opcional)</label>
-                            <input type="url" id="icono-sitio" placeholder="https://ejemplo.com/icono.png" class="control-input">
-                        </div>
-                        <div class="control-grupo">
-                            <label>O sube una imagen local</label>
-                            <div class="file-upload-container">
-                                <input type="file" id="icono-file" accept="image/*" class="file-input">
-                                <label for="icono-file" class="file-label">
-                                    <span class="file-icon">📁</span>
-                                    <span class="file-text">Seleccionar imagen</span>
-                                </label>
-                                <div class="file-name" id="file-name"></div>
+                            <div class="control-grupo">
+                                <div class="control-label">
+                                    <label id="barras_1"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-maximize w-3 h-3" aria-hidden="true" style="color: #6d6d6d;"><path d="M8 3H5a2 2 0 0 0-2 2v3"></path><path d="M21 8V5a2 2 0 0 0-2-2h-3"></path><path d="M3 16v3a2 2 0 0 0 2 2h3"></path><path d="M16 21h3a2 2 0 0 0 2-2v-3"></path></svg>Tamaño del icono</label>
+                                    <span class="control-valor" id="tamano-valor">74%</span>
+                                </div>
+                                <input type="range" id="tamano-icono" min="30" max="100" value="74"
+                                    class="control-range">
+                                <!--  <div class="range-marks"><span>30%</span><span>65%</span><span>100%</span></div> -->
                             </div>
                         </div>
+
                     </div>
                 </div>
+
+                <div class="modal-botones">
+                    <button class="btn-secundario" id="cancelar-icono">Cancelar</button>
+                    <button class="btn-primario" id="guardar-icono">Guardar</button>
+                </div>
+
+
             </div>
-            <div class="modal-botones">
-                <button class="btn-secundario" id="cancelar-icono">Cancelar</button>
-                <button class="btn-primario" id="guardar-icono">Guardar cambios</button>
-            </div>
+
         </div>
     </div>
 
     <!-- MODAL DE PERSONALIZACIÓN DE FONDO -->
     <div class="modal-personalizar" id="modal-personalizar">
+
         <div class="modal-personalizar-contenido">
-            <h2>Personalizar fondo</h2>
-            <div class="personalizar-input-group">
-                <label>Tipo de fondo:</label>
-                <select id="fondo-tipo" class="control-input">
-                    <option value="gradiente">Gradiente</option>
-                    <option value="imagen">Imagen</option>
-                    <option value="video">Video</option>
-                </select>
+            <div class="top-modal">
+                <h2>Personalizar fondo</h2>
             </div>
-            
-            <div id="imagenes-predefinidas" style="display: none;">
-                <h3>Imágenes predefinidas</h3>
-                <div class="opciones-fondo" id="opciones-imagenes">
-                    <div class="opcion-fondo" data-tipo="imagen" data-url="img/backgrounds/img_background_1.jpg">
-                        <img src="img/backgrounds/img_background_1.jpg" alt="Fondo 1" loading="lazy">
-                    </div>
-                    <div class="opcion-fondo" data-tipo="imagen" data-url="img/backgrounds/img_background_2.jpg">
-                        <img src="img/backgrounds/img_background_2.jpg" alt="Fondo 2" loading="lazy">
-                    </div>
-                    <div class="opcion-fondo" data-tipo="imagen" data-url="img/backgrounds/img_background_3.jpg">
-                        <img src="img/backgrounds/img_background_3.jpg" alt="Fondo 3" loading="lazy">
-                    </div>
-                    <div class="opcion-fondo" data-tipo="imagen" data-url="img/backgrounds/img_background_4.jpg">
-                        <img src="img/backgrounds/img_background_4.jpg" alt="Fondo 4" loading="lazy">
+
+            <div class="body-modal">
+                <div class="personalizar-input-group">
+                    <label>Tipo de fondo:</label>
+
+                    <!-- Input oculto para mantener compatibilidad con el JS -->
+                    <input type="hidden" id="fondo-tipo" value="gradiente">
+
+                    <div class="button-select" id="fondo-tipo-buttons">
+                        <button type="button" class="btn-tipo activo" data-value="gradiente" id="gradient_1">
+                            Gradiente
+                        </button>
+                        <button type="button" class="btn-tipo" data-value="imagen" id="imagen_1">
+                            Imagen
+                        </button>
+                        <button type="button" class="btn-tipo" data-value="video" id="video_1">
+                            Video
+                        </button>
                     </div>
                 </div>
-            </div>
-            
-            <div id="videos-predefinidos" style="display: none;">
-                <h3>Videos predefinidos</h3>
-                <div class="opciones-fondo" id="opciones-videos">
-                    <div class="opcion-fondo" data-tipo="video" data-url="img/backgrounds/vid_background_1.mp4">
-                        <video src="img/backgrounds/vid_background_1.mp4" muted loop playsinline></video>
+
+                               <div id="imagenes-predefinidas" style="display: none;">
+                    <h3>Imágenes predefinidas</h3>
+                    <div class="opciones-fondo" id="opciones-imagenes">
+                        <div class="opcion-fondo" data-tipo="imagen" data-url="img/backgrounds/img_background_1.jpg">
+                            <img src="img/backgrounds/img_background_1.jpg" alt="Fondo 1" loading="lazy">
+                        </div>
+                        <div class="opcion-fondo" data-tipo="imagen" data-url="img/backgrounds/img_background_2.jpg">
+                            <img src="img/backgrounds/img_background_2.jpg" alt="Fondo 2" loading="lazy">
+                        </div>
+                        <div class="opcion-fondo" data-tipo="imagen" data-url="img/backgrounds/img_background_3.jpg">
+                            <img src="img/backgrounds/img_background_3.jpg" alt="Fondo 3" loading="lazy">
+                        </div>
+                        <div class="opcion-fondo" data-tipo="imagen" data-url="img/backgrounds/img_background_4.jpg">
+                            <img src="img/backgrounds/img_background_4.jpg" alt="Fondo 4" loading="lazy">
+                        </div>
                     </div>
-                    <div class="opcion-fondo" data-tipo="video" data-url="img/backgrounds/vid_background_2.mp4">
-                        <video src="img/backgrounds/vid_background_2.mp4" muted loop playsinline></video>
+
+                    <!-- ===== NUEVA SECCIÓN DE RECURSOS DE IMÁGENES ===== -->
+                    <div class="recursos-container">
+                        <h4 class="recursos-titulo">Conseguir más imágenes:</h4>
+                        <div class="recursos-enlaces">
+                            <a href="https://pixabay.com/es/images/search/fondos/?orientation=horizontal" target="_blank" class="recurso-enlace" rel="noopener noreferrer">Pixabay<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-external-link-icon lucide-external-link"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></a>
+                            <a href="https://unsplash.com/es" target="_blank" class="recurso-enlace" rel="noopener noreferrer">Unsplash<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-external-link-icon lucide-external-link"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></a>
+                            <a href="https://www.freepik.es/" target="_blank" class="recurso-enlace" rel="noopener noreferrer">Freepik<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-external-link-icon lucide-external-link"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></a>
+                            <a href="https://www.pexels.com/es-es/" target="_blank" class="recurso-enlace" rel="noopener noreferrer">Pexels<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-external-link-icon lucide-external-link"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></a>
+                        </div>
                     </div>
-                    <div class="opcion-fondo" data-tipo="video" data-url="img/backgrounds/vid_background_3.mp4">
-                        <video src="img/backgrounds/vid_background_3.mp4" muted loop playsinline></video>
+                    <!-- ===== FIN NUEVA SECCIÓN ===== -->
+                </div>
+
+                               <div id="videos-predefinidos" style="display: none;">
+                    <h3>Videos predefinidos</h3>
+                    <div class="opciones-fondo" id="opciones-videos">
+                        <div class="opcion-fondo" data-tipo="video" data-url="img/backgrounds/vid_background_1.mp4">
+                            <video src="img/backgrounds/vid_background_1.mp4" muted loop playsinline></video>
+                        </div>
+                        <div class="opcion-fondo" data-tipo="video" data-url="img/backgrounds/vid_background_2.mp4">
+                            <video src="img/backgrounds/vid_background_2.mp4" muted loop playsinline></video>
+                        </div>
+                        <div class="opcion-fondo" data-tipo="video" data-url="img/backgrounds/vid_background_3.mp4">
+                            <video src="img/backgrounds/vid_background_3.mp4" muted loop playsinline></video>
+                        </div>
+                        <div class="opcion-fondo" data-tipo="video" data-url="img/backgrounds/vid_background_4.mp4">
+                            <video src="img/backgrounds/vid_background_4.mp4" muted loop playsinline></video>
+                        </div>
                     </div>
-                    <div class="opcion-fondo" data-tipo="video" data-url="img/backgrounds/vid_background_4.mp4">
-                        <video src="img/backgrounds/vid_background_4.mp4" muted loop playsinline></video>
+
+                    <!-- ===== NUEVA SECCIÓN DE RECURSOS ===== -->
+                    <div class="recursos-container">
+                        <h4 class="recursos-titulo">Conseguir más videos:</h4>
+                        <div class="recursos-enlaces">
+                            <a href="https://pixabay.com/es/videos/search/fondos/?orientation=horizontal" target="_blank" class="recurso-enlace" rel="noopener noreferrer">Pixabay<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-external-link-icon lucide-external-link"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></a>
+                            <a href="https://www.videvo.net/" target="_blank" class="recurso-enlace" rel="noopener noreferrer">Videvo<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-external-link-icon lucide-external-link"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></a>
+                            <a href="https://coverr.co/" target="_blank" class="recurso-enlace" rel="noopener noreferrer">Coverr<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-external-link-icon lucide-external-link"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></a>
+                            <a href="https://mixkit.co/" target="_blank" class="recurso-enlace" rel="noopener noreferrer">Mixkit<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-external-link-icon lucide-external-link"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></a>
+                        </div>
+                    </div>
+                    <!-- ===== FIN NUEVA SECCIÓN ===== -->
+                </div>
+
+                <div class="personalizar-input-group" style="display: inline-flex;flex-direction: column;width: 100%;">
+                    <label><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-globe w-3 h-3" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path><path d="M2 12h20"></path></svg>URL personalizada (opcional):</label>
+                    <input type="url" id="fondo-url-input" placeholder="https://ejemplo.com/imagen.jpg o video.mp4"
+                        class="control-input">
+                </div>
+
+                <div class="personalizar-input-group" id="grupo-colores">
+                    <div style="width: 100%;">
+                        <label>Color inicio gradiente:</label>
+                        <input type="color" id="color-inicio" value="#667eea" class="color-input">
+                    </div>
+                    <div style="width: 100%;">
+                        <label>Color fin gradiente:</label>
+                        <input type="color" id="color-fin" value="#764ba2" class="color-input">
                     </div>
                 </div>
-            </div>
-            
-            <div class="personalizar-input-group">
-                <label>URL personalizada (opcional):</label>
-                <input type="url" id="fondo-url-input" placeholder="https://ejemplo.com/imagen.jpg o video.mp4" class="control-input">
-            </div>
-            
-            <div class="personalizar-input-group" id="grupo-colores">
-                <label>Color inicio gradiente:</label>
-                <input type="color" id="color-inicio" value="#667eea" class="color-input">
-                <label style="margin-top:10px">Color fin gradiente:</label>
-                <input type="color" id="color-fin" value="#764ba2" class="color-input">
-            </div>
-            
-            <div class="range-group">
-                <div class="range-header">
-                    <label for="fondo-opacidad">Opacidad</label>
-                    <span class="range-value" id="opacidad-valor">20%</span>
+
+                <div style="display: inline-flex;flex-direction: row;justify-content: center;gap: 1rem;width: 100%;margin-top: 1rem;">
+                    <div class="range-group" style="width: 100%;">
+                        <div class="range-header">
+                            <label for="fondo-opacidad"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-sliders-vertical w-3 h-3" aria-hidden="true"><path d="M10 8h4"></path><path d="M12 21v-9"></path><path d="M12 8V3"></path><path d="M17 16h4"></path><path d="M19 12V3"></path><path d="M19 21v-5"></path><path d="M3 14h4"></path><path d="M5 10V3"></path><path d="M5 21v-7"></path></svg>Oscurecer</label>
+                            <span class="range-value" id="opacidad-valor">20%</span>
+                        </div>
+                        <input type="range" id="fondo-opacidad" min="0" max="100" value="20" class="control-range">
+                        <div class="range-marks">
+                            <span>0%</span>
+                            <span>100%</span>
+                        </div>
+                    </div>
+
+                    <div class="range-group" style="width: 100%;">
+                        <div class="range-header">
+                            <label for="fondo-desenfoque"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-sliders-vertical w-3 h-3" aria-hidden="true"><path d="M10 8h4"></path><path d="M12 21v-9"></path><path d="M12 8V3"></path><path d="M17 16h4"></path><path d="M19 12V3"></path><path d="M19 21v-5"></path><path d="M3 14h4"></path><path d="M5 10V3"></path><path d="M5 21v-7"></path></svg>Desenfocar</label>
+                            <span class="range-value" id="desenfoque-valor">0px</span>
+                        </div>
+                        <input type="range" id="fondo-desenfoque" min="0" max="20" value="0" step="1"
+                            class="control-range">
+                        <div class="range-marks">
+                            <span>0px</span>
+                            <span>20px</span>
+                        </div>
+                    </div>
                 </div>
-                <input type="range" id="fondo-opacidad" min="0" max="100" value="20" class="control-range">
-                <div class="range-marks">
-                    <span>0% (más claro)</span>
-                    <span>100% (más oscuro)</span>
+
+
+                <h3>Vista previa</h3>
+
+                <div class="previer-master-box">
+                    <div class="preview-fondo" id="preview-fondo"></div>
+                    <video class="preview-video" id="preview-video" muted loop playsinline style="display:none"></video>
+                </div>
+
+            </div>
+
+            <div class="button-modal">
+                <div class="personalizar-botones">
+                    <button class="btn-secundario" id="cancelar-personalizacion">Cancelar</button>
+                    <button class="btn-primario" id="guardar-personalizacion">Aplicar</button>
                 </div>
             </div>
 
-            <div class="range-group">
-                <div class="range-header">
-                    <label for="fondo-desenfoque">Desenfoque</label>
-                    <span class="range-value" id="desenfoque-valor">0px</span>
-                </div>
-                <input type="range" id="fondo-desenfoque" min="0" max="20" value="0" step="1" class="control-range">
-                <div class="range-marks">
-                    <span>0px</span>
-                    <span>10px</span>
-                    <span>20px</span>
-                </div>
-            </div>
-            
-            <h3>Vista previa</h3>
-            <div class="preview-fondo" id="preview-fondo"></div>
-            <video class="preview-video" id="preview-video" muted loop playsinline style="display:none"></video>
-            
-            <div class="personalizar-botones">
-                <button class="btn-secundario" id="cancelar-personalizacion">Cancelar</button>
-                <button class="btn-primario" id="guardar-personalizacion">Guardar cambios</button>
-            </div>
         </div>
     </div>
 
@@ -264,13 +361,13 @@
 
             <div class="selectores-buscador">
                 <div class="circulo-buscador activo" data-buscador="google" title="Google">
-                    <img src="./img/icons/google_1.png" alt="Google">
+                    <img src="./img/icons/google_1.png" alt="Google" loading="lazy">
                 </div>
                 <div class="circulo-buscador" data-buscador="bing" title="Bing">
-                    <img src="./img/icons/bing_1.png" alt="Bing">
+                    <img src="./img/icons/bing_1.png" alt="Bing" loading="lazy">
                 </div>
                 <div class="circulo-buscador" data-buscador="duckduckgo" title="DuckDuckGo">
-                    <img src="./img/icons/duckduckgo_1.png" alt="DuckDuckGo">
+                    <img src="./img/icons/duckduckgo_1.png" alt="DuckDuckGo" loading="lazy">
                 </div>
             </div>
 
@@ -278,22 +375,22 @@
                 <input type="text" id="barra-busqueda" placeholder="Buscar en la web...">
                 <div class="iconos-busqueda">
                     <button class="icono-busqueda" id="btn-limpiar" title="Limpiar">
-                        <img src="./img/icons/x_1.png" alt="Limpiar">
+                        <img src="./img/icons/x_1.png" alt="Limpiar" loading="lazy">
                     </button>
                     <button class="icono-busqueda" id="btn-microfono" title="Búsqueda por voz">
-                        <img src="./img/icons/microfono_1.png" alt="Micrófono">
+                        <img src="./img/icons/microfono_1.png" alt="Micrófono" loading="lazy">
                     </button>
                     <button class="icono-busqueda" id="btn-buscar" title="Buscar">
-                        <img src="./img/icons/lupa_1.png" alt="Buscar">
+                        <img src="./img/icons/lupa_1.png" alt="Buscar" loading="lazy">
                     </button>
                 </div>
             </div>
 
             <div class="filtros-busqueda">
-                <div class="filtro-item activo" data-filtro="web">Web</div>
-                <div class="filtro-item" data-filtro="imagenes">Imágenes</div>
-                <div class="filtro-item" data-filtro="video">Videos</div>
-                <div class="filtro-item" data-filtro="noticias">Noticias</div>
+                <div class="filtro-item activo" data-filtro="web"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-globe w-4 h-4" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path><path d="M2 12h20"></path></svg>Web</div>
+                <div class="filtro-item" data-filtro="imagenes"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image w-4 h-4" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"></rect><circle cx="9" cy="9" r="2"></circle><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"></path></svg>Imágenes</div>
+                <div class="filtro-item" data-filtro="video"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-video w-4 h-4" aria-hidden="true"><path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5"></path><rect x="2" y="6" width="14" height="12" rx="2"></rect></svg>Videos</div>
+                <div class="filtro-item" data-filtro="noticias"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-newspaper w-4 h-4" aria-hidden="true"><path d="M15 18h-5"></path><path d="M18 14h-8"></path><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-4 0v-9a2 2 0 0 1 2-2h2"></path><rect width="8" height="4" x="10" y="6" rx="1"></rect></svg>Noticias</div>
             </div>
         </div>
 
@@ -301,9 +398,9 @@
             <div class="contenedor-iconos" id="contenedor-iconos"></div>
         </div>
 
-<div class="categorias-container">
-    <!-- Las categorías se generan dinámicamente -->
-</div>
+        <div class="categorias-container">
+            <!-- Las categorías se generan dinámicamente -->
+        </div>
     </div>
 
     <div class="agregar-icono">
@@ -313,7 +410,6 @@
     <button id="btn-personalizar" class="btn-personalizar" title="Personalizar fondo">
         <span class="btn-personalizar-icono">🎨</span>
     </button>
-
-    <script src="script.js"></script>
 </body>
+
 </html>

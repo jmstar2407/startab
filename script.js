@@ -1,5 +1,5 @@
-// script.js - Versión con Autenticación Google Firebase y Datos por Usuario
-// Configuración de Firebase
+// script.js - VERSIÓN COMPLETA OPTIMIZADA PARA EXTENSIÓN SIN PARPADEOS
+// ===== CONFIGURACIÓN DE FIREBASE (diferida) =====
 const firebaseConfig = {
     apiKey: "AIzaSyBU8DyN2kRcDq0fxB20qRUXWBHV0E-0d6A",
     authDomain: "startab-44e48.firebaseapp.com",
@@ -9,18 +9,17 @@ const firebaseConfig = {
     appId: "1:874084877753:web:cf9cbe9a344356dc9be268"
 };
 
-firebase.initializeApp(firebaseConfig);
-const db = firebase.firestore();
-const auth = firebase.auth();
-const googleProvider = new firebase.auth.GoogleAuthProvider();
-
-// Habilitar persistencia de sesión
-auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+// Variables de Firebase (inicialización diferida)
+let db = null;
+let auth = null;
 
 // ===== VARIABLES DE AUTENTICACIÓN =====
 let currentUser = null;
 let userConfigRef = null;
 let unsubscribeUserConfig = null;
+
+// URL de autenticación (TU GITHUB PAGES)
+const AUTH_PAGE = 'https://jmstar2407.github.io/startab/auth.html';
 
 // ===== CONSTANTES =====
 const MAX_CATEGORIAS = 6;
@@ -81,10 +80,7 @@ const CONFIG_DEFAULT = {
         nota4: '',
         nota5: ''
     },
-    settings: {
-        buscadorActual: 'google',
-        filtroActual: 'web'
-    },
+    settings: {},
     metadata: {
         ultimaModificacion: null,
         version: "1.0"
@@ -92,10 +88,6 @@ const CONFIG_DEFAULT = {
 };
 
 // ===== NOTAS =====
-const NOTA_CONFIG = {
-    coleccion: 'users'
-};
-
 let notaTimeouts = {};
 let notaEstado = {
     sincronizado: true,
@@ -114,13 +106,23 @@ let categoriasPersonalizadas = [];
 
 const estado = {
     categoriaActual: localStorage.getItem('categoriaSeleccionada') || 'general',
-    buscadorActual: localStorage.getItem('buscadorSeleccionado') || 'google',
+    buscadorActual: (() => {
+        const saved = localStorage.getItem('buscadorSeleccionado');
+        return saved && ['google', 'bing', 'duckduckgo'].includes(saved) ? saved : 'google';
+    })(),
     filtroActual: 'web',
     iconoSeleccionadoIndex: null,
     elementoArrastrado: null,
     iconosActuales: [],
-    isAuthenticated: false
+    isAuthenticated: false,
+    firebaseInicializado: false
 };
+
+// ===== VARIABLES DE OPTIMIZACIÓN =====
+let _renderizando = false;
+let _iconosCache = null;
+let _ultimoRenderizado = 0;
+const DEBOUNCE_TIME = 100; // ms
 
 // ===== CACHÉ DE ELEMENTOS DOM =====
 const DOM = {};
@@ -147,15 +149,26 @@ function cachearElementos() {
     DOM.logoutBtn = document.getElementById('logout-btn');
 }
 
-// ===== UTILIDADES =====
-const debounce = (fn, delay) => {
-    let timeoutId;
-    return (...args) => {
-        clearTimeout(timeoutId);
-        timeoutId = setTimeout(() => fn(...args), delay);
-    };
-};
+// ===== INICIALIZACIÓN DE FIREBASE (DIFERIDA) =====
+function initFirebase() {
+    if (estado.firebaseInicializado) return true;
+    
+    try {
+        if (typeof firebase !== 'undefined' && !db) {
+            firebase.initializeApp(firebaseConfig);
+            db = firebase.firestore();
+            auth = firebase.auth();
+            estado.firebaseInicializado = true;
+            console.log('Firebase inicializado correctamente');
+            return true;
+        }
+    } catch (e) {
+        console.error('Error al inicializar Firebase:', e);
+    }
+    return false;
+}
 
+// ===== UTILIDADES =====
 const convertirABase64 = file => new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result);
@@ -163,128 +176,235 @@ const convertirABase64 = file => new Promise((resolve, reject) => {
     reader.readAsDataURL(file);
 });
 
-// ===== FUNCIONES DE AUTENTICACIÓN =====
-function inicializarAutenticacion() {
-    // Escuchar cambios en el estado de autenticación
-    auth.onAuthStateChanged(async (user) => {
-        if (user) {
-            // Usuario autenticado
-            currentUser = user;
-            estado.isAuthenticated = true;
 
-            // Actualizar UI
-            actualizarUIAutenticacion(user);
+// ===== UTILIDADES DE COMPRESIÓN DE IMÁGENES =====
+// ===== UTILIDADES DE COMPRESIÓN DE IMÁGENES (MODIFICADA PARA GIFs) =====
+const comprimirYRedimensionarImagen = async (file, maxHeight = 256) => {
+    return new Promise((resolve, reject) => {
+        // Si es GIF, NO procesar con canvas, devolver como Data URL directamente
+        if (file.type === 'image/gif') {
+            const reader = new FileReader();
+            reader.onload = () => {
+                const tamañoKB = Math.round((reader.result.length * 3/4) / 1024);
+                console.log(`GIF procesado: ${tamañoKB}KB (sin compresión para mantener animación)`);
+                resolve(reader.result);
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+            return;
+        }
 
-            // Sincronizar perfil con Firestore
-            await sincronizarPerfilUsuario(user);
-
-            // Cargar configuración del usuario desde Firestore
-            await cargarConfiguracionUsuario(user.uid);
-
-            // Habilitar edición
-            habilitarEdicion(true);
-
-            console.log('Usuario autenticado:', user.displayName);
-        } else {
-            // Usuario no autenticado
-            currentUser = null;
-            estado.isAuthenticated = false;
-
-            // Actualizar UI
-            actualizarUIAutenticacion(null);
-
-            // Desuscribirse deconfiguración anterior
-            if (unsubscribeUserConfig) {
-                unsubscribeUserConfig();
-                unsubscribeUserConfig = null;
+        // Para imágenes no-GIF, proceder con el procesamiento normal
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        
+        img.onload = () => {
+            URL.revokeObjectURL(url);
+            
+            let width = img.width;
+            let height = img.height;
+            
+            if (height > maxHeight) {
+                const ratio = maxHeight / height;
+                width = Math.round(width * ratio);
+                height = maxHeight;
             }
+            
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, width, height);
+            ctx.drawImage(img, 0, 0, width, height);
+            
+            let mimeType = 'image/jpeg';
+            let calidad = 0.9;
+            
+            if (file.type === 'image/png' || file.type === 'image/webp') {
+                mimeType = 'image/png';
+                calidad = 1;
+            }
+            
+            const imageData = ctx.getImageData(0, 0, width, height);
+            let hasTransparency = false;
+            
+            if (mimeType === 'image/jpeg') {
+                for (let i = 3; i < imageData.data.length; i += 4) {
+                    if (imageData.data[i] < 255) {
+                        hasTransparency = true;
+                        break;
+                    }
+                }
+                
+                if (hasTransparency) {
+                    mimeType = 'image/png';
+                    calidad = 1;
+                }
+            }
+            
+            const base64 = canvas.toDataURL(mimeType, calidad);
+            const tamañoKB = Math.round((base64.length * 3/4) / 1024);
+            console.log(`Imagen procesada: ${width}x${height}, ${tamañoKB}KB, formato: ${mimeType}`);
+            
+            resolve(base64);
+        };
+        
+        img.onerror = (error) => {
+            URL.revokeObjectURL(url);
+            reject(error);
+        };
+        
+        img.src = url;
+    });
+};
 
-            // Cargar configuración por defecto (local)
-            await cargarConfiguracionLocal();
 
-            // Deshabilitar edición
-            habilitarEdicion(false);
+// ===== FUNCIONES DE AUTENTICACIÓN =====
+async function iniciarSesionGoogle() {
+    try {
+        if (!DOM.authBtn) return;
+        
+        DOM.authBtn.disabled = true;
+        DOM.authBtn.innerHTML = '<span class="auth-btn-text">Conectando...</span>';
 
-            console.log('Usuario no autenticado');
+        const authWindow = window.open(
+            AUTH_PAGE,
+            'StarTab Auth',
+            'width=500,height=700,left=100,top=100,scrollbars=yes,resizable=yes'
+        );
+
+        if (!authWindow) {
+            alert('Por favor, permite las ventanas emergentes para iniciar sesión');
+            DOM.authBtn.disabled = false;
+            DOM.authBtn.innerHTML = '<span class="auth-btn-text">Iniciar sesión</span>';
+            return;
         }
-    });
 
-    // Event listeners para botones de auth
-    DOM.authBtn?.addEventListener('click', iniciarSesionGoogle);
-    DOM.logoutBtn?.addEventListener('click', cerrarSesion);
+        const messageHandler = async (event) => {
+            if (!event.origin.includes('github.io') && !event.origin.includes('localhost')) return;
 
-    // Cerrar dropdown al hacer clic fuera
-    document.addEventListener('click', (e) => {
-        if (DOM.userMenu && !DOM.userMenu.contains(e.target)) {
-            DOM.userDropdown.style.display = 'none';
+            if (event.data?.type === 'STAR_TAB_AUTH_SUCCESS') {
+                window.removeEventListener('message', messageHandler);
+                
+                try {
+                    await procesarAutenticacionExitosa(event.data.user);
+                    if (authWindow && !authWindow.closed) {
+                        setTimeout(() => authWindow.close(), 1000);
+                    }
+                } catch (error) {
+                    console.error('Error al procesar usuario:', error);
+                }
+            }
+        };
+
+        window.addEventListener('message', messageHandler);
+
+        const checkInterval = setInterval(() => {
+            try {
+                const authData = localStorage.getItem('starTab_auth_data');
+                if (authData) {
+                    clearInterval(checkInterval);
+                    window.removeEventListener('message', messageHandler);
+                    
+                    localStorage.removeItem('starTab_auth_data');
+                    const userData = JSON.parse(authData);
+                    
+                    procesarAutenticacionExitosa(userData);
+                    
+                    if (authWindow && !authWindow.closed) {
+                        authWindow.close();
+                    }
+                }
+            } catch (e) {
+                console.error('Error en polling:', e);
+            }
+        }, 1000);
+
+        setTimeout(() => {
+            clearInterval(checkInterval);
+            window.removeEventListener('message', messageHandler);
+            
+            if (!estado.isAuthenticated) {
+                DOM.authBtn.disabled = false;
+                DOM.authBtn.innerHTML = '<span class="auth-btn-text">Iniciar sesión</span>';
+            }
+        }, 120000);
+
+    } catch (error) {
+        console.error('Error en iniciarSesionGoogle:', error);
+        if (DOM.authBtn) {
+            DOM.authBtn.disabled = false;
+            DOM.authBtn.innerHTML = '<span class="auth-btn-text">Iniciar sesión</span>';
         }
-    });
+        alert('Error al conectar con el servicio de autenticación');
+    }
+}
 
-    // Toggle dropdown al hacer clic en el avatar
-    DOM.userAvatar?.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const display = DOM.userDropdown.style.display;
-        DOM.userDropdown.style.display = display === 'none' ? 'block' : 'none';
-    });
+async function procesarAutenticacionExitosa(user) {
+    currentUser = user;
+    estado.isAuthenticated = true;
+    
+    actualizarUIAutenticacion(user);
+    
+    // Inicializar Firebase si es necesario
+    if (initFirebase()) {
+        await sincronizarPerfilUsuario(user);
+        await cargarConfiguracionUsuario(user.uid);
+    }
+    
+    habilitarEdicion(true);
+    
+    try {
+        localStorage.setItem('starTab_lastUser', JSON.stringify({
+            uid: user.uid,
+            email: user.email,
+            displayName: user.displayName,
+            photoURL: user.photoURL,
+            timestamp: Date.now()
+        }));
+    } catch (e) {
+        console.log('No se pudo guardar en localStorage:', e);
+    }
 }
 
 function actualizarUIAutenticacion(user) {
-    if (user) {
-        // Mostrar avatar y ocultar botón de login
+    if (user && DOM.authBtn && DOM.userMenu) {
         DOM.authBtn.style.display = 'none';
         DOM.userMenu.style.display = 'flex';
 
-        // Actualizar información del usuario
-        DOM.userAvatar.src = user.photoURL || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23667eea"><circle cx="12" cy="12" r="10"/></svg>';
+        DOM.userAvatar.src = user.photoURL || 'data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\' fill=\'%23667eea\'%3E%3Ccircle cx=\'12\' cy=\'12\' r=\'10\'/%3E%3C/svg%3E';
         DOM.userName.textContent = user.displayName || 'Usuario';
         DOM.userEmail.textContent = user.email || '';
     } else {
-        // Mostrar botón de login y ocultar avatar
-        DOM.authBtn.style.display = 'flex';
-        DOM.userMenu.style.display = 'none';
-        DOM.userAvatar.src = '';
-        DOM.userName.textContent = '';
-        DOM.userEmail.textContent = '';
+        if (DOM.authBtn) DOM.authBtn.style.display = 'flex';
+        if (DOM.userMenu) DOM.userMenu.style.display = 'none';
+        if (DOM.userAvatar) DOM.userAvatar.src = '';
+        if (DOM.userName) DOM.userName.textContent = '';
+        if (DOM.userEmail) DOM.userEmail.textContent = '';
     }
 }
 
-async function iniciarSesionGoogle() {
-    try {
-        DOM.authBtn.disabled = true;
-        DOM.authBtn.innerHTML = '<span class="auth-btn-text">Cargando...</span>';
-
-        const result = await auth.signInWithPopup(googleProvider);
-
-        console.log('Inicio de sesión exitoso:', result.user.displayName);
-    } catch (error) {
-        console.error('Error al iniciar sesión:', error);
-
-        let mensajeError = 'Error al iniciar sesión';
-        if (error.code === 'auth/popup-closed-by-user') {
-            mensajeError = 'Ventana cerrada por el usuario';
-        } else if (error.code === 'auth/account-exists-with-different-credential') {
-            mensajeError = 'Ya existe una cuenta con diferente método de autenticación';
-        }
-
-        alert(mensajeError);
-    } finally {
-        DOM.authBtn.disabled = false;
-        DOM.authBtn.innerHTML = '<span class="auth-btn-text">Iniciar sesión</span>';
+function cerrarSesion() {
+    currentUser = null;
+    estado.isAuthenticated = false;
+    
+    actualizarUIAutenticacion(null);
+    
+    if (unsubscribeUserConfig) {
+        unsubscribeUserConfig();
+        unsubscribeUserConfig = null;
     }
-}
-
-async function cerrarSesion() {
-    try {
-        await auth.signOut();
-        DOM.userDropdown.style.display = 'none';
-        console.log('Sesión cerrada');
-    } catch (error) {
-        console.error('Error al cerrar sesión:', error);
-    }
+    
+    localStorage.removeItem('starTab_lastUser');
+    localStorage.removeItem('starTab_auth_data');
+    
+    cargarConfiguracionLocal();
+    habilitarEdicion(false);
 }
 
 async function sincronizarPerfilUsuario(user) {
-    if (!user || !user.uid) return;
+    if (!user || !user.uid || !db) return;
 
     try {
         const userDocRef = db.collection('users').doc(user.uid);
@@ -292,7 +412,6 @@ async function sincronizarPerfilUsuario(user) {
 
         if (doc.exists) {
             const data = doc.data();
-            // Actualizar photoURL si ha cambiado en Google
             if (data.profile?.photoURL !== user.photoURL) {
                 await userDocRef.set({
                     profile: {
@@ -303,7 +422,6 @@ async function sincronizarPerfilUsuario(user) {
                 }, { merge: true });
             }
         } else {
-            // Crear documento de usuario con perfil
             await userDocRef.set({
                 profile: {
                     displayName: user.displayName,
@@ -317,122 +435,263 @@ async function sincronizarPerfilUsuario(user) {
     }
 }
 
-// ===== CONFIGURACIÓN POR USUARIO =====
-async function cargarConfiguracionUsuario(uid) {
+function inicializarAutenticacion() {
     try {
-        // Desuscribirse deconfiguración anterior si existe
+        const savedUser = localStorage.getItem('starTab_lastUser');
+        if (savedUser) {
+            const userData = JSON.parse(savedUser);
+            if (Date.now() - userData.timestamp < 7 * 24 * 60 * 60 * 1000) {
+                // Restaurar sesión sin Firebase inmediatamente
+                currentUser = userData;
+                estado.isAuthenticated = true;
+                actualizarUIAutenticacion(userData);
+                habilitarEdicion(true);
+                
+                // Inicializar Firebase en segundo plano
+                requestIdleCallback(() => {
+                    if (initFirebase()) {
+                        cargarConfiguracionUsuario(userData.uid);
+                    }
+                }, { timeout: 2000 });
+            }
+        }
+    } catch (e) {
+        console.log('Error al restaurar sesión:', e);
+    }
+
+    if (DOM.authBtn) {
+        DOM.authBtn.addEventListener('click', iniciarSesionGoogle);
+    }
+    
+    if (DOM.logoutBtn) {
+        DOM.logoutBtn.addEventListener('click', cerrarSesion);
+    }
+
+    document.addEventListener('click', (e) => {
+        if (DOM.userMenu && !DOM.userMenu.contains(e.target)) {
+            DOM.userDropdown.style.display = 'none';
+        }
+    });
+
+    if (DOM.userAvatar) {
+        DOM.userAvatar.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const display = DOM.userDropdown.style.display;
+            DOM.userDropdown.style.display = display === 'none' ? 'block' : 'none';
+        });
+    }
+}
+
+// ===== CONFIGURACIÓN POR USUARIO CON RESPALDO LOCAL =====
+let _ultimaCategoriaFondo = null;
+
+// Función para guardar backup local
+function guardarBackupLocal(data) {
+    try {
+        const backupData = {
+            ...data,
+            metadata: {
+                ...data.metadata,
+                ultimaModificacionLocal: Date.now() / 1000
+            }
+        };
+        const backupActual = localStorage.getItem('starTab_config_backup');
+        const nuevoBackup = JSON.stringify(backupData);
+        
+        if (backupActual !== nuevoBackup) {
+            localStorage.setItem('starTab_config_backup', nuevoBackup);
+            console.log('Backup local guardado');
+        }
+    } catch (e) {
+        console.log('Error guardando backup local:', e);
+    }
+}
+
+// Función para cargar backup local
+function cargarBackupLocal() {
+    try {
+        const backupRaw = localStorage.getItem('starTab_config_backup');
+        if (backupRaw) {
+            return JSON.parse(backupRaw);
+        }
+    } catch (e) {
+        console.log('Error cargando backup local:', e);
+    }
+    return null;
+}
+
+// Función para aplicar configuración sin parpadeos
+function aplicarConfiguracion(data) {
+    if (!data) return;
+    
+    // Guardar backup local
+    guardarBackupLocal(data);
+
+    // Verificar si realmente hay cambios en categorías
+    const categoriasCambiaron = JSON.stringify(categoriasPersonalizadas) !== JSON.stringify(data.categorias);
+    
+    if (categoriasCambiaron) {
+        if (data.categorias && data.categorias.length > 0) {
+            categoriasPersonalizadas = data.categorias;
+        } else {
+            categoriasPersonalizadas = [
+                {
+                    ...CATEGORIA_GENERAL,
+                    accesos: obtenerIconosPorDefecto()
+                }
+            ];
+        }
+
+        renderizarCategorias();
+        
+        if (!categoriasPersonalizadas.some(c => c.id === estado.categoriaActual)) {
+            estado.categoriaActual = 'general';
+            localStorage.setItem('categoriaSeleccionada', 'general');
+        }
+    }
+
+    // Verificar si hay cambios en notas
+    if (data.notas) {
+        let notasCambiaron = false;
+        for (let i = 1; i <= 5; i++) {
+            if (data.notas[`nota${i}`] !== undefined && 
+                notaEstado.notas[i].contenido !== data.notas[`nota${i}`]) {
+                notaEstado.notas[i].contenido = data.notas[`nota${i}`];
+                notasCambiaron = true;
+            }
+        }
+        
+        if (notasCambiaron) {
+            const notaDOM = {
+                textarea: document.getElementById('nota-textarea')
+            };
+            if (notaDOM.textarea && document.getElementById('nota-modal')?.classList.contains('nota-modal-abierto')) {
+                cargarNota(notaEstado.notaActual, notaDOM);
+            }
+        }
+    }
+
+    // Obtener iconos de la categoría actual
+    const categoriaActual = categoriasPersonalizadas.find(c => c.id === estado.categoriaActual);
+    const nuevosIconos = categoriaActual?.accesos || [];
+    
+    const iconosCambiaron = JSON.stringify(estado.iconosActuales) !== JSON.stringify(nuevosIconos);
+    
+    if (iconosCambiaron) {
+        estado.iconosActuales = nuevosIconos;
+        renderizarIconos(true);
+    }
+
+    if (categoriaActual && categoriaActual.background) {
+        const fondoActual = window.fondoActualCategoria;
+        const nuevoFondo = categoriaActual.background;
+        
+        if (!fondoActual || JSON.stringify(fondoActual) !== JSON.stringify(nuevoFondo)) {
+            aplicarFondoCategoria(estado.categoriaActual);
+        }
+    }
+}
+
+async function cargarConfiguracionUsuario(uid) {
+    if (!db) {
+        console.log('Firebase no inicializado, usando configuración local');
+        cargarConfiguracionLocal();
+        return;
+    }
+    
+    try {
         if (unsubscribeUserConfig) {
             unsubscribeUserConfig();
         }
 
-        // Referencia al documento del usuario
         userConfigRef = db.collection('users').doc(uid);
 
-        // Escuchar cambios en tiempo real
-        unsubscribeUserConfig = userConfigRef.onSnapshot(async (doc) => {
+        const localBackup = cargarBackupLocal();
+        let localTimestamp = localBackup?.metadata?.ultimaModificacionLocal || 0;
+
+        try {
+            const doc = await userConfigRef.get();
+            
             if (doc.exists) {
-                const data = doc.data();
-
-                // ── Cambio originado en ESTE dispositivo ─────────────────────────────
-                // hasPendingWrites = true → el cliente aún no recibió confirmación del servidor.
-                // Significa que este snapshot es el eco de nuestra propia escritura, ya aplicada
-                // localmente. Solo actualizamos memoria y mostramos "Guardando...".
-                const esCambioLocal = doc.metadata.hasPendingWrites;
-
-                if (esCambioLocal) {
-                    // Sincronizar datos en memoria (sin tocar el DOM)
-                    if (data.categorias && data.categorias.length > 0) {
-                        categoriasPersonalizadas = data.categorias;
-                    }
-                    if (data.settings) {
-                        if (data.settings.buscadorActual) estado.buscadorActual = data.settings.buscadorActual;
-                        if (data.settings.filtroActual)   estado.filtroActual   = data.settings.filtroActual;
-                    }
-                    mostrarIndicadorSync('guardando');
-                    return; // Cambio ya aplicado localmente → no re-renderizar
-                }
-
-                // ── Confirmación del servidor (o cambio desde otro dispositivo) ─────
-                mostrarIndicadorSync('guardado');
-
-                // Cargar categorías
-                if (data.categorias && data.categorias.length > 0) {
-                    categoriasPersonalizadas = data.categorias;
+                const firebaseData = doc.data();
+                const firebaseTimestamp = firebaseData.metadata?.ultimaModificacion?.seconds || 0;
+                
+                if (localTimestamp > firebaseTimestamp && localBackup) {
+                    console.log('Configuración local más nueva, actualizando Firebase');
+                    await userConfigRef.set(localBackup, { merge: true });
+                    aplicarConfiguracion(localBackup);
                 } else {
-                    // Nueva configuración por defecto
-                    categoriasPersonalizadas = [
-                        {
-                            ...CATEGORIA_GENERAL,
-                            accesos: obtenerIconosPorDefecto()
-                        }
-                    ];
-                    await guardarConfiguracionCompleta();
+                    console.log('Usando configuración de Firebase');
+                    aplicarConfiguracion(firebaseData);
                 }
-
-                // Cargar notas
-                if (data.notas) {
-                    for (let i = 1; i <= 5; i++) {
-                        if (data.notas[`nota${i}`]) {
-                            notaEstado.notas[i].contenido = data.notas[`nota${i}`];
-                        }
-                    }
-                }
-
-                // Cargar configuración del buscador
-                if (data.settings) {
-                    if (data.settings.buscadorActual) {
-                        estado.buscadorActual = data.settings.buscadorActual;
-                        localStorage.setItem('buscadorSeleccionado', estado.buscadorActual);
-                    }
-                    if (data.settings.filtroActual) {
-                        estado.filtroActual = data.settings.filtroActual;
-                    }
-                }
-
-                // Validar categoría actual
-                if (!categoriasPersonalizadas.some(c => c.id === estado.categoriaActual)) {
-                    estado.categoriaActual = 'general';
-                    localStorage.setItem('categoriaSeleccionada', 'general');
-                }
-
-                // Actualizar estado.iconosActuales
-                const categoriaActual = categoriasPersonalizadas.find(c => c.id === estado.categoriaActual);
-                estado.iconosActuales = categoriaActual?.accesos || [];
-
-                // Renderizar
-                renderizarCategorias();
-                actualizarBuscadorUI();
-                actualizarPlaceholder();
-                aplicarFondoCategoria(estado.categoriaActual);
-                await renderizarIconos();
-
-                // Actualizar notas si el modal está abierto
-                const notaDOM = {
-                    textarea: document.getElementById('nota-textarea')
-                };
-                if (notaDOM.textarea) {
-                    cargarNota(notaEstado.notaActual, notaDOM);
-                }
-
-                console.log('Configuración sincronizada desde Firestore');
             } else {
-                // Primer inicio de sesión - crear configuración por defecto
-                console.log('Creando configuración por defecto para nuevo usuario');
-                await crearConfiguracionPorDefecto(uid);
+                if (localBackup) {
+                    console.log('No hay datos en Firebase, usando backup local');
+                    await userConfigRef.set(localBackup);
+                    aplicarConfiguracion(localBackup);
+                } else {
+                    await crearConfiguracionPorDefecto(uid);
+                }
+            }
+        } catch (firebaseError) {
+            console.log('Error conectando a Firebase, usando backup local:', firebaseError);
+            
+            if (localBackup) {
+                console.log('Usando configuración de backup local');
+                aplicarConfiguracion(localBackup);
+            } else {
+                cargarConfiguracionLocal();
+            }
+        }
+
+        // Snapshot optimizado sin parpadeos
+        unsubscribeUserConfig = userConfigRef.onSnapshot(async (doc) => {
+            const isOnline = navigator.onLine;
+            
+            if (!isOnline || doc.metadata.hasPendingWrites) {
+                return;
+            }
+
+            if (doc.exists) {
+                const firebaseData = doc.data();
+                const firebaseTimestamp = firebaseData.metadata?.ultimaModificacion?.seconds || 0;
+                
+                const currentLocalBackup = cargarBackupLocal();
+                let currentLocalTimestamp = currentLocalBackup?.metadata?.ultimaModificacionLocal || 0;
+
+                if (firebaseTimestamp > currentLocalTimestamp || !currentLocalBackup) {
+                    const categoriasActuales = JSON.stringify(categoriasPersonalizadas);
+                    const categoriasNuevas = JSON.stringify(firebaseData.categorias || []);
+                    
+                    const notasActuales = JSON.stringify({
+                        nota1: notaEstado.notas[1].contenido,
+                        nota2: notaEstado.notas[2].contenido,
+                        nota3: notaEstado.notas[3].contenido,
+                        nota4: notaEstado.notas[4].contenido,
+                        nota5: notaEstado.notas[5].contenido
+                    });
+                    
+                    const notasNuevas = JSON.stringify(firebaseData.notas || {});
+                    
+                    if (categoriasActuales !== categoriasNuevas || notasActuales !== notasNuevas) {
+                        console.log('Snapshot: aplicando cambios de Firebase');
+                        aplicarConfiguracion(firebaseData);
+                    }
+                }
             }
         }, (error) => {
-            console.error('Error al escuchar configuración:', error);
-            mostrarIndicadorSync('error');
-            cargarConfiguracionLocal();
+            console.error('Error en snapshot de Firebase:', error);
         });
 
     } catch (error) {
-        console.error('Error al cargar configuración de usuario:', error);
-        await cargarConfiguracionLocal();
+        console.error('Error general en cargarConfiguracionUsuario:', error);
+        cargarConfiguracionLocal();
     }
 }
 
 async function crearConfiguracionPorDefecto(uid) {
+    if (!db) return;
+    
     try {
         const configInicial = { ...CONFIG_DEFAULT };
         configInicial.profile = {
@@ -440,206 +699,214 @@ async function crearConfiguracionPorDefecto(uid) {
             email: currentUser?.email || '',
             photoURL: currentUser?.photoURL || ''
         };
-
         await db.collection('users').doc(uid).set(configInicial);
-        console.log('Configuración por defecto creada');
+        guardarBackupLocal(configInicial);
     } catch (error) {
-        console.error('Error al crear configuración por defecto:', error);
+        console.error('Error al crear configuración:', error);
     }
 }
 
 async function cargarConfiguracionLocal() {
-    // Cargar configuración por defecto sin usuario
+    console.log('Cargando configuración local...');
+    
+    const backup = cargarBackupLocal();
+    let fondoGuardado = null;
+    
+    try {
+        fondoGuardado = JSON.parse(localStorage.getItem('starTab_fondo_rapido') || 'null');
+    } catch (e) {}
+
+    if (backup) {
+        console.log('Cargando configuración desde backup local');
+        
+        categoriasPersonalizadas = backup.categorias || [
+            {
+                ...CATEGORIA_GENERAL,
+                accesos: obtenerIconosPorDefecto(),
+                background: fondoGuardado ? {
+                    tipo: fondoGuardado.tipo || 'gradiente',
+                    url: fondoGuardado.url || null,
+                    opacidad: fondoGuardado.opacidad || 0.2,
+                    desenfoque: fondoGuardado.desenfoque || 0,
+                    colorInicio: fondoGuardado.colorInicio || '#667eea',
+                    colorFin: fondoGuardado.colorFin || '#764ba2'
+                } : { ...FONDO_DEFAULT }
+            }
+        ];
+
+        if (backup.notas) {
+            for (let i = 1; i <= 5; i++) {
+                if (backup.notas[`nota${i}`]) {
+                    notaEstado.notas[i].contenido = backup.notas[`nota${i}`];
+                }
+            }
+        }
+
+        renderizarCategorias();
+        aplicarFondoCategoria(estado.categoriaActual);
+        renderizarIconos(true);
+        
+        const notaDOM = {
+            textarea: document.getElementById('nota-textarea')
+        };
+        if (notaDOM.textarea) {
+            cargarNota(notaEstado.notaActual, notaDOM);
+        }
+        
+        return;
+    }
+
+    console.log('No hay backup, usando configuración por defecto');
     categoriasPersonalizadas = [
         {
             ...CATEGORIA_GENERAL,
-            accesos: obtenerIconosPorDefecto()
+            accesos: obtenerIconosPorDefecto(),
+            background: fondoGuardado ? {
+                tipo: fondoGuardado.tipo || 'gradiente',
+                url: fondoGuardado.url || null,
+                opacidad: fondoGuardado.opacidad || 0.2,
+                desenfoque: fondoGuardado.desenfoque || 0,
+                colorInicio: fondoGuardado.colorInicio || '#667eea',
+                colorFin: fondoGuardado.colorFin || '#764ba2'
+            } : { ...FONDO_DEFAULT }
         }
     ];
 
-    // Reiniciar notas
     for (let i = 1; i <= 5; i++) {
-        notaEstado.notas[i].contenido = '';
+        notaEstado.notas[i].contenido = `📝 Nota ${i}\n\n• Inicia sesión para sincronizar\n• Tus notas se guardarán en la nube`;
     }
 
-    // Renderizar
     renderizarCategorias();
-    await aplicarFondoCategoria(estado.categoriaActual);
-    await renderizarIconos();
-
-    console.log('Configuración local cargada');
+    
+    if (fondoGuardado) {
+        const fondoConfig = {
+            tipo: fondoGuardado.tipo || 'gradiente',
+            url: fondoGuardado.url || null,
+            opacidad: fondoGuardado.opacidad || 0.2,
+            desenfoque: fondoGuardado.desenfoque || 0,
+            colorInicio: fondoGuardado.colorInicio || '#667eea',
+            colorFin: fondoGuardado.colorFin || '#764ba2'
+        };
+        
+        const fondoElement = document.getElementById('fondo-activo') || document.createElement('div');
+        if (!fondoElement.id) {
+            fondoElement.id = 'fondo-activo';
+            fondoElement.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                z-index: -1;
+                pointer-events: none;
+            `;
+            document.body.insertBefore(fondoElement, document.body.firstChild);
+        }
+        
+        aplicarEstiloFondo(fondoElement, fondoConfig, false);
+        fondoElement.style.opacity = '1';
+        
+        categoriasPersonalizadas[0].background = fondoConfig;
+        window.fondoActualCategoria = fondoConfig;
+    } else {
+        await aplicarFondoCategoria(estado.categoriaActual);
+    }
+    
+    await renderizarIconos(true);
 }
 
-// ===== INDICADOR DE SINCRONIZACIÓN =====
-let _syncHideTimeout = null;
-
-function mostrarIndicadorSync(estado) {
-    let indicator = document.getElementById('sync-indicator');
-    if (!indicator) {
-        indicator = document.createElement('div');
-        indicator.id = 'sync-indicator';
-        indicator.style.cssText = `
-            position: fixed;
-            bottom: 18px;
-            left: 18px;
-            padding: 6px 14px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: 600;
-            letter-spacing: 0.3px;
-            pointer-events: none;
-            z-index: 9999;
-            transition: opacity 0.35s ease, transform 0.35s ease;
-            opacity: 0;
-            transform: translateY(6px);
-        `;
-        document.body.appendChild(indicator);
-    }
-
-    clearTimeout(_syncHideTimeout);
-
-    if (estado === 'guardando') {
-        indicator.textContent = '⏳ Guardando...';
-        indicator.style.background = 'rgba(30,30,50,0.82)';
-        indicator.style.color = '#a5b4fc';
-        indicator.style.border = '1px solid rgba(165,180,252,0.25)';
-        indicator.style.opacity = '1';
-        indicator.style.transform = 'translateY(0)';
-    } else if (estado === 'guardado') {
-        indicator.textContent = '✓ Guardado';
-        indicator.style.background = 'rgba(20,40,30,0.82)';
-        indicator.style.color = '#6ee7b7';
-        indicator.style.border = '1px solid rgba(110,231,183,0.25)';
-        indicator.style.opacity = '1';
-        indicator.style.transform = 'translateY(0)';
-        _syncHideTimeout = setTimeout(() => {
-            indicator.style.opacity = '0';
-            indicator.style.transform = 'translateY(6px)';
-        }, 2000);
-    } else if (estado === 'error') {
-        indicator.textContent = '✗ Error al guardar';
-        indicator.style.background = 'rgba(50,20,20,0.82)';
-        indicator.style.color = '#fca5a5';
-        indicator.style.border = '1px solid rgba(252,165,165,0.25)';
-        indicator.style.opacity = '1';
-        indicator.style.transform = 'translateY(0)';
-        _syncHideTimeout = setTimeout(() => {
-            indicator.style.opacity = '0';
-            indicator.style.transform = 'translateY(6px)';
-        }, 4000);
-    }
-}
-
-// ===== GUARDADO EN FIREBASE =====
+// ===== GUARDADO EN FIREBASE CON RESPALDO LOCAL =====
 async function guardarConfiguracionCompleta() {
-    if (!currentUser || !userConfigRef) return;
-    mostrarIndicadorSync('guardando');
+    const datosAGuardar = {
+        categorias: categoriasPersonalizadas,
+        notas: {
+            nota1: notaEstado.notas[1].contenido,
+            nota2: notaEstado.notas[2].contenido,
+            nota3: notaEstado.notas[3].contenido,
+            nota4: notaEstado.notas[4].contenido,
+            nota5: notaEstado.notas[5].contenido
+        }
+    };
+
+    guardarBackupLocal(datosAGuardar);
+
+    if (!currentUser || !userConfigRef || !db || !navigator.onLine) {
+        console.log('Offline o no autenticado: cambios guardados solo localmente');
+        return;
+    }
+    
     try {
         await userConfigRef.set({
             categorias: categoriasPersonalizadas,
+            notas: {
+                nota1: notaEstado.notas[1].contenido,
+                nota2: notaEstado.notas[2].contenido,
+                nota3: notaEstado.notas[3].contenido,
+                nota4: notaEstado.notas[4].contenido,
+                nota5: notaEstado.notas[5].contenido
+            },
             metadata: {
                 ultimaModificacion: firebase.firestore.FieldValue.serverTimestamp(),
                 version: '1.0'
             }
         }, { merge: true });
-        // El indicador "guardado" lo mostrará el onSnapshot cuando llegue la confirmación
+        console.log('Configuración guardada en Firebase');
     } catch (error) {
-        console.error('Error al guardar configuración:', error);
-        mostrarIndicadorSync('error');
-    }
-}
-
-async function guardarConfiguracionNotas() {
-    try {
-        if (currentUser && userConfigRef) {
-            const notasData = {};
-            for (let i = 1; i <= 5; i++) {
-                notasData[`nota${i}`] = notaEstado.notas[i].contenido || '';
-            }
-
-            await userConfigRef.set({
-                notas: notasData,
-                metadata: {
-                    ultimaModificacion: firebase.firestore.FieldValue.serverTimestamp()
-                }
-            }, { merge: true });
-        }
-    } catch (error) {
-        console.error('Error al guardar notas:', error);
-    }
-}
-
-async function guardarConfiguracionBuscador() {
-    if (!currentUser || !userConfigRef) return;
-    mostrarIndicadorSync('guardando');
-    try {
-        await userConfigRef.set({
-            settings: {
-                buscadorActual: estado.buscadorActual,
-                filtroActual: estado.filtroActual
-            },
-            metadata: {
-                ultimaModificacion: firebase.firestore.FieldValue.serverTimestamp()
-            }
-        }, { merge: true });
-    } catch (error) {
-        console.error('Error al guardar configuración de buscador:', error);
-        mostrarIndicadorSync('error');
+        console.error('Error al guardar configuración en Firebase:', error);
     }
 }
 
 // ===== HABILITAR/DESABILITAR EDICIÓN =====
 function habilitarEdicion(habilitar) {
-    // Botón agregar acceso directo
     if (DOM.btnAgregar) {
         DOM.btnAgregar.style.display = habilitar ? 'flex' : 'none';
     }
 
-    // Botón personalizar fondo
     if (DOM.btnPersonalizar) {
         DOM.btnPersonalizar.style.display = habilitar ? 'flex' : 'none';
     }
 
-    // Categorías - agregar nueva
     const btnAgregarCategoria = document.getElementById('btn-agregar-categoria');
     if (btnAgregarCategoria) {
         btnAgregarCategoria.style.display = habilitar ? 'inline-flex' : 'none';
     }
 
-    // Menú contextual para editar/eliminar iconos
-    // Esto se maneja en el renderizado de iconos
-
-    // Actualizar estado
     estado.isAuthenticated = habilitar;
-
-    console.log('Edición', habilitar ? 'habilitada' : 'deshabilitada');
 }
 
-// ===== FUNCIONES DE CATEGORÍAS =====
-
-// Flag para asegurarse de que los listeners del contenedor se registren UNA SOLA VEZ
+// ===== FUNCIONES DE CATEGORÍAS COMPLETAS =====
 let _categoriasListenersInit = false;
+let _agregarCategoriaEnProceso = false;
 
 function inicializarListenersCategorias() {
     if (_categoriasListenersInit) return;
+    
     const container = document.querySelector('.categorias-container');
     if (!container) return;
 
-    container.addEventListener('click', (e) => {
+    // Delegación de eventos para clicks
+    container.addEventListener('click', async (e) => {
+        // Botón de categoría normal
         const btn = e.target.closest('.categoria-btn[data-categoria]');
         if (btn) {
             cambiarCategoria(btn.dataset.categoria);
             return;
         }
+        
+        // Botón de agregar categoría
         const addBtn = e.target.closest('#btn-agregar-categoria');
-        if (addBtn) {
-            agregarCategoria();
+        if (addBtn && estado.isAuthenticated) {
+            e.preventDefault();
+            e.stopPropagation();
+            await agregarCategoria();
+            return;
         }
     });
 
+    // Menú contextual en categorías editables
     container.addEventListener('contextmenu', (e) => {
         const wrapper = e.target.closest('.categoria-wrapper');
-        if (wrapper) {
+        if (wrapper && estado.isAuthenticated) {
             e.preventDefault();
             const categoriaId = wrapper.dataset.categoriaId;
             const esEditable = wrapper.dataset.categoriaEditable === 'true';
@@ -670,19 +937,18 @@ function renderizarCategorias() {
         `;
     });
 
-    // Botón para agregar nueva categoría (si no se ha alcanzado el límite)
-    if (categoriasPersonalizadas.length < MAX_CATEGORIAS) {
+    if (categoriasPersonalizadas.length < MAX_CATEGORIAS && estado.isAuthenticated) {
         html += `
             <button class="categoria-btn agregar-categoria-btn" id="btn-agregar-categoria">
-                <span class="agregar-icono">+</span>
+                <span class="agregar-categoria">+</span>
             </button>
         `;
     }
 
-    container.innerHTML = html;
-
-    // Registrar listeners solo la primera vez (evita acumulación con cada render)
-    inicializarListenersCategorias();
+    if (container.innerHTML !== html) {
+        container.innerHTML = html;
+        inicializarListenersCategorias();
+    }
 }
 
 function actualizarCategoriasUI() {
@@ -697,104 +963,136 @@ async function cambiarCategoria(categoriaId) {
     estado.categoriaActual = categoriaId;
     localStorage.setItem('categoriaSeleccionada', categoriaId);
     
-    // Cargar los iconos de la nueva categoría
     const nuevaCategoria = categoriasPersonalizadas.find(c => c.id === categoriaId);
     estado.iconosActuales = nuevaCategoria?.accesos || [];
     
     actualizarCategoriasUI();
-    // No await: el token interno cancela transiciones obsoletas si el usuario cambia rápido
     aplicarFondoCategoria(categoriaId);
-    await renderizarIconos();
+    await renderizarIconos(true);
 }
 
-function mostrarMenuContextualCategoria(event, categoriaId) {
-    // Verificar si el usuario está autenticado
-    if (!estado.isAuthenticated) {
-        // Cerrar menú contextual existente
-        document.querySelector('.menu-contextual-categoria')?.remove();
+// FUNCIÓN AGREGAR CATEGORÍA
+async function agregarCategoria() {
+    if (_agregarCategoriaEnProceso) return;
+    _agregarCategoriaEnProceso = true;
 
-        const menu = document.createElement('div');
-        menu.className = 'menu-contextual menu-contextual-categoria';
-        menu.style.cssText = `left:${event.clientX}px;top:${event.clientY}px`;
-        menu.innerHTML = `
-            <div class="menu-item" style="cursor: default;">
-                <span class="menu-icono">🔒</span>Inicia sesión para editar
-            </div>
-        `;
+    try {
+        const nombre = prompt('Nombre de la nueva categoría (máx 20 caracteres):', 'Nueva categoría');
+        if (nombre === null) {
+            _agregarCategoriaEnProceso = false;
+            return;
+        }
 
-        document.body.appendChild(menu);
+        const nombreTrim = nombre.trim();
+        if (!nombreTrim) {
+            alert('El nombre no puede estar vacío');
+            _agregarCategoriaEnProceso = false;
+            return;
+        }
 
-        setTimeout(() => {
-            menu.remove();
-        }, 2000);
+        if (nombreTrim.length > 20) {
+            alert('El nombre no puede tener más de 20 caracteres');
+            _agregarCategoriaEnProceso = false;
+            return;
+        }
 
-        return;
+        if (categoriasPersonalizadas.some(c => c.nombre.toLowerCase() === nombreTrim.toLowerCase())) {
+            alert('Ya existe una categoría con ese nombre');
+            _agregarCategoriaEnProceso = false;
+            return;
+        }
+
+        const nuevoId = 'cat_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        
+        // Usar el fondo de la categoría actual como base
+        const categoriaActual = categoriasPersonalizadas.find(c => c.id === estado.categoriaActual);
+        const fondoBase = categoriaActual && categoriaActual.background ? categoriaActual.background : FONDO_DEFAULT;
+
+        const nuevaCategoria = {
+            id: nuevoId,
+            nombre: nombreTrim,
+            editable: true,
+            background: { ...fondoBase },
+            accesos: []
+        };
+
+        categoriasPersonalizadas.push(nuevaCategoria);
+        
+        await guardarConfiguracionCompleta();
+        
+        renderizarCategorias();
+        
+        // Cambiar automáticamente a la nueva categoría
+        estado.categoriaActual = nuevoId;
+        localStorage.setItem('categoriaSeleccionada', nuevoId);
+        estado.iconosActuales = [];
+        await renderizarIconos(true);
+        aplicarFondoCategoria(nuevoId);
+        
+    } catch (error) {
+        console.error('Error al agregar categoría:', error);
+        alert('Error al crear la categoría');
+    } finally {
+        _agregarCategoriaEnProceso = false;
     }
+}
 
-    // Cerrar menú contextual existente
+// FUNCIÓN MOSTRAR MENÚ CONTEXTUAL DE CATEGORÍA
+function mostrarMenuContextualCategoria(event, categoriaId) {
+    // Eliminar menú existente
     document.querySelector('.menu-contextual-categoria')?.remove();
-
+    
     const categoria = categoriasPersonalizadas.find(c => c.id === categoriaId);
-    if (!categoria) return;
-
-    // Crear el menú pero oculto temporalmente para medir
+    if (!categoria || !categoria.editable) return;
+    
     const menu = document.createElement('div');
     menu.className = 'menu-contextual menu-contextual-categoria';
-    menu.style.cssText = 'visibility:hidden;position:fixed;';
+    
     menu.innerHTML = `
-        <div class="menu-item" data-action="editar-categoria" data-categoria-id="${categoriaId}">
-            <span class="menu-icono">✏️</span>Editar categoría
+        <div class="menu-item" data-action="editar-categoria">
+            <span class="menu-icono">✏️</span>Renombrar
         </div>
-        <div class="menu-item" data-action="eliminar-categoria" data-categoria-id="${categoriaId}">
-            <span class="menu-icono">🗑️</span>Eliminar categoría
+        <div class="menu-item" data-action="eliminar-categoria">
+            <span class="menu-icono">🗑️</span>Eliminar
         </div>
     `;
 
     document.body.appendChild(menu);
     
-    // Obtener dimensiones reales
+    // Posicionar el menú
     const menuWidth = menu.offsetWidth;
     const menuHeight = menu.offsetHeight;
     
-    // Calcular posición
     let left = event.clientX;
     let top = event.clientY;
     
-    // Ajustar horizontal
     if (left + menuWidth > window.innerWidth) {
         left = window.innerWidth - menuWidth - 10;
     }
-    if (left < 10) {
-        left = 10;
-    }
+    if (left < 10) left = 10;
     
-    // Ajustar vertical - mostrar hacia arriba si no cabe abajo
     if (top + menuHeight > window.innerHeight) {
         top = event.clientY - menuHeight - 5;
     } else {
         top = event.clientY + 5;
     }
     
-    // Asegurar que no se salga por arriba
-    if (top < 5) {
-        top = 5;
-    }
+    if (top < 5) top = 5;
     
-    // Aplicar posición y hacer visible
-    menu.style.cssText = `left:${left}px;top:${top}px;visibility:visible;`;
+    menu.style.cssText = `left:${left}px;top:${top}px;position:fixed;z-index:2000;`;
 
-    // Event listeners
-    menu.addEventListener('click', async (e) => {
-        const action = e.target.closest('.menu-item')?.dataset.action;
-        if (action === 'editar-categoria') {
-            await editarCategoria(categoriaId);
-        } else if (action === 'eliminar-categoria') {
-            await eliminarCategoria(categoriaId);
-        }
+    // Event listeners del menú
+    menu.querySelector('[data-action="editar-categoria"]').addEventListener('click', async () => {
         menu.remove();
+        await editarCategoria(categoriaId);
     });
-
-    // Cerrar menú al hacer clic fuera
+    
+    menu.querySelector('[data-action="eliminar-categoria"]').addEventListener('click', async () => {
+        menu.remove();
+        await eliminarCategoria(categoriaId);
+    });
+    
+    // Cerrar al hacer click fuera
     setTimeout(() => {
         const cerrarMenu = (e) => {
             if (!menu.contains(e.target)) {
@@ -808,60 +1106,7 @@ function mostrarMenuContextualCategoria(event, categoriaId) {
     }, 100);
 }
 
-let _agregarCategoriaEnProceso = false;
-
-async function agregarCategoria() {
-    // Guard: evitar que se abra el prompt múltiples veces si hay listeners duplicados
-    if (_agregarCategoriaEnProceso) return;
-    _agregarCategoriaEnProceso = true;
-
-    try {
-        const nombre = prompt('Ingresa el nombre de la nueva categoría (máx 20 caracteres):');
-
-        if (nombre === null) return;
-
-        const nombreTrim = nombre.trim();
-        if (!nombreTrim) {
-            alert('El nombre no puede estar vacío');
-            return;
-        }
-
-        if (nombreTrim.length > 20) {
-            alert('El nombre no puede tener más de 20 caracteres');
-            return;
-        }
-
-        // Verificar si ya existe una categoría con ese nombre
-        if (categoriasPersonalizadas.some(c => c.nombre.toLowerCase() === nombreTrim.toLowerCase())) {
-            alert('Ya existe una categoría con ese nombre');
-            return;
-        }
-
-        // Generar ID único
-        const id = 'cat_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
-
-        // Usar el fondo de la categoría actual como base para la nueva
-        const categoriaActual = categoriasPersonalizadas.find(c => c.id === estado.categoriaActual);
-        const fondoBase = categoriaActual && categoriaActual.background ? categoriaActual.background : FONDO_DEFAULT;
-
-        const nuevaCategoria = {
-            id: id,
-            nombre: nombreTrim,
-            editable: true,
-            background: { ...fondoBase },
-            accesos: []
-        };
-
-        categoriasPersonalizadas.push(nuevaCategoria);
-        await guardarConfiguracionCompleta();
-
-        renderizarCategorias();
-    } finally {
-        // Siempre liberar el guard, incluso si hay un error o se canceló
-        _agregarCategoriaEnProceso = false;
-    }
-}
-
+// FUNCIÓN EDITAR CATEGORÍA
 async function editarCategoria(categoriaId) {
     const categoria = categoriasPersonalizadas.find(c => c.id === categoriaId);
     if (!categoria || categoria.editable === false) {
@@ -869,7 +1114,7 @@ async function editarCategoria(categoriaId) {
         return;
     }
     
-    const nuevoNombre = prompt('Editar nombre de la categoría (máx 20 caracteres):', categoria.nombre);
+    const nuevoNombre = prompt('Renombrar categoría (máx 20 caracteres):', categoria.nombre);
     
     if (nuevoNombre === null) return;
     
@@ -884,18 +1129,18 @@ async function editarCategoria(categoriaId) {
         return;
     }
     
-    // Verificar si ya existe otra categoría con ese nombre
     if (categoriasPersonalizadas.some(c => c.id !== categoriaId && c.nombre.toLowerCase() === nombreTrim.toLowerCase())) {
         alert('Ya existe otra categoría con ese nombre');
         return;
     }
     
     categoria.nombre = nombreTrim;
-    await guardarConfiguracionCompleta();
     
+    await guardarConfiguracionCompleta();
     renderizarCategorias();
 }
 
+// FUNCIÓN ELIMINAR CATEGORÍA
 async function eliminarCategoria(categoriaId) {
     const categoria = categoriasPersonalizadas.find(c => c.id === categoriaId);
     
@@ -904,31 +1149,36 @@ async function eliminarCategoria(categoriaId) {
         return;
     }
     
-    if (confirm(`¿Eliminar la categoría "${categoria.nombre}"? Los accesos directos se perderán.`)) {
-        const index = categoriasPersonalizadas.findIndex(c => c.id === categoriaId);
-        if (index !== -1) {
-            categoriasPersonalizadas.splice(index, 1);
-            await guardarConfiguracionCompleta();
+    const mensaje = categoria.accesos && categoria.accesos.length > 0
+        ? `¿Eliminar la categoría "${categoria.nombre}" y todos sus ${categoria.accesos.length} accesos directos?`
+        : `¿Eliminar la categoría "${categoria.nombre}"?`;
+    
+    if (!confirm(mensaje)) return;
+    
+    const index = categoriasPersonalizadas.findIndex(c => c.id === categoriaId);
+    if (index !== -1) {
+        categoriasPersonalizadas.splice(index, 1);
+        
+        await guardarConfiguracionCompleta();
+        
+        // Si la categoría actual fue eliminada, ir a 'general'
+        if (estado.categoriaActual === categoriaId) {
+            estado.categoriaActual = 'general';
+            localStorage.setItem('categoriaSeleccionada', 'general');
             
-            // Si la categoría actual es la que se eliminó, cambiar a General
-            if (estado.categoriaActual === categoriaId) {
-                estado.categoriaActual = 'general';
-                localStorage.setItem('categoriaSeleccionada', 'general');
-                const categoriaGeneral = categoriasPersonalizadas.find(c => c.id === 'general');
-                estado.iconosActuales = categoriaGeneral?.accesos || [];
-                await aplicarFondoCategoria('general');
-                await renderizarIconos();
-            }
-            
-            renderizarCategorias();
+            const categoriaGeneral = categoriasPersonalizadas.find(c => c.id === 'general');
+            estado.iconosActuales = categoriaGeneral?.accesos || [];
+            await aplicarFondoCategoria('general');
+            await renderizarIconos(true);
         }
+        
+        renderizarCategorias();
     }
 }
 
-// ===== FUNCIONES DE ICONOS =====
+// ===== FUNCIONES DE ICONOS OPTIMIZADAS =====
 async function guardarIconosEnFirebase(iconos) {
     try {
-        // Actualizar los accesos de la categoría actual
         const categoriaIndex = categoriasPersonalizadas.findIndex(c => c.id === estado.categoriaActual);
         if (categoriaIndex !== -1) {
             categoriasPersonalizadas[categoriaIndex].accesos = iconos;
@@ -941,12 +1191,9 @@ async function guardarIconosEnFirebase(iconos) {
 }
 
 async function cargarIconosDeFirebase() {
-    // Los iconos ya deberían estar en estado.iconosActuales
-    // Pero por si acaso, recargamos de la categoría actual
     const categoriaActual = categoriasPersonalizadas.find(c => c.id === estado.categoriaActual);
     estado.iconosActuales = categoriaActual?.accesos || [];
     
-    // Si es la categoría General y está vacía, cargar iconos por defecto
     if (estado.categoriaActual === 'general' && estado.iconosActuales.length === 0) {
         estado.iconosActuales = obtenerIconosPorDefecto();
         await guardarIconosEnFirebase(estado.iconosActuales);
@@ -956,48 +1203,102 @@ async function cargarIconosDeFirebase() {
 }
 
 function obtenerIconosPorDefecto() {
-    const crearIcono = (nombre, url) => ({
-        nombre,
-        url,
-        icono: `${url}/favicon.ico`,
-        estilos: { ...ESTILOS_DEFAULT }
-    });
-
     return [
-        crearIcono('Google', 'https://www.google.com'),
-        crearIcono('YouTube', 'https://www.youtube.com'),
-        crearIcono('Facebook', 'https://www.facebook.com')
+        {
+            nombre: 'Google',
+            url: 'https://www.google.com',
+            icono: './img/icons/google_1.png',
+            estilos: { ...ESTILOS_DEFAULT }
+        },
+        {
+            nombre: 'YouTube',
+            url: 'https://www.youtube.com',
+            icono: './img/icons/youtube_1.png',
+            estilos: { ...ESTILOS_DEFAULT }
+        },
+        {
+            nombre: 'Facebook',
+            url: 'https://www.facebook.com',
+            icono: './img/icons/facebook_1.png',
+            estilos: { ...ESTILOS_DEFAULT }
+        }
     ];
 }
 
-// ===== FUNCIONES DE RENDERIZADO =====
-async function renderizarIconos() {
+// ===== FUNCIONES DE RENDERIZADO OPTIMIZADAS SIN PARPADEOS =====
+async function renderizarIconos(ignorarCache = false) {
+    const ahora = Date.now();
+    if (ahora - _ultimoRenderizado < DEBOUNCE_TIME && !ignorarCache) {
+        return;
+    }
+    
+    if (_renderizando) return;
+    _renderizando = true;
+    
     const iconos = await cargarIconosDeFirebase();
     
-    DOM.contenedorIconos.style.opacity = '0';
+    if (!ignorarCache && _iconosCache && JSON.stringify(_iconosCache) === JSON.stringify(iconos)) {
+        console.log('Iconos sin cambios, omitiendo renderizado');
+        _renderizando = false;
+        return;
+    }
     
-    requestAnimationFrame(() => {
-        DOM.contenedorIconos.innerHTML = iconos.map((icono, index) => {
-            const estilos = { ...ESTILOS_DEFAULT, ...(icono.estilos || {}) };
-            const bgColor = estilos.tieneFondo && estilos.colorFondo ? estilos.colorFondo : 'transparent';
-            const boxShadow = estilos.tieneFondo ? '0 4px 15px rgba(0,0,0,0.2)' : 'none';
+    _iconosCache = iconos;
+    
+    const iconosActuales = DOM.contenedorIconos.children;
+    if (iconosActuales.length === iconos.length && !ignorarCache) {
+        let sonIguales = true;
+        for (let i = 0; i < iconosActuales.length; i++) {
+            const iconoActual = iconosActuales[i];
+            const iconoNuevo = iconos[i];
             
-            return `
-                <a href="${icono.url}" class="icono-item" target="_blank" data-index="${index}"
-                   style="animation: aparecerIcono 0.5s cubic-bezier(0.2, 0, 0, 1) ${index * 0.05}s both">
-                    <div class="icono-contenedor" style="background-color:${bgColor};border-radius:${estilos.radioBorde}%;width:100px;height:100px;display:flex;align-items:center;justify-content:center;margin-bottom:0.5rem;transition:all 0.3s ease;box-shadow:${boxShadow}">
-                        <img src="${icono.icono}" alt="${icono.nombre}" 
-                             style="width:${estilos.tamanoIcono}%;height:${estilos.tamanoIcono}%;object-fit:contain"
-                             onerror="this.src='https://via.placeholder.com/64?text=${icono.nombre.charAt(0)}'">
-                    </div>
-                    <span>${icono.nombre}</span>
-                </a>
-            `;
-        }).join('');
+            const hrefActual = iconoActual.getAttribute('href');
+            const imgActual = iconoActual.querySelector('img')?.src;
+            const spanActual = iconoActual.querySelector('span')?.textContent;
+            
+            if (hrefActual !== iconoNuevo.url || 
+                imgActual !== iconoNuevo.icono || 
+                spanActual !== iconoNuevo.nombre) {
+                sonIguales = false;
+                break;
+            }
+        }
+        
+        if (sonIguales) {
+            console.log('Iconos visualmente iguales, omitiendo renderizado');
+            _renderizando = false;
+            return;
+        }
+    }
+
+    requestAnimationFrame(() => {
+const nuevoHTML = iconos.map((icono, index) => {
+    const estilos = { ...ESTILOS_DEFAULT, ...(icono.estilos || {}) };
+    const bgColor = estilos.tieneFondo && estilos.colorFondo ? estilos.colorFondo : 'transparent';
+    const boxShadow = estilos.tieneFondo ? '0 4px 15px rgba(0,0,0,0.2)' : 'none';
+
+    return `
+        <a href="${icono.url}" class="icono-item" target="_blank" data-index="${index}" style="animation: aparecerIcono 0.3s cubic-bezier(0.2, 0, 0, 1) ${index * 0.03}s both">
+            <div class="icono-contenedor" style="background-color:${bgColor};border-radius:${estilos.radioBorde}%;width:100px;height:100px;display:flex;align-items:center;justify-content:center;margin-bottom:0.5rem;transition:all 0.3s ease;box-shadow:${boxShadow}">
+                <img src="${icono.icono}" alt="${icono.nombre}" style="width:${estilos.tamanoIcono}%;height:${estilos.tamanoIcono}%;object-fit:contain" loading="lazy">
+            </div>
+            
+            <div class="btn-incognito-small" title="Abrir en incógnito" data-url="${icono.url}">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-hat-glasses-icon lucide-hat-glasses"><path d="M14 18a2 2 0 0 0-4 0"/><path d="m19 11-2.11-6.657a2 2 0 0 0-2.752-1.148l-1.276.61A2 2 0 0 1 12 4H8.5a2 2 0 0 0-1.925 1.456L5 11"/><path d="M2 11h20"/><circle cx="17" cy="18" r="3"/><circle cx="7" cy="18" r="3"/></svg>
+            </div>
+
+            <span>${icono.nombre}</span>
+        </a>
+    `;
+}).join('');
+
+        if (DOM.contenedorIconos.innerHTML !== nuevoHTML) {
+            DOM.contenedorIconos.innerHTML = nuevoHTML;
+        }
 
         DOM.contenedorIconos.oncontextmenu = e => {
             const item = e.target.closest('.icono-item');
-            if (item) {
+            if (item && estado.isAuthenticated) {
                 e.preventDefault();
                 const index = parseInt(item.dataset.index);
                 estado.iconoSeleccionadoIndex = index;
@@ -1006,10 +1307,33 @@ async function renderizarIconos() {
         };
 
         inicializarDragAndDrop();
-        
-        DOM.contenedorIconos.style.transition = 'opacity 0.3s ease';
-        DOM.contenedorIconos.style.opacity = '1';
+        _renderizando = false;
+        _ultimoRenderizado = Date.now();
     });
+}
+
+function cargarIconosRapidos(sinAnimacion = false) {
+    const iconosDefault = obtenerIconosPorDefecto();
+    if (DOM.contenedorIconos) {
+        const estiloAnimacion = sinAnimacion ? 'animation: none;' : 'animation: aparecerIcono 0.5s cubic-bezier(0.2, 0, 0, 1) both;';
+        
+        const nuevoHTML = iconosDefault.map((icono, index) => {
+            return `
+                <a href="${icono.url}" class="icono-item" target="_blank" data-index="${index}"
+                   style="${estiloAnimacion} animation-delay: ${index * 0.05}s">
+                    <div class="icono-contenedor" style="background-color:transparent;border-radius:50%;width:100px;height:100px;display:flex;align-items:center;justify-content:center;margin-bottom:0.5rem;">
+                        <img src="${icono.icono}" alt="${icono.nombre}" 
+                             style="width:74%;height:74%;object-fit:contain" loading="lazy">
+                    </div>
+                    <span>${icono.nombre}</span>
+                </a>
+            `;
+        }).join('');
+        
+        if (DOM.contenedorIconos.innerHTML !== nuevoHTML) {
+            DOM.contenedorIconos.innerHTML = nuevoHTML;
+        }
+    }
 }
 
 async function eliminarIcono(index) {
@@ -1021,20 +1345,22 @@ async function eliminarIcono(index) {
         await new Promise(resolve => setTimeout(resolve, 400));
         estado.iconosActuales.splice(index, 1);
         await guardarIconosEnFirebase(estado.iconosActuales);
-        await renderizarIconos();
+        await renderizarIconos(true);
     }
 }
 
 // ===== DRAG AND DROP =====
 function inicializarDragAndDrop() {
     DOM.contenedorIconos?.querySelectorAll('.icono-item').forEach(item => {
-        item.draggable = true;
-        item.addEventListener('dragstart', handleDragStart);
-        item.addEventListener('dragend', handleDragEnd);
-        item.addEventListener('dragover', e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; });
-        item.addEventListener('dragenter', handleDragEnter);
-        item.addEventListener('dragleave', e => e.currentTarget.classList.remove('drag-over'));
-        item.addEventListener('drop', handleDrop);
+        item.draggable = estado.isAuthenticated;
+        if (estado.isAuthenticated) {
+            item.addEventListener('dragstart', handleDragStart);
+            item.addEventListener('dragend', handleDragEnd);
+            item.addEventListener('dragover', e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; });
+            item.addEventListener('dragenter', handleDragEnter);
+            item.addEventListener('dragleave', e => e.currentTarget.classList.remove('drag-over'));
+            item.addEventListener('drop', handleDrop);
+        }
     });
 
     DOM.contenedorIconos?.addEventListener('dragover', e => e.preventDefault());
@@ -1073,33 +1399,12 @@ async function handleDrop(e) {
     estado.iconosActuales.splice(toIndex, 0, movedItem);
     
     await guardarIconosEnFirebase(estado.iconosActuales);
-    await renderizarIconos();
+    await renderizarIconos(true);
 }
 
 // ===== MENÚ CONTEXTUAL =====
 function mostrarMenuContextual(event, icono) {
-    // Verificar si el usuario está autenticado
-    if (!estado.isAuthenticated) {
-        // Mostrar mensaje de que debe iniciar sesión
-        document.querySelector('.menu-contextual')?.remove();
-
-        const menu = document.createElement('div');
-        menu.className = 'menu-contextual';
-        menu.style.cssText = `left:${event.clientX}px;top:${event.clientY}px`;
-        menu.innerHTML = `
-            <div class="menu-item" style="cursor: default;">
-                <span class="menu-icono">🔒</span>Inicia sesión para editar
-            </div>
-        `;
-
-        document.body.appendChild(menu);
-
-        setTimeout(() => {
-            menu.remove();
-        }, 2000);
-
-        return;
-    }
+    if (!estado.isAuthenticated) return;
 
     document.querySelector('.menu-contextual')?.remove();
 
@@ -1126,30 +1431,29 @@ function mostrarMenuContextual(event, icono) {
     }, 100);
 }
 
-// ===== FUNCIONES DE FONDO =====
-
-// Token global para cancelar transiciones obsoletas al cambiar rápidamente de categoría
+// ===== FUNCIONES DE FONDO OPTIMIZADAS =====
 let _fondoToken = 0;
 
 async function aplicarFondoCategoria(categoriaId) {
+    if (_ultimaCategoriaFondo === categoriaId) {
+        return;
+    }
+    
     const categoria = categoriasPersonalizadas.find(c => c.id === categoriaId);
     if (!categoria || !categoria.background) return;
 
-    // Incrementar token — cualquier llamada anterior con token distinto quedará cancelada
     const miToken = ++_fondoToken;
-
     const fondoConfig = categoria.background;
 
-    // Pre-cargar el recurso según el tipo
     if (fondoConfig.tipo === 'imagen' && fondoConfig.url) {
         await precargarImagen(fondoConfig.url);
     } else if (fondoConfig.tipo === 'video' && fondoConfig.url) {
         await precargarVideo(fondoConfig.url);
     }
 
-    // Si mientras precargábamos llegó un cambio más reciente, cancelar esta transición
     if (miToken !== _fondoToken) return;
-
+    
+    _ultimaCategoriaFondo = categoriaId;
     aplicarFondoConFade(fondoConfig);
 }
 
@@ -1168,31 +1472,40 @@ function precargarVideo(url) {
         video.preload = 'auto';
         video.muted = true;
         video.playsInline = true;
-
         video.oncanplay = () => resolve();
         video.onerror = () => resolve();
-        video.onstalled = () => resolve();
-
         video.src = url;
-
-        // Timeout de seguridad
         setTimeout(resolve, 5000);
     });
 }
 
 function aplicarFondoConFade(fondoConfig) {
-    const DURACION_FADE = 600; // ms - transición suave
-
-    // Capturar token actual de forma síncrona (sin await)
+    const DURACION_FADE = 400;
     const tokenEsteFrame = _fondoToken;
 
-    // Limpiar fondos temporales huérfanos de transiciones anteriores
     document.querySelectorAll('[id="fondo-temporal"]').forEach(el => el.remove());
 
-    // Obtener el fondo activo actual
     let fondoActual = document.getElementById('fondo-activo');
 
-    // Crear nuevo fondo
+    if (fondoActual && fondoActual.dataset.fondoRapido === 'true') {
+        const savedRaw = localStorage.getItem('starTab_fondo_rapido');
+        const saved = savedRaw ? JSON.parse(savedRaw) : null;
+        const mismoFondo = saved &&
+            saved.tipo === fondoConfig.tipo &&
+            saved.url === (fondoConfig.url || null) &&
+            saved.colorInicio === (fondoConfig.colorInicio || null) &&
+            saved.colorFin === (fondoConfig.colorFin || null);
+
+        if (mismoFondo) {
+            fondoActual.dataset.fondoRapido = 'false';
+            window.fondoActualCategoria = fondoConfig;
+            _guardarFondoLocalStorage(fondoConfig);
+            return;
+        } else {
+            fondoActual.dataset.fondoRapido = 'false';
+        }
+    }
+
     const nuevoFondo = document.createElement('div');
     nuevoFondo.id = 'fondo-temporal';
     nuevoFondo.dataset.tipo = fondoConfig.tipo;
@@ -1208,31 +1521,22 @@ function aplicarFondoConFade(fondoConfig) {
         pointer-events: none;
     `;
 
-    // Insertar delante del actual
     document.body.insertBefore(nuevoFondo, fondoActual || document.body.firstChild);
-
-    // Aplicar estilos al nuevo fondo
     aplicarEstiloFondo(nuevoFondo, fondoConfig, true);
-
-    // Forzar reflow para que la transición funcione
     nuevoFondo.offsetHeight;
 
-    // Iniciar transición de salida del fondo actual (si existe)
     if (fondoActual) {
         fondoActual.style.opacity = '0';
         fondoActual.style.transition = `opacity ${DURACION_FADE}ms cubic-bezier(0.4, 0, 0.2, 1)`;
     }
 
-    // Iniciar transición de entrada del nuevo fondo
     requestAnimationFrame(() => {
-        // Si llegó otro cambio mientras esperábamos el frame, cancelar esta transición
         if (tokenEsteFrame !== _fondoToken) {
             nuevoFondo.remove();
             return;
         }
         nuevoFondo.style.opacity = '1';
 
-        // Renombrar y limpiar después de la transición
         setTimeout(() => {
             if (tokenEsteFrame !== _fondoToken) {
                 nuevoFondo.remove();
@@ -1245,98 +1549,84 @@ function aplicarFondoConFade(fondoConfig) {
         }, DURACION_FADE);
     });
 
-    // Guardar la configuración actual
     window.fondoActualCategoria = fondoConfig;
+    _guardarFondoLocalStorage(fondoConfig);
 }
 
-function aplicarEstiloFondo(elemento, config, esTransicion = false) {
-    const { tipo, url, colorInicio, colorFin, opacidad, desenfoque } = config;
-    const DURACION_FADE = 600;
-
-    // Configuración base
-    elemento.style.backdropFilter = 'none';
-    elemento.style.filter = 'none';
-
-    // Aplicar desenfoque si existe
-    if (desenfoque !== undefined && desenfoque > 0) {
-        if (tipo === 'video') {
-            // El desenfoque se aplica al video internamente
-        } else {
-            elemento.style.backdropFilter = `blur(${desenfoque}px)`;
-            elemento.style.webkitBackdropFilter = `blur(${desenfoque}px)`;
+function _guardarFondoLocalStorage(fondoConfig) {
+    try {
+        const fondoActual = localStorage.getItem('starTab_fondo_rapido');
+        const nuevoFondo = JSON.stringify({
+            tipo: fondoConfig.tipo,
+            url: fondoConfig.url || null,
+            opacidad: fondoConfig.opacidad,
+            desenfoque: fondoConfig.desenfoque,
+            colorInicio: fondoConfig.colorInicio || null,
+            colorFin: fondoConfig.colorFin || null
+        });
+        
+        if (fondoActual !== nuevoFondo) {
+            localStorage.setItem('starTab_fondo_rapido', nuevoFondo);
         }
+    } catch(e) {
+        console.log('Error guardando fondo en localStorage:', e);
     }
+}
 
-    switch (tipo) {
-        case 'gradiente':
-            elemento.style.background = `linear-gradient(135deg, ${colorInicio} 0%, ${colorFin} 100%)`;
-            elemento.style.backgroundSize = 'cover';
-            elemento.style.backgroundPosition = 'center';
-            elemento.style.transition = esTransicion ? `background ${DURACION_FADE}ms ease` : 'none';
-            break;
-
-        case 'imagen':
-            if (url) {
-                const opacidadCapa = opacidad !== undefined ? opacidad : 0.2;
-                elemento.style.background = `linear-gradient(rgba(0, 0, 0, ${opacidadCapa}), rgba(0, 0, 0, ${opacidadCapa})), url('${url}')`;
-                elemento.style.backgroundSize = 'cover';
-                elemento.style.backgroundPosition = 'center';
-                elemento.style.backgroundAttachment = 'fixed';
-                elemento.style.transition = esTransicion ? `background ${DURACION_FADE}ms ease` : 'none';
-            }
-            break;
-
-        case 'video':
-            if (url) {
-                // Remover videos anteriores
-                const videoAnterior = elemento.querySelector('video');
-                if (videoAnterior) videoAnterior.remove();
-
-                // Crear video optimizado para evitar lag
-                const video = document.createElement('video');
-                video.className = 'video-fondo';
-                video.src = url;
-                video.autoplay = true;
-                video.loop = true;
-                video.muted = true;
-                video.playsInline = true;
-                video.preload = 'auto';
-                video.style.cssText = `
-                    position: absolute;
-                    top: 0;
-                    left: 0;
-                    width: 100%;
-                    height: 100%;
-                    object-fit: cover;
-                    transition: opacity ${DURACION_FADE}ms cubic-bezier(0.4, 0, 0.2, 1);
-                `;
-
-                // Aplicar desenfoque al video si está configurado
-                if (desenfoque !== undefined && desenfoque > 0) {
-                    video.style.filter = `blur(${desenfoque}px)`;
-                    video.style.webkitFilter = `blur(${desenfoque}px)`;
-                }
-
-                elemento.style.background = '#000';
-                elemento.appendChild(video);
-
-                // Reproducir con manejo de errores
-                video.play().catch(e => {
-                    console.log('Video autoplay bloqueado, intentando con interacción:', e);
-                    // Intentar reproducir en el siguiente clic del usuario
-                    document.addEventListener('click', function reproducirVideo() {
-                        video.play().catch(() => {});
-                        document.removeEventListener('click', reproducirVideo);
-                    }, { once: true });
-                });
-
-                // Transición suave para el video
-                video.style.opacity = '0';
-                requestAnimationFrame(() => {
-                    video.style.opacity = '1';
-                });
-            }
-            break;
+// ===== FUNCIÓN DE FONDO SIMPLIFICADA =====
+function aplicarEstiloFondo(elemento, config) {
+    const { tipo, url, colorInicio, colorFin, opacidad, desenfoque } = config;
+    
+    // Limpiar estilos
+    elemento.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: -1;
+        pointer-events: none;
+    `;
+    
+    // Aplicar desenfoque SIEMPRE de la misma manera
+    if (desenfoque > 0) {
+        elemento.style.filter = `blur(${desenfoque}px)`;
+    }
+    
+    // Aplicar fondo según tipo
+    if (tipo === 'gradiente') {
+        elemento.style.background = `linear-gradient(135deg, ${colorInicio}, ${colorFin})`;
+    } 
+    else if (tipo === 'imagen' && url) {
+        const op = opacidad || 0.2;
+        elemento.style.background = `linear-gradient(rgba(0,0,0,${op}), rgba(0,0,0,${op})), url('${url}')`;
+        elemento.style.backgroundSize = 'cover';
+        elemento.style.backgroundPosition = 'center';
+    } 
+    else if (tipo === 'video' && url) {
+        elemento.style.background = '#000';
+        
+        // Video simple
+        let video = elemento.querySelector('video');
+        if (!video) {
+            video = document.createElement('video');
+            video.className = 'video-fondo';
+            video.style.cssText = `
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+            `;
+            elemento.appendChild(video);
+        }
+        
+        video.src = url;
+        video.loop = true;
+        video.muted = true;
+        video.playsInline = true;
+        video.play().catch(() => {});
     }
 }
 
@@ -1344,23 +1634,28 @@ async function guardarFondoCategoria(nuevaConfiguracion) {
     const categoriaIndex = categoriasPersonalizadas.findIndex(c => c.id === estado.categoriaActual);
     if (categoriaIndex === -1) return;
 
-    // Actualizar el fondo en memoria
     categoriasPersonalizadas[categoriaIndex].background = {
         tipo: nuevaConfiguracion.tipo,
         url: nuevaConfiguracion.url,
         opacidad: nuevaConfiguracion.opacidad,
-        desenfoque: nuevaConfiguracion.desenfoque,
+        desenfoque: nuevaConfiguracion.desenfoque, // Esto ya se guarda
         colorInicio: nuevaConfiguracion.colorInicio,
         colorFin: nuevaConfiguracion.colorFin
     };
 
-    // Aplicar visualmente de inmediato (feedback instantáneo)
     aplicarFondoCategoria(estado.categoriaActual);
-
-    // Persistir en Firebase (mostrará indicador automáticamente)
     await guardarConfiguracionCompleta();
+    
+    // Guardar en localStorage para fondo-rapido.js
+    localStorage.setItem('starTab_fondo_rapido', JSON.stringify({
+        tipo: nuevaConfiguracion.tipo,
+        url: nuevaConfiguracion.url,
+        opacidad: nuevaConfiguracion.opacidad,
+        desenfoque: nuevaConfiguracion.desenfoque, // ¡Importante!
+        colorInicio: nuevaConfiguracion.colorInicio,
+        colorFin: nuevaConfiguracion.colorFin
+    }));
 }
-
 // ===== BARRA DE BÚSQUEDA =====
 function inicializarBarraBusqueda() {
     if (!DOM.barraBusqueda) return;
@@ -1380,7 +1675,6 @@ function inicializarBarraBusqueda() {
             actualizarBuscadorUI();
             actualizarPlaceholder();
             DOM.barraBusqueda.focus();
-            guardarConfiguracionBuscador(); // Sincronizar con Firebase en tiempo real
         }
     });
 
@@ -1391,7 +1685,6 @@ function inicializarBarraBusqueda() {
             filtro.classList.add('activo');
             estado.filtroActual = filtro.dataset.filtro;
             DOM.barraBusqueda.focus();
-            guardarConfiguracionBuscador(); // Sincronizar con Firebase en tiempo real
         }
     });
 
@@ -1501,6 +1794,16 @@ function inicializarModalIconos() {
         fileText: document.querySelector('.file-text')
     };
 
+const inputNombre = document.getElementById('nombre-sitio');
+const previewNombre = document.getElementById('preview-nombre');
+
+if (inputNombre && previewNombre) {
+    inputNombre.addEventListener('input', (e) => {
+        // Actualiza el texto de la previsualización con el valor del input
+        previewNombre.textContent = e.target.value;
+    });
+}
+
     elementos.tieneFondo?.addEventListener('change', () => {
         elementos.colorFondoContainer.style.display = elementos.tieneFondo.checked ? 'flex' : 'none';
         actualizarPreviewDesdeModal(elementos);
@@ -1521,46 +1824,66 @@ function inicializarModalIconos() {
     });
 
     elementos.icono?.addEventListener('input', () => {
-        elementos.previewImg.src = elementos.icono.value || 'https://via.placeholder.com/64?text=Img';
+        elementos.previewImg.src = elementos.icono.value || 'data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'64\' height=\'64\' viewBox=\'0 0 24 24\' fill=\'%23666\'%3E%3Ccircle cx=\'12\' cy=\'12\' r=\'10\'/%3E%3C/svg%3E';
         actualizarPreviewDesdeModal(elementos);
     });
 
-    elementos.fileInput?.addEventListener('change', async e => {
-        const file = e.target.files[0];
-        if (!file) return;
+elementos.fileInput?.addEventListener('change', async e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    // Verificar que sea una imagen
+    if (!file.type.startsWith('image/')) {
+        alert('Por favor, selecciona un archivo de imagen válido.');
+        return;
+    }
+    
+    elementos.fileName.textContent = file.name;
+    elementos.fileLabel?.classList.add('seleccionado');
+    if (elementos.fileText) elementos.fileText.textContent = '⏳';
+    
+    try {
+        // Mostrar mensaje de proceso
+        const previewNombre = document.getElementById('preview-nombre');
+        if (previewNombre) previewNombre.textContent = 'Procesando...';
         
-        elementos.fileName.textContent = file.name;
-        elementos.fileLabel?.classList.add('seleccionado');
+        // Comprimir y redimensionar la imagen (manteniendo transparencia)
+        const base64Procesada = await comprimirYRedimensionarImagen(file, 256);
         
-        try {
-            const base64 = await convertirABase64(file);
-            elementos.icono.value = base64;
-            elementos.previewImg.src = base64;
-            if (elementos.fileText) elementos.fileText.textContent = 'Imagen seleccionada';
-        } catch (error) {
-            console.error('Error al convertir imagen:', error);
-            alert('Error al cargar la imagen.');
-        }
-    });
+        // Actualizar campos
+        elementos.icono.value = base64Procesada;
+        elementos.previewImg.src = base64Procesada;
+        
+        // Restaurar texto del botón
+        if (elementos.fileText) elementos.fileText.textContent = '✔';
+        if (previewNombre) previewNombre.textContent = elementos.nombre.value || '';
+        
+    } catch (error) {
+        console.error('Error al procesar imagen:', error);
+        alert('Error al procesar la imagen. Intenta con otra imagen.');
+        if (elementos.fileText) elementos.fileText.textContent = '+';
+        
+        // Limpiar el input en caso de error
+        elementos.fileInput.value = '';
+        elementos.fileName.textContent = '';
+        elementos.fileLabel?.classList.remove('seleccionado');
+    }
+});
 
     elementos.guardarBtn?.addEventListener('click', async () => {
+        if (!estado.isAuthenticated) {
+            alert('Debes iniciar sesión para guardar accesos directos');
+            return;
+        }
+        
         const nombre = elementos.nombre.value;
         const url = elementos.url.value;
-        let icono = elementos.icono.value;
+        const icono = elementos.icono.value;
         const index = estado.iconoSeleccionadoIndex;
 
         if (!nombre || !url) {
             alert('Por favor, completa al menos el nombre y la URL');
             return;
-        }
-
-        if (!icono) {
-            try {
-                const urlObj = new URL(url);
-                icono = `${urlObj.protocol}//${urlObj.hostname}/favicon.ico`;
-            } catch {
-                icono = 'https://via.placeholder.com/64?text=' + nombre.charAt(0);
-            }
         }
 
         const estilos = {
@@ -1571,18 +1894,16 @@ function inicializarModalIconos() {
         };
 
         if (index !== null && index >= 0) {
-            // Editar
             estado.iconosActuales[index] = { 
                 ...estado.iconosActuales[index],
                 nombre, url, icono, estilos
             };
         } else {
-            // Agregar nuevo
             estado.iconosActuales.push({ nombre, url, icono, estilos });
         }
         
         await guardarIconosEnFirebase(estado.iconosActuales);
-        await renderizarIconos();
+        await renderizarIconos(true);
         cerrarModalIconos(elementos);
     });
 
@@ -1594,11 +1915,18 @@ function inicializarModalIconos() {
     });
 
     DOM.btnAgregar?.addEventListener('click', () => {
+        if (!estado.isAuthenticated) {
+            alert('Debes iniciar sesión para agregar accesos directos');
+            return;
+        }
         resetearModalIconos(elementos);
         elementos.titulo.textContent = 'Agregar acceso directo';
         estado.iconoSeleccionadoIndex = null;
         modal.classList.add('modal-abierto');
         modal.style.display = 'flex';
+
+            document.querySelectorAll('.control-range').forEach(input => actualizarProgresoRange(input));
+
     });
 }
 
@@ -1608,7 +1936,7 @@ function actualizarPreviewDesdeModal(elementos) {
     Object.assign(elementos.previewIcono.style, {
         backgroundColor: elementos.tieneFondo.checked ? elementos.colorFondo.value : 'transparent',
         borderRadius: `${elementos.radioBorde.value}%`,
-        boxShadow: elementos.tieneFondo.checked ? '0 10px 30px rgba(0,0,0,0.2)' : 'none'
+        boxShadow: elementos.tieneFondo.checked ? 'none' : 'none'
     });
     
     Object.assign(elementos.previewImg.style, {
@@ -1618,6 +1946,8 @@ function actualizarPreviewDesdeModal(elementos) {
 }
 
 function abrirModalEdicion(index, icono) {
+    if (!estado.isAuthenticated) return;
+    
     const modal = DOM.modalIconos;
     if (!modal) return;
 
@@ -1655,8 +1985,11 @@ function abrirModalEdicion(index, icono) {
     
     modal.classList.add('modal-abierto');
     modal.style.display = 'flex';
+        document.querySelectorAll('.control-range').forEach(input => actualizarProgresoRange(input));
+
 }
 
+// En la función resetearModalIconos, agregar la línea para reiniciar preview-nombre
 function resetearModalIconos(elementos) {
     elementos.nombre.value = '';
     elementos.url.value = '';
@@ -1669,6 +2002,12 @@ function resetearModalIconos(elementos) {
     elementos.tamanoIcono.value = '74';
     elementos.tamanoValor.textContent = '74%';
     
+    // REINICIAR PREVIEW-NOMBRE
+    const previewNombre = document.getElementById('preview-nombre');
+    if (previewNombre) {
+        previewNombre.textContent = '';
+    }
+    
     const fileInput = document.getElementById('icono-file');
     const fileName = document.getElementById('file-name');
     const fileText = document.querySelector('.file-text');
@@ -1676,16 +2015,23 @@ function resetearModalIconos(elementos) {
     if (fileInput) fileInput.value = '';
     if (fileName) fileName.textContent = '';
     document.querySelector('.file-label')?.classList.remove('seleccionado');
-    if (fileText) fileText.textContent = 'Seleccionar imagen';
+    if (fileText) fileText.textContent = '+';
     
-    Object.assign(elementos.previewIcono.style, { backgroundColor: 'transparent', borderRadius: '50%', boxShadow: 'none' });
+    Object.assign(elementos.previewIcono.style, { backgroundColor: 'transparent', borderRadius: '12%', boxShadow: 'none' });
     Object.assign(elementos.previewImg.style, { width: '74%', height: '74%' });
-    elementos.previewImg.src = 'https://via.placeholder.com/64?text=Img';
+    elementos.previewImg.src = './img/icons/interrogacion.png';
 }
 
+// También agregar en la función cerrarModalIconos para asegurar que se reinicie
 function cerrarModalIconos(elementos) {
     const modal = DOM.modalIconos;
     if (!modal) return;
+    
+    // Reiniciar preview-nombre al cerrar
+    const previewNombre = document.getElementById('preview-nombre');
+    if (previewNombre) {
+        previewNombre.textContent = '';
+    }
     
     modal.classList.remove('modal-abierto');
     setTimeout(() => {
@@ -1693,13 +2039,40 @@ function cerrarModalIconos(elementos) {
     }, 300);
 }
 
+
+function actualizarProgresoRange(input) {
+    if (!input) return;
+    
+    const min = parseFloat(input.min) || 0;
+    const max = parseFloat(input.max) || 100;
+    const value = parseFloat(input.value) || min;
+    
+    // Calcular porcentaje
+    const porcentaje = ((value - min) / (max - min)) * 100;
+    
+    // Aplicar color blanco hasta el porcentaje
+    input.style.background = `linear-gradient(to right, white, white ${porcentaje}%, rgba(255,255,255,0.2) ${porcentaje}%, rgba(255,255,255,0.2))`;
+}
+
+// Configurar los listeners para todos los inputs con esa clase
+document.querySelectorAll('.control-range').forEach(input => {
+    // Actualizar al cargar
+    actualizarProgresoRange(input);
+    
+    // Actualizar al mover
+    input.addEventListener('input', () => {
+        actualizarProgresoRange(input);
+    });
+});
+
+
 // ===== MODAL DE PERSONALIZACIÓN =====
 function inicializarModalPersonalizar() {
     const modal = DOM.modalPersonalizar;
     if (!modal) return;
 
     const elementos = {
-        tipo: document.getElementById('fondo-tipo'),
+        tipo: document.getElementById('fondo-tipo'), // input hidden
         url: document.getElementById('fondo-url-input'),
         opacidad: document.getElementById('fondo-opacidad'),
         opacidadValor: document.getElementById('opacidad-valor'),
@@ -1716,65 +2089,136 @@ function inicializarModalPersonalizar() {
         cancelarBtn: document.getElementById('cancelar-personalizacion')
     };
 
-    // Opciones predefinidas
-    document.querySelectorAll('.opcion-fondo').forEach(opcion => {
-        opcion.addEventListener('click', () => {
-            const tipo = opcion.dataset.tipo;
-            const url = opcion.dataset.url;
-            elementos.tipo.value = tipo;
-            elementos.url.value = url;
+    // ===== BUTTON SELECT TIPO FONDO =====
+    const botonesTipo = document.querySelectorAll('#fondo-tipo-buttons .btn-tipo');
+
+    botonesTipo.forEach(boton => {
+        boton.addEventListener('click', () => {
+            // Quitar activo a todos
+            botonesTipo.forEach(b => b.classList.remove('activo'));
+
+            // Activar el actual
+            boton.classList.add('activo');
+
+            // Actualizar input hidden
+            elementos.tipo.value = boton.dataset.value;
+
             actualizarSeccionesFondo(elementos);
             actualizarPreviewFondo(elementos);
         });
     });
 
-    elementos.tipo?.addEventListener('change', () => {
-        actualizarSeccionesFondo(elementos);
-        actualizarPreviewFondo(elementos);
+    // ===== OPCIONES PREDEFINIDAS =====
+    document.querySelectorAll('.opcion-fondo').forEach(opcion => {
+        opcion.addEventListener('click', () => {
+            const tipo = opcion.dataset.tipo;
+            const url = opcion.dataset.url;
+
+            elementos.tipo.value = tipo;
+            elementos.url.value = url;
+
+            // Sincronizar botones visualmente
+            botonesTipo.forEach(b => {
+                b.classList.toggle('activo', b.dataset.value === tipo);
+            });
+
+            actualizarSeccionesFondo(elementos);
+            actualizarPreviewFondo(elementos);
+        });
     });
 
+    // ===== LISTENERS GENERALES =====
     elementos.url?.addEventListener('input', () => actualizarPreviewFondo(elementos));
     elementos.colorInicio?.addEventListener('input', () => actualizarPreviewFondo(elementos));
     elementos.colorFin?.addEventListener('input', () => actualizarPreviewFondo(elementos));
+
     elementos.opacidad?.addEventListener('input', () => {
         elementos.opacidadValor.textContent = `${elementos.opacidad.value}%`;
         actualizarPreviewFondo(elementos);
     });
+
     elementos.desenfoque?.addEventListener('input', () => {
         elementos.desenfoqueValor.textContent = `${elementos.desenfoque.value}px`;
         actualizarPreviewFondo(elementos);
     });
 
-    elementos.guardarBtn?.addEventListener('click', () => {
-        const opacidadSlider = parseInt(elementos.opacidad.value);
-        const opacidadGuardar = (opacidadSlider / 100) * 0.5;
-        
-        guardarFondoCategoria({
-            tipo: elementos.tipo.value,
-            url: elementos.url.value || null,
-            opacidad: opacidadGuardar,
-            desenfoque: parseInt(elementos.desenfoque.value),
-            colorInicio: elementos.colorInicio.value,
-            colorFin: elementos.colorFin.value
-        });
-        cerrarModalPersonalizar(modal);
-    });
+    // ===== GUARDAR =====
+   elementos.guardarBtn?.addEventListener('click', () => {
+    if (!estado.isAuthenticated) {
+        alert('Debes iniciar sesión para personalizar el fondo');
+        return;
+    }
 
+    const opacidadSlider = parseInt(elementos.opacidad.value);
+    const opacidadGuardar = (opacidadSlider / 100) * 0.5;
+
+    const config = {
+        tipo: elementos.tipo.value,
+        url: elementos.url.value || null,
+        opacidad: opacidadGuardar,
+        desenfoque: parseInt(elementos.desenfoque.value),
+        colorInicio: elementos.colorInicio.value,
+        colorFin: elementos.colorFin.value
+    };
+
+    // 1️⃣ Guardar en sistema
+    guardarFondoCategoria(config);
+
+    // 2️⃣ Aplicar inmediatamente al fondo visible
+    let fondoActual = document.getElementById('fondo-activo');
+
+    if (!fondoActual) {
+        fondoActual = document.createElement('div');
+        fondoActual.id = 'fondo-activo';
+        fondoActual.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            pointer-events: none;
+            transition: opacity 0.3s ease, filter 0.3s ease;
+        `;
+        document.body.insertBefore(fondoActual, document.body.firstChild);
+    }
+
+    aplicarEstiloFondo(fondoActual, config, false);
+
+    cerrarModalPersonalizar(modal);
+});
+
+    // ===== CANCELAR =====
     elementos.cancelarBtn?.addEventListener('click', () => cerrarModalPersonalizar(modal));
 
     modal.addEventListener('click', e => {
         if (e.target === modal) cerrarModalPersonalizar(modal);
     });
 
+    // ===== ABRIR MODAL =====
     DOM.btnPersonalizar?.addEventListener('click', () => {
+        if (!estado.isAuthenticated) {
+            alert('Debes iniciar sesión para personalizar el fondo');
+            return;
+        }
+
         cargarValoresActualesEnModal(elementos);
+
+        // Sincronizar botones con valor actual
+        botonesTipo.forEach(b => {
+            b.classList.toggle('activo', b.dataset.value === elementos.tipo.value);
+        });
+
         modal.classList.add('modal-personalizar-abierto');
         modal.style.display = 'flex';
-    });
+    // 🔥 SOLO AGREGA ESTAS LÍNEAS:
+    setTimeout(() => {
+        document.querySelectorAll('.control-range').forEach(input => actualizarProgresoRange(input));
+    }, 50);
+});
 }
 
 function cargarValoresActualesEnModal(elementos) {
-    // Cargar la configuración del fondo de la categoría actual
     const categoria = categoriasPersonalizadas.find(c => c.id === estado.categoriaActual);
     const fondoActual = categoria && categoria.background ? categoria.background : FONDO_DEFAULT;
 
@@ -1795,15 +2239,27 @@ function cargarValoresActualesEnModal(elementos) {
 
     actualizarSeccionesFondo(elementos);
     actualizarPreviewFondo(elementos);
+    // 🔥 SOLO AGREGA ESTAS LÍNEAS:
+    if (elementos.opacidad) actualizarProgresoRange(elementos.opacidad);
+    if (elementos.desenfoque) actualizarProgresoRange(elementos.desenfoque);
 }
 
+// En la función actualizarSeccionesFondo, agrega la lógica para ocultar/mostrar el campo URL
 function actualizarSeccionesFondo(elementos) {
     const tipo = elementos.tipo.value;
     
-    elementos.grupoColores.style.display = tipo === 'gradiente' ? 'block' : 'none';
+    elementos.grupoColores.style.display = tipo === 'gradiente' ? 'inline-flex' : 'none';
     elementos.imagenesSection.style.display = tipo === 'imagen' ? 'block' : 'none';
     elementos.videosSection.style.display = tipo === 'video' ? 'block' : 'none';
+    
+    // 🔥 NUEVO: Ocultar/mostrar el contenedor de URL personalizada
+    const urlInputGroup = document.querySelector('.personalizar-input-group:has(#fondo-url-input)');
+    if (urlInputGroup) {
+        urlInputGroup.style.display = tipo === 'gradiente' ? 'none' : 'inline-flex';
+    }
 }
+
+// script.js - Función actualizada para vistas previas diferenciadas
 
 function actualizarPreviewFondo(elementos) {
     const tipo = elementos.tipo.value;
@@ -1813,6 +2269,10 @@ function actualizarPreviewFondo(elementos) {
     const opacidadCapa = (parseInt(elementos.opacidad.value) / 100) * 0.5;
     const desenfoquePx = parseInt(elementos.desenfoque.value);
 
+    // *** ELEMENTO: La caja que solo mostrará la imagen limpia ***
+    const previerMasterBox = document.querySelector('.previer-master-box');
+
+    // --- ACTUALIZAR VISTA PREVIA COMPLETA (#preview-fondo) ---
     if (tipo === 'video' && url) {
         elementos.previewFondo.style.display = 'none';
         elementos.previewVideo.style.display = 'block';
@@ -1825,9 +2285,9 @@ function actualizarPreviewFondo(elementos) {
         elementos.previewFondo.style.display = 'block';
         elementos.previewVideo.style.display = 'none';
         elementos.previewVideo.pause();
-        
+
         let backgroundStyle = '';
-        
+
         if (tipo === 'imagen' && url) {
             backgroundStyle = `linear-gradient(rgba(0, 0, 0, ${opacidadCapa}), rgba(0, 0, 0, ${opacidadCapa})), url('${url}')`;
             elementos.previewFondo.style.backgroundImage = backgroundStyle;
@@ -1836,14 +2296,55 @@ function actualizarPreviewFondo(elementos) {
         } else if (tipo === 'gradiente') {
             backgroundStyle = `linear-gradient(135deg, ${colorInicio}, ${colorFin})`;
             elementos.previewFondo.style.backgroundImage = backgroundStyle;
+            elementos.previewFondo.style.backgroundSize = 'auto';
+            elementos.previewFondo.style.backgroundPosition = '0% 0%';
         } else {
             elementos.previewFondo.style.backgroundImage = 'none';
             elementos.previewFondo.style.backgroundColor = '#f0f0f0';
         }
-        
+
+        // Aplicar desenfoque SOLO a preview-fondo
         elementos.previewFondo.style.filter = `blur(${desenfoquePx}px)`;
     }
+
+    // --- ACTUALIZAR PREVIER-MASTER-BOX (solo imagen limpia, sin blur ni opacidad) ---
+    if (previerMasterBox) {
+        // Resetear cualquier filtro o estilo adicional
+        previerMasterBox.style.filter = 'none';
+        
+        if (tipo === 'imagen' && url) {
+            // SOLO la imagen, sin capa de opacidad ni blur
+            previerMasterBox.style.backgroundImage = `url('${url}')`;
+            previerMasterBox.style.backgroundSize = 'cover';
+            previerMasterBox.style.backgroundPosition = 'center';
+        } else if (tipo === 'video' && url) {
+            // Para video, usamos un frame representativo (el primer frame o una imagen por defecto)
+            // O podrías dejar el fondo negro, pero mejor ponemos una imagen representativa
+            previerMasterBox.style.backgroundImage = `url('img/backgrounds/video-placeholder.jpg')`; // Idealmente una imagen del video
+            previerMasterBox.style.backgroundSize = 'cover';
+            previerMasterBox.style.backgroundPosition = 'center';
+            console.log('Modo video seleccionado - considera usar un placeholder');
+        } else if (tipo === 'gradiente') {
+            // Para gradiente, mostramos el gradiente limpio
+            previerMasterBox.style.backgroundImage = `linear-gradient(135deg, ${colorInicio}, ${colorFin})`;
+            previerMasterBox.style.backgroundSize = 'auto';
+            previerMasterBox.style.backgroundPosition = '0% 0%';
+        } else {
+            // Fallback
+            previerMasterBox.style.backgroundImage = `url('img/backgrounds/img_background_2.jpg')`;
+            previerMasterBox.style.backgroundSize = 'cover';
+            previerMasterBox.style.backgroundPosition = 'center';
+        }
+        
+        // Asegurar que no tenga blur ni otros efectos
+        previerMasterBox.style.backdropFilter = 'none';
+        previerMasterBox.style.webkitBackdropFilter = 'none';
+    }
+
+
 }
+
+
 
 function cerrarModalPersonalizar(modal) {
     modal.classList.remove('modal-personalizar-abierto');
@@ -1866,7 +2367,7 @@ function inicializarNota() {
 
     if (!notaDOM.textarea) return;
 
-    cargarNotasDeFirebase(notaDOM);
+    cargarNotasIniciales(notaDOM);
 
     notaDOM.notaBtns.forEach(btn => {
         btn.addEventListener('click', () => {
@@ -1886,7 +2387,12 @@ function inicializarNota() {
     notaDOM.textarea?.addEventListener('input', (e) => {
         const texto = e.target.value;
         actualizarContadorCaracteres(texto, notaDOM);
-        guardarNotaEnTiempoReal(notaEstado.notaActual, texto, notaDOM);
+        
+        if (estado.isAuthenticated) {
+            guardarNotaEnTiempoReal(notaEstado.notaActual, texto, notaDOM);
+        } else {
+            notaEstado.notas[notaEstado.notaActual].contenido = texto;
+        }
     });
 
     document.addEventListener('keydown', (e) => {
@@ -1912,78 +2418,35 @@ function inicializarNota() {
     });
 }
 
-function copiarNota(notaDOM) {
-    if (!notaDOM.textarea) return;
-    
-    const texto = notaDOM.textarea.value;
-    
-    if (!texto || texto.trim() === '') return;
-    
-    navigator.clipboard.writeText(texto).catch(err => {
-        console.error('Error al copiar:', err);
-    });
-}
-
-function cambiarNota(notaNum, notaDOM) {
-    if (notaNum === notaEstado.notaActual) return;
-    
-    if (!notaEstado.notas[notaEstado.notaActual].sincronizado) {
-        guardarNotaEnFirebase(notaEstado.notaActual, notaDOM.textarea.value);
+function cargarNotasIniciales(notaDOM) {
+    for (let i = 1; i <= 5; i++) {
+        if (!notaEstado.notas[i].contenido) {
+            notaEstado.notas[i].contenido = `📝 Nota ${i}\n\n• Inicia sesión para sincronizar tus notas\n• Se guardarán automáticamente en la nube\n• Accede desde cualquier dispositivo\n\n¡Empieza a escribir! ✨`;
+        }
     }
+    cargarNota(1, notaDOM);
     
-    notaEstado.notaActual = notaNum;
-    
-    notaDOM.notaBtns.forEach(btn => {
-        btn.classList.toggle('activo', parseInt(btn.dataset.nota) === notaNum);
-    });
-    
-    cargarNota(notaNum, notaDOM);
-    notaDOM.textarea.placeholder = `Nota ${notaNum} - Escribe aquí...`;
+    if (estado.isAuthenticated) {
+        cargarNotasDeFirebase(notaDOM);
+    }
 }
 
 async function cargarNotasDeFirebase(notaDOM) {
+    if (!currentUser || !userConfigRef || !db) return;
+
     try {
-        // Si no hay usuario autenticado, cargar notas vacías
-        if (!currentUser || !userConfigRef) {
-            console.log('Usuario no autenticado - mostrando notas locales');
-            for (let i = 1; i <= 5; i++) {
-                const notaDefault = `📝 Nota ${i}\n\n• Inicia sesión para sincronizar tus notas\n• Se guardarán automáticamente en la nube\n• Accede desde cualquier dispositivo\n\n¡Empieza a escribir! ✨`;
-                notaEstado.notas[i].contenido = notaDefault;
-            }
-            cargarNota(1, notaDOM);
-            actualizarEstadoSync('sincronizado', 'Sin sesión', notaDOM);
-            return;
-        }
-
-        actualizarEstadoSync('sincronizando', 'Cargando...', notaDOM);
-
         const doc = await userConfigRef.get();
-
         if (doc.exists && doc.data() && doc.data().notas) {
             const data = doc.data();
-
             for (let i = 1; i <= 5; i++) {
                 if (data.notas[`nota${i}`]) {
                     notaEstado.notas[i].contenido = data.notas[`nota${i}`];
-                } else {
-                    const notaDefault = `📝 Nota ${i}\n\n• Escribe lo que necesites recordar\n• Se guarda automáticamente\n• Sincronizado con todos tus dispositivos\n• Atajo: Ctrl+${i} para cambiar\n\n¡Empieza a escribir! ✨`;
-                    notaEstado.notas[i].contenido = notaDefault;
                 }
             }
-        } else {
-            // Primer usuario - crear notas por defecto
-            for (let i = 1; i <= 5; i++) {
-                const notaDefault = `📝 Nota ${i}\n\n• Escribe lo que necesites recordar\n• Se guarda automáticamente\n• Sincronizado con todos tus dispositivos\n• Atajo: Ctrl+${i} para cambiar\n\n¡Empieza a escribir! ✨`;
-                notaEstado.notas[i].contenido = notaDefault;
-            }
-            await guardarTodasLasNotasEnFirebase();
+            cargarNota(notaEstado.notaActual, notaDOM);
         }
-
-        cargarNota(1, notaDOM);
-        actualizarEstadoSync('sincronizado', 'Sincronizado', notaDOM);
     } catch (error) {
         console.error('Error al cargar notas:', error);
-        actualizarEstadoSync('error', 'Error al cargar', notaDOM);
     }
 }
 
@@ -1999,78 +2462,21 @@ function cargarNota(notaNum, notaDOM) {
 
 function guardarNotaEnTiempoReal(notaNum, texto, notaDOM) {
     notaEstado.notas[notaNum].contenido = texto;
-    notaEstado.notas[notaNum].sincronizado = false;
-    notaEstado.sincronizado = false;
-    actualizarEstadoSync('sincronizando', 'Guardando...', notaDOM);
     
     if (notaTimeouts[notaNum]) clearTimeout(notaTimeouts[notaNum]);
     
     notaTimeouts[notaNum] = setTimeout(async () => {
         try {
-            await guardarNotaEnFirebase(notaNum, texto);
-            notaEstado.notas[notaNum].sincronizado = true;
+            if (!currentUser || !userConfigRef || !db) return;
             
-            let todasSincronizadas = true;
-            for (let i = 1; i <= 5; i++) {
-                if (!notaEstado.notas[i].sincronizado) {
-                    todasSincronizadas = false;
-                    break;
-                }
-            }
-            
-            if (todasSincronizadas) {
-                notaEstado.sincronizado = true;
-                actualizarEstadoSync('sincronizado', 'Sincronizado', notaDOM);
-            }
+            const updateData = {};
+            updateData[`notas.nota${notaNum}`] = texto;
+            updateData['metadata.ultimaModificacion'] = firebase.firestore.FieldValue.serverTimestamp();
+            await userConfigRef.set(updateData, { merge: true });
         } catch (error) {
             console.error('Error al guardar nota:', error);
-            actualizarEstadoSync('error', 'Error al guardar', notaDOM);
         }
     }, 1000);
-}
-
-async function guardarNotaEnFirebase(notaNum, texto) {
-    try {
-        // Solo guardar si hay usuario autenticado
-        if (!currentUser || !userConfigRef) {
-            console.log('Nota guardada solo en memoria (sin usuario)');
-            return;
-        }
-
-        notaEstado.notas[notaNum].contenido = texto;
-
-        const updateData = {};
-        updateData[`notas.nota${notaNum}`] = texto;
-        updateData['metadata.ultimaModificacion'] = firebase.firestore.FieldValue.serverTimestamp();
-
-        await userConfigRef.set(updateData, { merge: true });
-    } catch (error) {
-        throw error;
-    }
-}
-
-async function guardarTodasLasNotasEnFirebase() {
-    try {
-        // Solo guardar si hay usuario autenticado
-        if (!currentUser || !userConfigRef) {
-            console.log('Notas guardadas solo en memoria (sin usuario)');
-            return;
-        }
-
-        const notasData = {};
-        for (let i = 1; i <= 5; i++) {
-            if (notaEstado.notas[i] && notaEstado.notas[i].contenido) {
-                notasData[`notas.nota${i}`] = notaEstado.notas[i].contenido;
-            }
-        }
-
-        notasData['metadata.ultimaModificacion'] = firebase.firestore.FieldValue.serverTimestamp();
-
-        await userConfigRef.set(notasData, { merge: true });
-    } catch (error) {
-        console.error('Error al guardar todas las notas:', error);
-        throw error;
-    }
 }
 
 function actualizarContadorCaracteres(texto, notaDOM) {
@@ -2080,37 +2486,6 @@ function actualizarContadorCaracteres(texto, notaDOM) {
     const palabras = texto.trim() ? texto.trim().split(/\s+/).length : 0;
     
     notaDOM.charCount.textContent = `${caracteres} caracteres · ${palabras} palabras`;
-    
-    if (caracteres > 500000) {
-        notaDOM.charCount.style.color = '#f87171';
-    } else if (caracteres > 400000) {
-        notaDOM.charCount.style.color = '#fbbf24';
-    } else {
-        notaDOM.charCount.style.color = 'rgb(0 229 255 / 94%)';
-    }
-}
-
-function actualizarEstadoSync(estado, texto, notaDOM) {
-    if (!notaDOM.syncIcon || !notaDOM.syncText) return;
-    
-    notaDOM.syncIcon.classList.remove('sincronizando', 'sincronizado', 'error');
-    
-    switch(estado) {
-        case 'sincronizando':
-            notaDOM.syncIcon.classList.add('sincronizando');
-            notaDOM.syncIcon.textContent = '🔄';
-            break;
-        case 'sincronizado':
-            notaDOM.syncIcon.classList.add('sincronizado');
-            notaDOM.syncIcon.textContent = '✅';
-            break;
-        case 'error':
-            notaDOM.syncIcon.classList.add('error');
-            notaDOM.syncIcon.textContent = '❌';
-            break;
-    }
-    
-    notaDOM.syncText.textContent = texto;
 }
 
 function abrirModalNota(notaDOM) {
@@ -2122,11 +2497,6 @@ function abrirModalNota(notaDOM) {
     setTimeout(() => {
         notaDOM.textarea?.focus();
     }, 300);
-    
-    notaDOM.icono?.classList.add('nota-icono-click');
-    setTimeout(() => {
-        notaDOM.icono?.classList.remove('nota-icono-click');
-    }, 300);
 }
 
 function cerrarModalNota(notaDOM) {
@@ -2134,26 +2504,129 @@ function cerrarModalNota(notaDOM) {
     
     notaDOM.modal.classList.remove('nota-modal-abierto');
     document.body.style.overflow = '';
-    
-    if (!notaEstado.notas[notaEstado.notaActual].sincronizado) {
-        guardarNotaEnFirebase(notaEstado.notaActual, notaDOM.textarea.value);
-    }
 }
 
-// ===== INICIALIZACIÓN =====
+function copiarNota(notaDOM) {
+    if (!notaDOM.textarea) return;
+    
+    const texto = notaDOM.textarea.value;
+    if (!texto || texto.trim() === '') return;
+    
+    navigator.clipboard.writeText(texto).catch(err => {
+        console.error('Error al copiar:', err);
+    });
+}
+
+function cambiarNota(notaNum, notaDOM) {
+    if (notaNum === notaEstado.notaActual) return;
+    
+    notaEstado.notaActual = notaNum;
+    
+    notaDOM.notaBtns.forEach(btn => {
+        btn.classList.toggle('activo', parseInt(btn.dataset.nota) === notaNum);
+    });
+    
+    cargarNota(notaNum, notaDOM);
+    notaDOM.textarea.placeholder = `Nota ${notaNum} - Escribe aquí...`;
+}
+
+// ===== INICIALIZACIÓN PRINCIPAL OPTIMIZADA =====
 document.addEventListener('DOMContentLoaded', () => {
+    // Desactivar animaciones temporalmente
+    document.body.classList.add('no-animation');
+    
+    // 1. Cachear elementos DOM primero
     cachearElementos();
-
-    // Inicializar autenticación primero
-    // Esto disparará la carga de configuración según el estado del usuario
-    inicializarAutenticacion();
-
-    // Inicializar resto de componentes
+    
+    // 2. Inicializar UI inmediata (sin Firebase)
     inicializarBarraBusqueda();
+    inicializarAutenticacion();
     inicializarNota();
-    inicializarModalIconos();
-    inicializarModalPersonalizar();
+    
+    // 3. Cargar iconos rápidos SIN animación
+    cargarIconosRapidos(true);
+    
+    // 4. Cargar configuración local primero
+    cargarConfiguracionLocal();
+    
+    // 5. Reactivar animaciones después de la carga inicial
+    setTimeout(() => {
+        document.body.classList.remove('no-animation');
+    }, 100);
+    
+    // 6. Inicializar Firebase y modales en segundo plano
+    if ('requestIdleCallback' in window) {
+        requestIdleCallback(() => {
+            initFirebase();
+            inicializarModalIconos();
+            inicializarModalPersonalizar();
+            
+            if (currentUser && currentUser.uid && estado.firebaseInicializado) {
+                cargarConfiguracionUsuario(currentUser.uid);
+            }
+        }, { timeout: 2000 });
+    } else {
+        setTimeout(() => {
+            initFirebase();
+            inicializarModalIconos();
+            inicializarModalPersonalizar();
+            
+            if (currentUser && currentUser.uid && estado.firebaseInicializado) {
+                cargarConfiguracionUsuario(currentUser.uid);
+            }
+        }, 1000);
+    }
 
-    // Deshabilitar edición inicialmente (hasta que se verifique auth)
-    habilitarEdicion(false);
+    // 7. Listener para cuando vuelve la conexión
+    window.addEventListener('online', () => {
+        console.log('Conexión restaurada, sincronizando...');
+        if (currentUser && currentUser.uid && estado.firebaseInicializado) {
+            cargarConfiguracionUsuario(currentUser.uid);
+        }
+    });
 });
+
+// Precargar imágenes de iconos comunes
+window.addEventListener('load', () => {
+    const imagenesPrecarga = [
+        './img/icons/google_1.png',
+        './img/icons/youtube_1.png',
+        './img/icons/facebook_1.png'
+    ];
+    
+    imagenesPrecarga.forEach(src => {
+        const img = new Image();
+        img.src = src;
+    });
+});
+
+
+
+
+
+// Manejador de clics para el botón de incógnito
+document.getElementById('contenedor-iconos').addEventListener('click', (e) => {
+    const btnIncognito = e.target.closest('.btn-incognito-small');
+    
+    if (btnIncognito) {
+        e.preventDefault(); // Evita que el <a> padre se active
+        e.stopPropagation(); // Evita que el evento suba
+        
+        const url = btnIncognito.dataset.url;
+        
+        // Intentar usar la API de Chrome si es una extensión
+        if (typeof chrome !== 'undefined' && chrome.windows) {
+            chrome.windows.create({
+                url: url,
+                incognito: true,
+                type: 'normal'
+            });
+        } else {
+            // Si se usa como web normal (no extensión), el modo incógnito real 
+            // no es accesible por JS por seguridad, pero abrimos en nueva ventana.
+            window.open(url, '_blank', 'noopener,noreferrer');
+            console.warn("El modo incógnito real solo funciona si esto corre como Extensión de Chrome.");
+        }
+    }
+});
+/* 5 */

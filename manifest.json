@@ -1,0 +1,40 @@
+{
+  "manifest_version": 3,
+  "name": "StarTab - Nueva Pestaña",
+  "version": "1.0",
+  "description": "Página personalizada para nueva pestaña con sincronización en la nube",
+  "chrome_url_overrides": {
+    "newtab": "index.html"
+  },
+"permissions": [
+  "tabs",
+  "storage"
+],
+  "host_permissions": [
+    "https://accounts.google.com/*",
+    "https://oauth2.googleapis.com/*",
+    "https://www.googleapis.com/*",
+    "https://*.firebase.com/*",
+    "https://*.firebaseio.com/*",
+    "https://*.googleapis.com/*",
+    "https://*.gstatic.com/*",
+    "https://firestore.googleapis.com/*",
+    "https://securetoken.googleapis.com/*",
+    "https://identitytoolkit.googleapis.com/*"
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src https://accounts.google.com https://oauth2.googleapis.com https://www.googleapis.com https://*.firebase.com https://*.firebaseio.com https://*.googleapis.com https://*.gstatic.com https://firestore.googleapis.com https://securetoken.googleapis.com https://identitytoolkit.googleapis.com"
+  },
+  "oauth2": {
+    "client_id": "427918393457-crgqe77q3e6jr7bigvmhlhel473dbogp.apps.googleusercontent.com",
+    "scopes": [
+      "https://www.googleapis.com/auth/userinfo.email",
+      "https://www.googleapis.com/auth/userinfo.profile"
+    ]
+  },
+  "icons": {
+    "16": "icono.png",
+    "48": "icono.png",
+    "128": "icono.png"
+  }
+}
