@@ -1279,7 +1279,7 @@ const nuevoHTML = iconos.map((icono, index) => {
 
     return `
         <a href="${icono.url}" class="icono-item" target="_blank" data-index="${index}" style="animation: aparecerIcono 0.3s cubic-bezier(0.2, 0, 0, 1) ${index * 0.03}s both">
-            <div class="icono-contenedor" style="background-color:${bgColor};border-radius:${estilos.radioBorde}%;width:100px;height:100px;display:flex;align-items:center;justify-content:center;margin-bottom:0.5rem;transition:all 0.3s ease;box-shadow:${boxShadow}">
+            <div class="icono-contenedor" style="background-color:${bgColor};border-radius:${estilos.radioBorde}%;display:flex;align-items:center;justify-content:center;margin-bottom:0.5rem;transition:all 0.3s ease;box-shadow:${boxShadow}">
                 <img src="${icono.icono}" alt="${icono.nombre}" style="width:${estilos.tamanoIcono}%;height:${estilos.tamanoIcono}%;object-fit:contain" loading="lazy">
             </div>
             
