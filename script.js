@@ -351,6 +351,98 @@ function cerrarSesion() {
     habilitarEdicion(false);
 }
 
+async function descargarBackup() {
+    if (!currentUser || !db) {
+        alert('Debes iniciar sesión para descargar el backup');
+        return;
+    }
+
+    try {
+        // Mostrar indicador de carga
+        const backupBtn = document.getElementById('backup-btn');
+        if (backupBtn) {
+            backupBtn.disabled = true;
+            backupBtn.innerHTML = '<span class="backup-icon">⏳</span>Generando backup...';
+        }
+
+        // Obtener datos del usuario
+        const userDoc = await userDocRef.get();
+        const userData = userDoc.exists ? userDoc.data() : {};
+
+        // Obtener todas las categorías
+        const categoriasSnapshot = await userDocRef.collection('categorias').get();
+        const categoriasData = [];
+        
+        for (const catDoc of categoriasSnapshot.docs) {
+            const categoria = {
+                id: catDoc.id,
+                ...catDoc.data()
+            };
+            
+            // Obtener iconos de cada categoría
+            const iconosSnapshot = await catDoc.ref.collection('iconos').orderBy('orden').get();
+            categoria.iconos = [];
+            iconosSnapshot.forEach(iconoDoc => {
+                categoria.iconos.push({
+                    id: iconoDoc.id,
+                    ...iconoDoc.data()
+                });
+            });
+            
+            categoriasData.push(categoria);
+        }
+
+        // Preparar el objeto de backup
+        const backupData = {
+            version: "1.0",
+            fecha: new Date().toISOString(),
+            usuario: {
+                uid: currentUser.uid,
+                email: currentUser.email,
+                displayName: currentUser.displayName,
+                photoURL: currentUser.photoURL
+            },
+            perfil: userData.profile || {},
+            notas: userData.notas || {},
+            categorias: categoriasData,
+            metadata: {
+                ...userData.metadata,
+                fechaBackup: firebase.firestore.FieldValue.serverTimestamp()
+            }
+        };
+
+        // Crear y descargar el archivo
+        const backupJSON = JSON.stringify(backupData, null, 2);
+        const blob = new Blob([backupJSON], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        
+        const fecha = new Date();
+        const fechaStr = `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-${String(fecha.getDate()).padStart(2, '0')}_${String(fecha.getHours()).padStart(2, '0')}-${String(fecha.getMinutes()).padStart(2, '0')}`;
+        
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `startab_backup_${fechaStr}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        alert('✅ Backup descargado exitosamente');
+
+    } catch (error) {
+        console.error('Error al descargar backup:', error);
+        alert('❌ Error al descargar el backup: ' + error.message);
+    } finally {
+        // Restaurar el botón
+        const backupBtn = document.getElementById('backup-btn');
+        if (backupBtn) {
+            backupBtn.disabled = false;
+            backupBtn.innerHTML = '<span class="backup-icon">💾</span>Descargar backup';
+        }
+    }
+}
+
+
 async function sincronizarPerfilUsuario(user) {
     if (!user || !user.uid || !db) return;
 
@@ -425,7 +517,6 @@ function inicializarAutenticacion() {
                     if (initFirebase()) {
                         cargarCategoriasUsuario(userData.uid);
                     }
-                    // Inicializar drag & drop de categorías después de cargar
                     setTimeout(() => inicializarDragAndDropCategorias(), 500);
                 }, { timeout: 2000 });
             }
@@ -440,6 +531,12 @@ function inicializarAutenticacion() {
     
     if (DOM.logoutBtn) {
         DOM.logoutBtn.addEventListener('click', cerrarSesion);
+    }
+
+    // NUEVO: Event listener para el botón de backup
+    const backupBtn = document.getElementById('backup-btn');
+    if (backupBtn) {
+        backupBtn.addEventListener('click', descargarBackup);
     }
 
     document.addEventListener('click', (e) => {
@@ -1056,54 +1153,88 @@ async function agregarCategoria() {
         return;
     }
 
-    const nombre = prompt('Nombre de la nueva categoría (máx 20 caracteres):', 'Nueva categoría');
-    if (nombre === null) return;
-
-    const nombreTrim = nombre.trim();
-    if (!nombreTrim) {
-        alert('El nombre no puede estar vacío');
-        return;
+    // Prevenir múltiples clics
+    const addBtn = document.getElementById('btn-agregar-categoria');
+    if (addBtn) {
+        addBtn.disabled = true;
+        addBtn.style.opacity = '0.5';
+        addBtn.style.cursor = 'not-allowed';
     }
 
-    if (nombreTrim.length > 20) {
-        alert('El nombre no puede tener más de 20 caracteres');
-        return;
+    try {
+        const nombre = prompt('Nombre de la nueva categoría (máx 20 caracteres):', 'Nueva categoría');
+        
+        // Si el usuario cancela o cierra el prompt
+        if (nombre === null) {
+            return;
+        }
+
+        const nombreTrim = nombre.trim();
+        if (!nombreTrim) {
+            alert('El nombre no puede estar vacío');
+            return;
+        }
+
+        if (nombreTrim.length > 20) {
+            alert('El nombre no puede tener más de 20 caracteres');
+            return;
+        }
+
+        // Verificar duplicados de manera más estricta
+        const nombreExistente = categorias.some(c => 
+            c.nombre.toLowerCase().trim() === nombreTrim.toLowerCase()
+        );
+        
+        if (nombreExistente) {
+            alert('Ya existe una categoría con ese nombre');
+            return;
+        }
+
+        const nuevoId = 'cat_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        const orden = categorias.length + 1;
+        
+        const categoriaActual = categorias.find(c => c.id === estado.categoriaActual);
+        const fondoBase = categoriaActual && categoriaActual.background ? categoriaActual.background : FONDO_DEFAULT;
+
+        const nuevaCategoria = {
+            id: nuevoId,
+            nombre: nombreTrim,
+            editable: true,
+            orden: orden,
+            background: { ...fondoBase }
+        };
+
+        // Agregar la categoría
+        categorias.push(nuevaCategoria);
+        
+        if (currentUser && db) {
+            await crearCategoriaEnFirebase(nuevaCategoria);
+        }
+        
+        guardarBackupLocal();
+        renderizarCategorias();
+        
+        // Cambiar a la nueva categoría
+        estado.categoriaActual = nuevoId;
+        localStorage.setItem('categoriaSeleccionada', nuevoId);
+        estado.iconosActuales = [];
+        guardarIconosLocalmente([]);
+        await renderizarIconos(true);
+        aplicarFondoCategoria(nuevoId);
+        
+    } catch (error) {
+        console.error('Error al crear categoría:', error);
+        alert('Error al crear la categoría. Intenta de nuevo.');
+    } finally {
+        // Restaurar el botón después de un pequeño retraso
+        setTimeout(() => {
+            if (addBtn) {
+                addBtn.disabled = false;
+                addBtn.style.opacity = '1';
+                addBtn.style.cursor = 'pointer';
+            }
+        }, 500);
     }
-
-    if (categorias.some(c => c.nombre.toLowerCase() === nombreTrim.toLowerCase())) {
-        alert('Ya existe una categoría con ese nombre');
-        return;
-    }
-
-    const nuevoId = 'cat_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-    const orden = categorias.length + 1; // Cambiado de categorias.length a categorias.length + 1
-    
-    const categoriaActual = categorias.find(c => c.id === estado.categoriaActual);
-    const fondoBase = categoriaActual && categoriaActual.background ? categoriaActual.background : FONDO_DEFAULT;
-
-    const nuevaCategoria = {
-        id: nuevoId,
-        nombre: nombreTrim,
-        editable: true,
-        orden: orden,
-        background: { ...fondoBase }
-    };
-
-    categorias.push(nuevaCategoria);
-    
-    if (currentUser && db) {
-        await crearCategoriaEnFirebase(nuevaCategoria);
-    }
-    
-    guardarBackupLocal();
-    renderizarCategorias();
-    
-    estado.categoriaActual = nuevoId;
-    localStorage.setItem('categoriaSeleccionada', nuevoId);
-    estado.iconosActuales = [];
-    guardarIconosLocalmente([]);
-    await renderizarIconos(true);
-    aplicarFondoCategoria(nuevoId);
 }
 
 function mostrarMenuContextualCategoria(event, categoriaId) {

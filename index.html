@@ -4,8 +4,9 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>StarTab</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Nueva pestaña</title>
+    <link rel="icon" href="img/icons/startab_3.svg" type="image/svg+xml">
     <link rel="stylesheet" href="styles.css">
     <!-- Firebase LOCAL (descargado) - CARGAR TEMPRANO -->
     <script src="lib/firebase-app-compat.js" defer></script>
@@ -15,29 +16,65 @@
     <script src="script.js" defer></script>
     <!-- Script rápido del fondo (inline pero con hash en CSP) -->
     <script src="fondo-rapido.js" defer></script>
+    <script src="tab-counter.js" defer></script>
+     <!-- <script src="tab-grouper.js" defer></script> -->
 </head>
 
 <body>
     <!-- BOTÓN DE AUTENTICACIÓN -->
-    <div class="auth-container" id="auth-container">
-        <button class="auth-btn" id="auth-btn">
-            <span class="auth-btn-text">Iniciar sesión</span>
-        </button>
-        <div class="user-menu" id="user-menu" style="display: none;">
-            <img src="" alt="Perfil" class="user-avatar" id="user-avatar" loading="lazy">
-            <div class="user-dropdown" id="user-dropdown">
-                <div class="user-info">
-                    <span class="user-name" id="user-name"></span>
-                    <span class="user-email" id="user-email"></span>
-                </div>
-                <div class="dropdown-divider"></div>
-                <button class="logout-btn" id="logout-btn">
-                    <span class="logout-icon">🚪</span>
-                    Cerrar sesión
-                </button>
+<div class="auth-container" id="auth-container">
+    <button class="auth-btn" id="auth-btn">
+        <span class="auth-btn-text">Iniciar sesión</span>
+    </button>
+    <div class="user-menu" id="user-menu" style="display: none;">
+        <img src="" alt="Perfil" class="user-avatar" id="user-avatar" loading="lazy">
+        <div class="user-dropdown" id="user-dropdown">
+            <div class="user-info">
+                <span class="user-name" id="user-name"></span>
+                <span class="user-email" id="user-email"></span>
+            </div>
+            <div class="dropdown-divider"></div>
+            <button class="backup-btn" id="backup-btn">
+                <span class="backup-icon">💾</span>
+                Descargar backup
+            </button>
+            <div class="dropdown-divider"></div>
+            <button class="logout-btn" id="logout-btn">
+                <span class="logout-icon">🚪</span>
+                Cerrar sesión
+            </button>
+        </div>
+    </div>
+</div>
+
+
+<!-- CONTADOR DE PESTAÑAS -->
+<div class="tab-counter-container" id="tab-counter-container" title="Pestañas abiertas">
+    <div class="tab-counter">
+        <span class="tab-counter-icon">📑</span>
+        <span class="tab-counter-value" id="tab-counter-value">0</span>
+    </div>
+    <div class="tab-counter-dropdown" id="tab-counter-dropdown">
+        <div class="tab-counter-header">
+            <span class="tab-counter-title">Estadísticas</span>
+        </div>
+        <div class="tab-counter-stats">
+            <div class="tab-stat-item">
+                <span class="tab-stat-label">Ventanas:</span>
+                <span class="tab-stat-value" id="tab-stat-windows">0</span>
+            </div>
+            <div class="tab-stat-item">
+                <span class="tab-stat-label">Pestañas:</span>
+                <span class="tab-stat-value" id="tab-stat-tabs">0</span>
+            </div>
+            <div class="tab-stat-divider"></div>
+            <div class="tab-stat-item total">
+                <span class="tab-stat-label">Total:</span>
+                <span class="tab-stat-value" id="tab-stat-total">0</span>
             </div>
         </div>
     </div>
+</div>
 
     <!-- ICONO DE NOTA MODERNO -->
     <div class="nota-icono-container" id="nota-icono">
@@ -357,7 +394,7 @@
 
     <div class="box-master">
         <div class="contenedor-busqueda">
-            <h1 class="titulo">StarTab</h1>
+            <h1 class="titulo"><img src="./img/icons/startab_3.2.svg">StarTab</h1>
 
             <div class="selectores-buscador">
                 <div class="circulo-buscador activo" data-buscador="google" title="Google">
