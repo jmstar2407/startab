@@ -57,6 +57,7 @@
     margin: 0;
     padding: 0;
     box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
 }
 
 html {
@@ -106,6 +107,16 @@ body {
     animation: aparecerTitulo 1s 0.7s ease forwards;
 }
 
+.icono-contenedor {
+    background-color: transparent;
+    border-radius: 50%;
+    width: 100px;
+    height: 100px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 0.5rem;
+}
 
 
 .auth-btn:hover {
@@ -676,6 +687,9 @@ body {
     height: 74px;
     transition: all 0.3s ease;
     pointer-events: none;
+    width: 74%;
+    height: 74%;
+    object-fit: contain;
 }
 
 .icono-item:hover img {
@@ -1605,28 +1619,38 @@ body.fondo-video {
 /* ===== NOTA MODERNA ===== */
 .nota-icono-container {
     position: fixed;
-    top: 2rem;
-    left: 2rem;
+    top: 1rem;
+    left: 1rem;
     z-index: 1000;
     cursor: pointer;
     transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .nota-icono-container:hover {
-    transform: scale(1.1) translateY(-5px);
+    transform: scale(1);
 }
 
 .nota-icono {
-    width: 60px;
-    height: 60px;
-    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    border-radius: 16px;
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0px 0px 0px 2px rgb(255 255 255 / 66%), 4px 3px 19px 4px rgb(0 0 0 / 13%);
+    box-shadow: 0px 0px 0px 1px rgb(153 153 153 / 66%), 4px 3px 19px 4px rgb(0 0 0 / 13%);
     backdrop-filter: blur(10px);
     background: #ffffff2b;
-    animation: notaFlotar 3s ease-in-out infinite;
+    transition: 0.3s;
+    /* animation: notaFlotar 3s ease-in-out infinite; */
+}
+
+.nota-icono:hover {
+    background: #ffffff3d;
+    transition: 0.3s;
+}
+
+.nota-icono svg {
+    color: #bbbbbb;
 }
 
 @keyframes notaFlotar {
@@ -1644,10 +1668,12 @@ body.fondo-video {
 .nota-icono-emoji {
     font-size: 2rem;
     transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
 }
 
 .nota-icono-container:hover .nota-icono-emoji {
-    transform: rotate(15deg) scale(1.1);
+    transform: scale(1.1);
 }
 
 .nota-icono-tooltip {
@@ -2116,6 +2142,7 @@ body.fondo-video {
         height: 42px;
         font-size: 1rem;
         padding: 0 100px 0 20px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
     }
 
     .icono-busqueda {
@@ -2186,7 +2213,10 @@ body.fondo-video {
         height: 40px;
     }
 
-
+    .icono-item img {
+        width: 85%;
+        height: 100%;
+    }
 
     .agregar-icono {
         bottom: 7rem;
@@ -2196,7 +2226,7 @@ body.fondo-video {
         bottom: 1rem;
     }
 
-        .agregar-icono,
+    .agregar-icono,
     .btn-personalizar {
         display: none !important;
     }
@@ -2534,9 +2564,12 @@ body.fondo-video {
 }
 
 @keyframes borderPulse {
-    0%, 100% {
+
+    0%,
+    100% {
         border-color: rgba(255, 255, 255, 0.5);
     }
+
     50% {
         border-color: rgba(255, 255, 255, 1);
     }
@@ -2549,7 +2582,8 @@ body.fondo-video {
 
 @media (max-width: 768px) {
     .categoria-wrapper[draggable="true"] {
-        cursor: default; /* Deshabilitar drag en móvil */
+        cursor: default;
+        /* Deshabilitar drag en móvil */
     }
 }
 
@@ -2707,10 +2741,12 @@ body.fondo-video {
     0% {
         transform: scale(1);
     }
+
     50% {
         transform: scale(1.2);
         color: #764ba2;
     }
+
     100% {
         transform: scale(1);
     }
@@ -2726,16 +2762,16 @@ body.fondo-video {
         top: 0.5rem;
         right: 4rem;
     }
-    
+
     .tab-counter {
         padding: 0.3rem 0.8rem;
         font-size: 0.85rem;
     }
-    
+
     .tab-counter-value {
         min-width: 20px;
     }
-    
+
     .tab-counter-dropdown {
         min-width: 180px;
         right: -10px;
@@ -2751,11 +2787,13 @@ body.fondo-video {
 
 .box-master {
     width: 100%;
-    height: 100dvh; /* Usar dvh en lugar de vh para mejor soporte móvil */
+    height: 100dvh;
+    /* Usar dvh en lugar de vh para mejor soporte móvil */
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    position: relative; /* Para contexto */
+    position: relative;
+    /* Para contexto */
 }
 
 /* Fallback para navegadores que no soportan dvh */
@@ -2768,43 +2806,49 @@ body.fondo-video {
 /* Ajustes específicos para móvil */
 @media (max-width: 768px) {
     .box-master {
-        height: -webkit-fill-available; /* Para Safari iOS */
-        height: 100dvh; /* Mantener dvh como prioridad */
+        height: -webkit-fill-available;
+        /* Para Safari iOS */
+        height: 100dvh;
+        /* Mantener dvh como prioridad */
         max-height: 100dvh;
         overflow: hidden;
-        position: fixed; /* Fijar el contenedor */
+        position: fixed;
+        /* Fijar el contenedor */
         top: 0;
         left: 0;
         right: 0;
         bottom: 0;
     }
-    
+
     /* Asegurar que los contenedores internos también se comporten bien */
     .contenedor-iconos-master {
         flex: 1;
         overflow-y: auto;
-        -webkit-overflow-scrolling: touch; /* Scroll suave en iOS */
+        -webkit-overflow-scrolling: touch;
+        /* Scroll suave en iOS */
         padding: 1rem;
-        max-height: calc(100dvh - 200px); /* Ajustar según la altura de otros elementos */
+        max-height: calc(100dvh - 200px);
+        /* Ajustar según la altura de otros elementos */
     }
-    
+
     /* Ajustar el contenedor de búsqueda para no ocupar demasiado espacio */
     .contenedor-busqueda {
-        flex-shrink: 0; /* Evitar que se comprima */
+        flex-shrink: 0;
+        /* Evitar que se comprima */
         padding: 0.5rem 1rem;
     }
-    
+
     /* Optimizar para pantallas muy pequeñas */
     @media (max-height: 600px) {
         .contenedor-busqueda {
             transform: scale(0.9);
             margin: -0.5rem 0;
         }
-        
+
         .selectores-buscador {
             margin-bottom: 0;
         }
-        
+
         .categorias-container {
             margin-top: 0;
             padding: 5px;
@@ -2825,98 +2869,128 @@ body.fondo-video {
 
 /* ===== CATEGORÍAS SIMPLIFICADAS - VERSIÓN MÓVIL CON SCROLL HORIZONTAL ===== */
 @media (max-width: 768px) {
+
     /* Cambiar el contenedor a horizontal con scroll */
     .categorias-container {
         display: flex;
-        flex-direction: row; /* Asegurar que sea horizontal */
-        flex-wrap: nowrap; /* Evitar que salten a la siguiente línea */
-        overflow-x: auto; /* Habilitar scroll horizontal */
-        overflow-y: hidden; /* Ocultar scroll vertical */
-        -webkit-overflow-scrolling: touch; /* Scroll suave en iOS */
-        scroll-snap-type: x mandatory; /* Opcional: snap al hacer scroll */
+        flex-direction: row;
+        /* Asegurar que sea horizontal */
+        flex-wrap: nowrap;
+        /* Evitar que salten a la siguiente línea */
+        overflow-x: auto;
+        /* Habilitar scroll horizontal */
+        overflow-y: hidden;
+        /* Ocultar scroll vertical */
+        -webkit-overflow-scrolling: touch;
+        /* Scroll suave en iOS */
+        scroll-snap-type: x mandatory;
+        /* Opcional: snap al hacer scroll */
         gap: 0.5rem;
-        padding: 10px 15px; /* Aumentar padding horizontal */
+        padding: 10px 15px;
+        /* Aumentar padding horizontal */
         margin: 0 auto;
         width: 100%;
-        max-width: 100%; /* Ocupar todo el ancho disponible */
-        justify-content: flex-start; /* Alinear al inicio */
-        scrollbar-width: thin; /* Scroll más delgado en Firefox */
-        white-space: nowrap; /* Prevenir saltos de línea */
+        max-width: 100%;
+        /* Ocupar todo el ancho disponible */
+        justify-content: flex-start;
+        /* Alinear al inicio */
+        scrollbar-width: thin;
+        /* Scroll más delgado en Firefox */
+        white-space: nowrap;
+        /* Prevenir saltos de línea */
         position: relative;
         bottom: auto;
         left: 0;
         right: 0;
-        transform: translateY(0); /* Resetear animación */
-        animation: none; /* Opcional: quitar animación en móvil */
+        transform: translateY(0);
+        /* Resetear animación */
+        animation: none;
+        /* Opcional: quitar animación en móvil */
     }
-    
+
     /* Estilizar la barra de scroll para que sea visible pero discreta */
     .categorias-container::-webkit-scrollbar {
-        height: 3px; /* Altura del scroll horizontal */
+        height: 3px;
+        /* Altura del scroll horizontal */
     }
-    
+
     .categorias-container::-webkit-scrollbar-track {
         background: rgba(255, 255, 255, 0.1);
         border-radius: 10px;
     }
-    
+
     .categorias-container::-webkit-scrollbar-thumb {
         background: rgba(255, 255, 255, 0.3);
         border-radius: 10px;
     }
-    
+
     .categorias-container::-webkit-scrollbar-thumb:hover {
         background: rgba(255, 255, 255, 0.5);
     }
-    
+
     /* Ajustar los wrappers de categoría para el scroll horizontal */
     .categoria-wrapper {
-        display: inline-flex; /* Cambiar a inline-flex para scroll horizontal */
-        flex-shrink: 0; /* Evitar que se encojan */
-        margin: 0; /* Resetear márgenes */
-        scroll-snap-align: start; /* Opcional: snap al inicio */
+        display: inline-flex;
+        /* Cambiar a inline-flex para scroll horizontal */
+        flex-shrink: 0;
+        /* Evitar que se encojan */
+        margin: 0;
+        /* Resetear márgenes */
+        scroll-snap-align: start;
+        /* Opcional: snap al inicio */
     }
-    
+
     /* Ajustar los botones de categoría */
     .categoria-btn {
-        min-width: auto; /* Permitir que se ajusten al contenido */
-        max-width: none; /* Sin límite máximo */
-        padding: 0.4rem 1rem; /* Padding consistente */
-        margin: 0; /* Resetear márgenes */
-        white-space: nowrap; /* Evitar que el texto salte */
+        min-width: auto;
+        /* Permitir que se ajusten al contenido */
+        max-width: none;
+        /* Sin límite máximo */
+        padding: 0.4rem 1rem;
+        /* Padding consistente */
+        margin: 0;
+        /* Resetear márgenes */
+        white-space: nowrap;
+        /* Evitar que el texto salte */
     }
-    
+
     /* Botón de agregar categoría */
     .agregar-categoria-btn {
         min-width: 40px !important;
         max-width: 40px !important;
         height: 40px;
-        flex-shrink: 0; /* Evitar que se encoja */
-        display: inline-flex !important; /* Asegurar que sea inline */
-        margin-left: 0.25rem; /* Pequeño margen */
+        flex-shrink: 0;
+        /* Evitar que se encoja */
+        display: inline-flex !important;
+        /* Asegurar que sea inline */
+        margin-left: 0.25rem;
+        /* Pequeño margen */
     }
-    
+
     /* Opcional: Ocultar completamente la barra de scroll pero mantener funcionalidad */
     .categorias-container.hide-scrollbar {
-        -ms-overflow-style: none; /* IE and Edge */
-        scrollbar-width: none; /* Firefox */
+        -ms-overflow-style: none;
+        /* IE and Edge */
+        scrollbar-width: none;
+        /* Firefox */
     }
-    
+
     .categorias-container.hide-scrollbar::-webkit-scrollbar {
-        display: none; /* Chrome, Safari, Opera */
+        display: none;
+        /* Chrome, Safari, Opera */
     }
-    
+
     /* Ajustar el contenedor master para mejor espaciado */
     .contenedor-iconos-master {
         padding: 0.5rem 1rem;
         margin-top: 0.25rem;
     }
-    
+
     /* Reducir el padding del contenedor de búsqueda si es necesario */
     .contenedor-busqueda {
         padding: 0.5rem 1rem 0;
     }
-    
+
     /* Ajustar el título para móvil si es necesario */
     .titulo {
         font-size: 1.5rem;
@@ -2924,22 +2998,23 @@ body.fondo-video {
         transform: translateY(0);
         animation: none;
     }
-    
+
     .titulo img {
         height: 30px;
     }
-    
+
     /* Ajustar la animación de aparición en móvil */
     .categorias-container {
         transform: translateY(0);
         animation: aparecerCategoriasMobile 0.5s ease forwards;
     }
-    
+
     @keyframes aparecerCategoriasMobile {
         0% {
             opacity: 0;
             transform: translateY(10px);
         }
+
         100% {
             opacity: 1;
             transform: translateY(0);
@@ -2953,10 +3028,67 @@ body.fondo-video {
         padding: 8px 10px;
         gap: 0.4rem;
     }
-    
+
     .categoria-btn {
         padding: 0.3rem 0.5rem;
         font-size: 0.7rem;
-            border-width: 1px;
+        border-width: 1px;
+    }
+}
+
+
+@media (max-width: 1224px) {
+    .contenedor-iconos {
+        grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+
+    }
+}
+
+@media (max-width: 1145px) {
+    .contenedor-iconos {
+        grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+
+    }
+}
+
+@media (max-width: 1065px) {
+    .contenedor-iconos {
+        grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+
+    }
+}
+
+@media (max-width: 985px) {
+    .contenedor-iconos {
+        grid-template-columns: repeat(auto-fill, minmax(85px, 1fr));
+        gap: 1rem;
+    }
+}
+
+@media (max-width: 888px) {
+    .contenedor-iconos {
+        grid-template-columns: repeat(auto-fill, minmax(74px, 1fr));
+    }
+
+    .icono-item {
+        padding: 0.5rem 0.5rem;
+    }
+
+    .icono-contenedor {
+        width: auto;
+    }
+}
+
+@media (max-width: 800px) {
+    .contenedor-iconos {
+        grid-template-columns: repeat(auto-fill, minmax(74px, 1fr));
+    }
+
+    .icono-item {
+        padding: 0.5rem 0.5rem;
+    }
+
+    .icono-contenedor {
+        width: auto;
     }
 }
