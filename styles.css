@@ -2818,3 +2818,145 @@ body.fondo-video {
     min-height: 100vh;
     min-height: 100dvh;
 }
+
+
+
+
+
+/* ===== CATEGORÍAS SIMPLIFICADAS - VERSIÓN MÓVIL CON SCROLL HORIZONTAL ===== */
+@media (max-width: 768px) {
+    /* Cambiar el contenedor a horizontal con scroll */
+    .categorias-container {
+        display: flex;
+        flex-direction: row; /* Asegurar que sea horizontal */
+        flex-wrap: nowrap; /* Evitar que salten a la siguiente línea */
+        overflow-x: auto; /* Habilitar scroll horizontal */
+        overflow-y: hidden; /* Ocultar scroll vertical */
+        -webkit-overflow-scrolling: touch; /* Scroll suave en iOS */
+        scroll-snap-type: x mandatory; /* Opcional: snap al hacer scroll */
+        gap: 0.5rem;
+        padding: 10px 15px; /* Aumentar padding horizontal */
+        margin: 0 auto;
+        width: 100%;
+        max-width: 100%; /* Ocupar todo el ancho disponible */
+        justify-content: flex-start; /* Alinear al inicio */
+        scrollbar-width: thin; /* Scroll más delgado en Firefox */
+        white-space: nowrap; /* Prevenir saltos de línea */
+        position: relative;
+        bottom: auto;
+        left: 0;
+        right: 0;
+        transform: translateY(0); /* Resetear animación */
+        animation: none; /* Opcional: quitar animación en móvil */
+    }
+    
+    /* Estilizar la barra de scroll para que sea visible pero discreta */
+    .categorias-container::-webkit-scrollbar {
+        height: 3px; /* Altura del scroll horizontal */
+    }
+    
+    .categorias-container::-webkit-scrollbar-track {
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
+    }
+    
+    .categorias-container::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.3);
+        border-radius: 10px;
+    }
+    
+    .categorias-container::-webkit-scrollbar-thumb:hover {
+        background: rgba(255, 255, 255, 0.5);
+    }
+    
+    /* Ajustar los wrappers de categoría para el scroll horizontal */
+    .categoria-wrapper {
+        display: inline-flex; /* Cambiar a inline-flex para scroll horizontal */
+        flex-shrink: 0; /* Evitar que se encojan */
+        margin: 0; /* Resetear márgenes */
+        scroll-snap-align: start; /* Opcional: snap al inicio */
+    }
+    
+    /* Ajustar los botones de categoría */
+    .categoria-btn {
+        min-width: auto; /* Permitir que se ajusten al contenido */
+        max-width: none; /* Sin límite máximo */
+        padding: 0.4rem 1rem; /* Padding consistente */
+        margin: 0; /* Resetear márgenes */
+        white-space: nowrap; /* Evitar que el texto salte */
+    }
+    
+    /* Botón de agregar categoría */
+    .agregar-categoria-btn {
+        min-width: 40px !important;
+        max-width: 40px !important;
+        height: 40px;
+        flex-shrink: 0; /* Evitar que se encoja */
+        display: inline-flex !important; /* Asegurar que sea inline */
+        margin-left: 0.25rem; /* Pequeño margen */
+    }
+    
+    /* Opcional: Ocultar completamente la barra de scroll pero mantener funcionalidad */
+    .categorias-container.hide-scrollbar {
+        -ms-overflow-style: none; /* IE and Edge */
+        scrollbar-width: none; /* Firefox */
+    }
+    
+    .categorias-container.hide-scrollbar::-webkit-scrollbar {
+        display: none; /* Chrome, Safari, Opera */
+    }
+    
+    /* Ajustar el contenedor master para mejor espaciado */
+    .contenedor-iconos-master {
+        padding: 0.5rem 1rem;
+        margin-top: 0.25rem;
+    }
+    
+    /* Reducir el padding del contenedor de búsqueda si es necesario */
+    .contenedor-busqueda {
+        padding: 0.5rem 1rem 0;
+    }
+    
+    /* Ajustar el título para móvil si es necesario */
+    .titulo {
+        font-size: 1.5rem;
+        margin-bottom: 1rem;
+        transform: translateY(0);
+        animation: none;
+    }
+    
+    .titulo img {
+        height: 30px;
+    }
+    
+    /* Ajustar la animación de aparición en móvil */
+    .categorias-container {
+        transform: translateY(0);
+        animation: aparecerCategoriasMobile 0.5s ease forwards;
+    }
+    
+    @keyframes aparecerCategoriasMobile {
+        0% {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+        100% {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+}
+
+/* Para pantallas muy pequeñas (menos de 400px) */
+@media (max-width: 400px) {
+    .categorias-container {
+        padding: 8px 10px;
+        gap: 0.4rem;
+    }
+    
+    .categoria-btn {
+        padding: 0.3rem 0.5rem;
+        font-size: 0.7rem;
+            border-width: 1px;
+    }
+}
