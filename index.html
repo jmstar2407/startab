@@ -17,69 +17,73 @@
     <!-- Script rápido del fondo (inline pero con hash en CSP) -->
     <script src="fondo-rapido.js" defer></script>
     <script src="tab-counter.js" defer></script>
-     <!-- <script src="tab-grouper.js" defer></script> -->
+    <!-- <script src="tab-grouper.js" defer></script> -->
 </head>
 
 <body>
     <!-- BOTÓN DE AUTENTICACIÓN -->
-<div class="auth-container" id="auth-container">
-    <button class="auth-btn" id="auth-btn">
-        <span class="auth-btn-text">Iniciar sesión</span>
-    </button>
-    <div class="user-menu" id="user-menu" style="display: none;">
-        <img src="" alt="Perfil" class="user-avatar" id="user-avatar" loading="lazy">
-        <div class="user-dropdown" id="user-dropdown">
-            <div class="user-info">
-                <span class="user-name" id="user-name"></span>
-                <span class="user-email" id="user-email"></span>
+    <div class="auth-container" id="auth-container">
+        <button class="auth-btn" id="auth-btn">
+            <span class="auth-btn-text">Iniciar sesión</span>
+        </button>
+        <div class="user-menu" id="user-menu" style="display: none;">
+            <img src="" alt="Perfil" class="user-avatar" id="user-avatar" loading="lazy">
+            <div class="user-dropdown" id="user-dropdown">
+                <div class="user-info">
+                    <span class="user-name" id="user-name"></span>
+                    <span class="user-email" id="user-email"></span>
+                </div>
+                <div class="dropdown-divider"></div>
+                <button class="backup-btn" id="backup-btn">
+                    <span class="backup-icon">💾</span>
+                    Descargar backup
+                </button>
+                <div class="dropdown-divider"></div>
+                <button class="logout-btn" id="logout-btn">
+                    <span class="logout-icon">🚪</span>
+                    Cerrar sesión
+                </button>
             </div>
-            <div class="dropdown-divider"></div>
-            <button class="backup-btn" id="backup-btn">
-                <span class="backup-icon">💾</span>
-                Descargar backup
-            </button>
-            <div class="dropdown-divider"></div>
-            <button class="logout-btn" id="logout-btn">
-                <span class="logout-icon">🚪</span>
-                Cerrar sesión
-            </button>
         </div>
     </div>
-</div>
 
 
-<!-- CONTADOR DE PESTAÑAS -->
-<div class="tab-counter-container" id="tab-counter-container" title="Pestañas abiertas">
-    <div class="tab-counter">
-        <span class="tab-counter-icon">📑</span>
-        <span class="tab-counter-value" id="tab-counter-value">0</span>
-    </div>
-    <div class="tab-counter-dropdown" id="tab-counter-dropdown">
-        <div class="tab-counter-header">
-            <span class="tab-counter-title">Estadísticas</span>
-        </div>
-        <div class="tab-counter-stats">
-            <div class="tab-stat-item">
-                <span class="tab-stat-label">Ventanas:</span>
-                <span class="tab-stat-value" id="tab-stat-windows">0</span>
-            </div>
-            <div class="tab-stat-item">
-                <span class="tab-stat-label">Pestañas:</span>
-                <span class="tab-stat-value" id="tab-stat-tabs">0</span>
-            </div>
-            <div class="tab-stat-divider"></div>
-            <div class="tab-stat-item total">
-                <span class="tab-stat-label">Total:</span>
-                <span class="tab-stat-value" id="tab-stat-total">0</span>
+    <!-- CONTADOR DE PESTAÑAS MEJORADO -->
+    <div class="tab-counter-container" id="tab-counter-container" title="Estadísticas de ventanas y pestañas">
+        <div class="tab-counter">
+            <span class="tab-counter-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
+                    viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round" class="lucide lucide-app-window-mac-icon lucide-app-window-mac">
+                    <rect width="20" height="16" x="2" y="4" rx="2" />
+                    <path d="M6 8h.01" />
+                    <path d="M10 8h.01" />
+                    <path d="M14 8h.01" />
+                </svg></span>
+            <div class="tab-counter-info">
+                <div class="tab-counter-item">
+                    <span class="tab-counter-label">Ventanas:</span>
+                    <span class="tab-counter-value" id="tab-counter-windows">0</span>
+                </div>
+                <div class="tab-counter-item">
+                    <span class="tab-counter-label">Pestañas:</span>
+                    <span class="tab-counter-value" id="tab-counter-tabs">0</span>
+                </div>
             </div>
         </div>
     </div>
-</div>
 
     <!-- ICONO DE NOTA MODERNO -->
     <div class="nota-icono-container" id="nota-icono">
         <div class="nota-icono">
-            <span class="nota-icono-emoji"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-text w-6 h-6" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"></path><path d="M14 2v4a2 2 0 0 0 2 2h4"></path><path d="M10 9H8"></path><path d="M16 13H8"></path><path d="M16 17H8"></path></svg></span>
+            <span class="nota-icono-emoji"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
+                    viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round" class="lucide lucide-file-text w-6 h-6" aria-hidden="true">
+                    <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"></path>
+                    <path d="M14 2v4a2 2 0 0 0 2 2h4"></path>
+                    <path d="M10 9H8"></path>
+                    <path d="M16 13H8"></path>
+                    <path d="M16 17H8"></path>
+                </svg></span>
         </div>
         <span class="nota-icono-tooltip">Notas rápidas (Ctrl+N)</span>
     </div>
@@ -140,7 +144,8 @@
                                 alt="Preview" id="preview-img" style="width:74%; height:74%; object-fit:contain;"
                                 loading="lazy">
                         </div>
-                        <span id="preview-nombre" style="display: block;text-align: center;margin-top: 10px;font-size: 1rem;font-weight: 400;color: white;min-height: 22px;min-height: 22px;pointer-events: none;white-space: nowrap;overflow: hidden;text-overflow: ellipsis;max-width: 140px;"></span>
+                        <span id="preview-nombre"
+                            style="display: block;text-align: center;margin-top: 10px;font-size: 1rem;font-weight: 400;color: white;min-height: 22px;min-height: 22px;pointer-events: none;white-space: nowrap;overflow: hidden;text-overflow: ellipsis;max-width: 140px;"></span>
                     </div>
 
                 </div>
@@ -159,11 +164,25 @@
                         <div
                             style="display: inline-flex;gap: 1.5rem;width: 100%;justify-content: space-between;margin-bottom: 2rem;">
                             <div class="control-grupo">
-                                <label><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-type w-3 h-3" aria-hidden="true"><path d="M12 4v16"></path><path d="M4 7V5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2"></path><path d="M9 20h6"></path></svg>Nombre del sitio</label>
+                                <label><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
+                                        viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                        stroke-linecap="round" stroke-linejoin="round"
+                                        class="lucide lucide-type w-3 h-3" aria-hidden="true">
+                                        <path d="M12 4v16"></path>
+                                        <path d="M4 7V5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2"></path>
+                                        <path d="M9 20h6"></path>
+                                    </svg>Nombre del sitio</label>
                                 <input type="text" id="nombre-sitio" placeholder="Ej: Google" class="control-input">
                             </div>
                             <div class="control-grupo">
-                                <label><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-globe w-3 h-3" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path><path d="M2 12h20"></path></svg>URL (Link)</label>
+                                <label><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
+                                        viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                        stroke-linecap="round" stroke-linejoin="round"
+                                        class="lucide lucide-globe w-3 h-3" aria-hidden="true">
+                                        <circle cx="12" cy="12" r="10"></circle>
+                                        <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path>
+                                        <path d="M2 12h20"></path>
+                                    </svg>URL (Link)</label>
                                 <input type="url" id="url-sitio" placeholder="https://ejemplo.com"
                                     class="control-input">
                             </div>
@@ -171,7 +190,18 @@
 
                         <div style="display: inline-flex;gap: 1.5rem;width: 100%;justify-content: space-between;">
                             <div class="control-grupo">
-                                <label><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-palette w-3 h-3" aria-hidden="true"><path d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z"></path><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"></circle><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"></circle><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"></circle><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"></circle></svg>Icono (URL o Subir imagen)</label>
+                                <label><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
+                                        viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                        stroke-linecap="round" stroke-linejoin="round"
+                                        class="lucide lucide-palette w-3 h-3" aria-hidden="true">
+                                        <path
+                                            d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z">
+                                        </path>
+                                        <circle cx="13.5" cy="6.5" r=".5" fill="currentColor"></circle>
+                                        <circle cx="17.5" cy="10.5" r=".5" fill="currentColor"></circle>
+                                        <circle cx="6.5" cy="12.5" r=".5" fill="currentColor"></circle>
+                                        <circle cx="8.5" cy="7.5" r=".5" fill="currentColor"></circle>
+                                    </svg>Icono (URL o Subir imagen)</label>
                                 <input type="url" id="icono-sitio" placeholder="https://ejemplo.com/icono.png"
                                     class="control-input">
                             </div>
@@ -208,7 +238,15 @@
                             style="display: inline-flex;gap: 1.5rem;width: 100%;justify-content: space-between;margin-bottom: 3rem;">
                             <div class="control-grupo">
                                 <div class="control-label">
-                                    <label id="barras_1"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-panels-top-left w-3 h-3" aria-hidden="true" style="color: #6d6d6d;"><rect width="18" height="18" x="3" y="3" rx="2"></rect><path d="M3 9h18"></path><path d="M9 21V9"></path></svg>Borde redondeado</label>
+                                    <label id="barras_1"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
+                                            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                            stroke-linecap="round" stroke-linejoin="round"
+                                            class="lucide lucide-panels-top-left w-3 h-3" aria-hidden="true"
+                                            style="color: #6d6d6d;">
+                                            <rect width="18" height="18" x="3" y="3" rx="2"></rect>
+                                            <path d="M3 9h18"></path>
+                                            <path d="M9 21V9"></path>
+                                        </svg>Borde redondeado</label>
                                     <span class="control-valor" id="radio-valor">50%</span>
                                 </div>
                                 <input type="range" id="radio-borde-icono" min="0" max="100" value="50"
@@ -217,7 +255,16 @@
                             </div>
                             <div class="control-grupo">
                                 <div class="control-label">
-                                    <label id="barras_1"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-maximize w-3 h-3" aria-hidden="true" style="color: #6d6d6d;"><path d="M8 3H5a2 2 0 0 0-2 2v3"></path><path d="M21 8V5a2 2 0 0 0-2-2h-3"></path><path d="M3 16v3a2 2 0 0 0 2 2h3"></path><path d="M16 21h3a2 2 0 0 0 2-2v-3"></path></svg>Tamaño del icono</label>
+                                    <label id="barras_1"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
+                                            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                            stroke-linecap="round" stroke-linejoin="round"
+                                            class="lucide lucide-maximize w-3 h-3" aria-hidden="true"
+                                            style="color: #6d6d6d;">
+                                            <path d="M8 3H5a2 2 0 0 0-2 2v3"></path>
+                                            <path d="M21 8V5a2 2 0 0 0-2-2h-3"></path>
+                                            <path d="M3 16v3a2 2 0 0 0 2 2h3"></path>
+                                            <path d="M16 21h3a2 2 0 0 0 2-2v-3"></path>
+                                        </svg>Tamaño del icono</label>
                                     <span class="control-valor" id="tamano-valor">74%</span>
                                 </div>
                                 <input type="range" id="tamano-icono" min="30" max="100" value="74"
@@ -268,7 +315,7 @@
                     </div>
                 </div>
 
-                               <div id="imagenes-predefinidas" style="display: none;">
+                <div id="imagenes-predefinidas" style="display: none;">
                     <h3>Imágenes predefinidas</h3>
                     <div class="opciones-fondo" id="opciones-imagenes">
                         <div class="opcion-fondo" data-tipo="imagen" data-url="img/backgrounds/img_background_1.jpg">
@@ -289,16 +336,49 @@
                     <div class="recursos-container">
                         <h4 class="recursos-titulo">Conseguir más imágenes:</h4>
                         <div class="recursos-enlaces">
-                            <a href="https://pixabay.com/es/images/search/fondos/?orientation=horizontal" target="_blank" class="recurso-enlace" rel="noopener noreferrer">Pixabay<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-external-link-icon lucide-external-link"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></a>
-                            <a href="https://unsplash.com/es" target="_blank" class="recurso-enlace" rel="noopener noreferrer">Unsplash<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-external-link-icon lucide-external-link"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></a>
-                            <a href="https://www.freepik.es/" target="_blank" class="recurso-enlace" rel="noopener noreferrer">Freepik<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-external-link-icon lucide-external-link"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></a>
-                            <a href="https://www.pexels.com/es-es/" target="_blank" class="recurso-enlace" rel="noopener noreferrer">Pexels<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-external-link-icon lucide-external-link"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></a>
+                            <a href="https://pixabay.com/es/images/search/fondos/?orientation=horizontal"
+                                target="_blank" class="recurso-enlace" rel="noopener noreferrer">Pixabay<svg
+                                    xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+                                    fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    class="lucide lucide-external-link-icon lucide-external-link">
+                                    <path d="M15 3h6v6" />
+                                    <path d="M10 14 21 3" />
+                                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                                </svg></a>
+                            <a href="https://unsplash.com/es" target="_blank" class="recurso-enlace"
+                                rel="noopener noreferrer">Unsplash<svg xmlns="http://www.w3.org/2000/svg" width="24"
+                                    height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                    stroke-linecap="round" stroke-linejoin="round"
+                                    class="lucide lucide-external-link-icon lucide-external-link">
+                                    <path d="M15 3h6v6" />
+                                    <path d="M10 14 21 3" />
+                                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                                </svg></a>
+                            <a href="https://www.freepik.es/" target="_blank" class="recurso-enlace"
+                                rel="noopener noreferrer">Freepik<svg xmlns="http://www.w3.org/2000/svg" width="24"
+                                    height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                    stroke-linecap="round" stroke-linejoin="round"
+                                    class="lucide lucide-external-link-icon lucide-external-link">
+                                    <path d="M15 3h6v6" />
+                                    <path d="M10 14 21 3" />
+                                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                                </svg></a>
+                            <a href="https://www.pexels.com/es-es/" target="_blank" class="recurso-enlace"
+                                rel="noopener noreferrer">Pexels<svg xmlns="http://www.w3.org/2000/svg" width="24"
+                                    height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                    stroke-linecap="round" stroke-linejoin="round"
+                                    class="lucide lucide-external-link-icon lucide-external-link">
+                                    <path d="M15 3h6v6" />
+                                    <path d="M10 14 21 3" />
+                                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                                </svg></a>
                         </div>
                     </div>
                     <!-- ===== FIN NUEVA SECCIÓN ===== -->
                 </div>
 
-                               <div id="videos-predefinidos" style="display: none;">
+                <div id="videos-predefinidos" style="display: none;">
                     <h3>Videos predefinidos</h3>
                     <div class="opciones-fondo" id="opciones-videos">
                         <div class="opcion-fondo" data-tipo="video" data-url="img/backgrounds/vid_background_1.mp4">
@@ -319,17 +399,56 @@
                     <div class="recursos-container">
                         <h4 class="recursos-titulo">Conseguir más videos:</h4>
                         <div class="recursos-enlaces">
-                            <a href="https://pixabay.com/es/videos/search/fondos/?orientation=horizontal" target="_blank" class="recurso-enlace" rel="noopener noreferrer">Pixabay<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-external-link-icon lucide-external-link"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></a>
-                            <a href="https://www.videvo.net/" target="_blank" class="recurso-enlace" rel="noopener noreferrer">Videvo<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-external-link-icon lucide-external-link"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></a>
-                            <a href="https://coverr.co/" target="_blank" class="recurso-enlace" rel="noopener noreferrer">Coverr<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-external-link-icon lucide-external-link"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></a>
-                            <a href="https://mixkit.co/" target="_blank" class="recurso-enlace" rel="noopener noreferrer">Mixkit<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-external-link-icon lucide-external-link"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></a>
+                            <a href="https://pixabay.com/es/videos/search/fondos/?orientation=horizontal"
+                                target="_blank" class="recurso-enlace" rel="noopener noreferrer">Pixabay<svg
+                                    xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+                                    fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    class="lucide lucide-external-link-icon lucide-external-link">
+                                    <path d="M15 3h6v6" />
+                                    <path d="M10 14 21 3" />
+                                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                                </svg></a>
+                            <a href="https://www.videvo.net/" target="_blank" class="recurso-enlace"
+                                rel="noopener noreferrer">Videvo<svg xmlns="http://www.w3.org/2000/svg" width="24"
+                                    height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                    stroke-linecap="round" stroke-linejoin="round"
+                                    class="lucide lucide-external-link-icon lucide-external-link">
+                                    <path d="M15 3h6v6" />
+                                    <path d="M10 14 21 3" />
+                                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                                </svg></a>
+                            <a href="https://coverr.co/" target="_blank" class="recurso-enlace"
+                                rel="noopener noreferrer">Coverr<svg xmlns="http://www.w3.org/2000/svg" width="24"
+                                    height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                    stroke-linecap="round" stroke-linejoin="round"
+                                    class="lucide lucide-external-link-icon lucide-external-link">
+                                    <path d="M15 3h6v6" />
+                                    <path d="M10 14 21 3" />
+                                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                                </svg></a>
+                            <a href="https://mixkit.co/" target="_blank" class="recurso-enlace"
+                                rel="noopener noreferrer">Mixkit<svg xmlns="http://www.w3.org/2000/svg" width="24"
+                                    height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                    stroke-linecap="round" stroke-linejoin="round"
+                                    class="lucide lucide-external-link-icon lucide-external-link">
+                                    <path d="M15 3h6v6" />
+                                    <path d="M10 14 21 3" />
+                                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                                </svg></a>
                         </div>
                     </div>
                     <!-- ===== FIN NUEVA SECCIÓN ===== -->
                 </div>
 
                 <div class="personalizar-input-group" style="display: inline-flex;flex-direction: column;width: 100%;">
-                    <label><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-globe w-3 h-3" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path><path d="M2 12h20"></path></svg>URL personalizada (opcional):</label>
+                    <label><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+                            fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                            stroke-linejoin="round" class="lucide lucide-globe w-3 h-3" aria-hidden="true">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path>
+                            <path d="M2 12h20"></path>
+                        </svg>URL personalizada (opcional):</label>
                     <input type="url" id="fondo-url-input" placeholder="https://ejemplo.com/imagen.jpg o video.mp4"
                         class="control-input">
                 </div>
@@ -345,10 +464,24 @@
                     </div>
                 </div>
 
-                <div style="display: inline-flex;flex-direction: row;justify-content: center;gap: 1rem;width: 100%;margin-top: 1rem;">
+                <div
+                    style="display: inline-flex;flex-direction: row;justify-content: center;gap: 1rem;width: 100%;margin-top: 1rem;">
                     <div class="range-group" style="width: 100%;">
                         <div class="range-header">
-                            <label for="fondo-opacidad"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-sliders-vertical w-3 h-3" aria-hidden="true"><path d="M10 8h4"></path><path d="M12 21v-9"></path><path d="M12 8V3"></path><path d="M17 16h4"></path><path d="M19 12V3"></path><path d="M19 21v-5"></path><path d="M3 14h4"></path><path d="M5 10V3"></path><path d="M5 21v-7"></path></svg>Oscurecer</label>
+                            <label for="fondo-opacidad"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
+                                    viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                    stroke-linecap="round" stroke-linejoin="round"
+                                    class="lucide lucide-sliders-vertical w-3 h-3" aria-hidden="true">
+                                    <path d="M10 8h4"></path>
+                                    <path d="M12 21v-9"></path>
+                                    <path d="M12 8V3"></path>
+                                    <path d="M17 16h4"></path>
+                                    <path d="M19 12V3"></path>
+                                    <path d="M19 21v-5"></path>
+                                    <path d="M3 14h4"></path>
+                                    <path d="M5 10V3"></path>
+                                    <path d="M5 21v-7"></path>
+                                </svg>Oscurecer</label>
                             <span class="range-value" id="opacidad-valor">20%</span>
                         </div>
                         <input type="range" id="fondo-opacidad" min="0" max="100" value="20" class="control-range">
@@ -360,7 +493,20 @@
 
                     <div class="range-group" style="width: 100%;">
                         <div class="range-header">
-                            <label for="fondo-desenfoque"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-sliders-vertical w-3 h-3" aria-hidden="true"><path d="M10 8h4"></path><path d="M12 21v-9"></path><path d="M12 8V3"></path><path d="M17 16h4"></path><path d="M19 12V3"></path><path d="M19 21v-5"></path><path d="M3 14h4"></path><path d="M5 10V3"></path><path d="M5 21v-7"></path></svg>Desenfocar</label>
+                            <label for="fondo-desenfoque"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
+                                    viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                    stroke-linecap="round" stroke-linejoin="round"
+                                    class="lucide lucide-sliders-vertical w-3 h-3" aria-hidden="true">
+                                    <path d="M10 8h4"></path>
+                                    <path d="M12 21v-9"></path>
+                                    <path d="M12 8V3"></path>
+                                    <path d="M17 16h4"></path>
+                                    <path d="M19 12V3"></path>
+                                    <path d="M19 21v-5"></path>
+                                    <path d="M3 14h4"></path>
+                                    <path d="M5 10V3"></path>
+                                    <path d="M5 21v-7"></path>
+                                </svg>Desenfocar</label>
                             <span class="range-value" id="desenfoque-valor">0px</span>
                         </div>
                         <input type="range" id="fondo-desenfoque" min="0" max="20" value="0" step="1"
@@ -411,23 +557,74 @@
             <div class="caja-busqueda">
                 <input type="text" id="barra-busqueda" placeholder="Buscar en la web...">
                 <div class="iconos-busqueda">
+
                     <button class="icono-busqueda" id="btn-limpiar" title="Limpiar">
-                        <img src="./img/icons/x_1.png" alt="Limpiar" loading="lazy">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                            class="lucide lucide-x-icon lucide-x">
+                            <path d="M18 6 6 18" />
+                            <path d="m6 6 12 12" />
+                        </svg>
                     </button>
-                    <button class="icono-busqueda" id="btn-microfono" title="Búsqueda por voz">
-                        <img src="./img/icons/microfono_1.png" alt="Micrófono" loading="lazy">
-                    </button>
+
                     <button class="icono-busqueda" id="btn-buscar" title="Buscar">
-                        <img src="./img/icons/lupa_1.png" alt="Buscar" loading="lazy">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                            class="lucide lucide-search-icon lucide-search">
+                            <path d="m21 21-4.34-4.34" />
+                            <circle cx="11" cy="11" r="8" />
+                        </svg>
                     </button>
+
+                    <button class="icono-busqueda" id="btn-microfono" title="Búsqueda por voz">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                            class="lucide lucide-mic-icon lucide-mic">
+                            <path d="M12 19v3" />
+                            <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                            <rect x="9" y="2" width="6" height="13" rx="3" />
+                        </svg>
+                    </button>
+
+                    <a class="ai-btn" href="https://www.google.com/search?q=&sca_esv=0ff7534cf1487ec7&sxsrf=ANbL-n7QLnqMFuHQoaorki77FmSn1g-iJQ%3A1772853762974&source=hp&ei=ApqraZKyOMna0PEP2f-2qAk&iflsig=AFdpzrgAAAAAaauoEqHo63e-nSUuW7rMeCsdcK_Yzclf&aep=22&udm=50&ved=0ahUKEwiSu5z26oyTAxVJLTQIHdm_DZUQteYPCBc&oq=&gs_lp=Egdnd3Mtd2l6GgIYASIAMgcQIxgnGOoCMgcQIxgnGOoCMg0QIxjwBRgnGMkCGOoCMgoQIxgnGOoCGIsDMgoQIxgnGOoCGIsDMgcQIxgnGOoCMg0QIxjwBRgnGOoCGJ4GMgcQIxgnGOoCMgoQIxgnGOoCGIsDMg0QIxjwBRgnGMkCGOoCSL3UE1AAWABwAXgAkAEAmAEAoAEAqgEAuAEByAEAmAIBoAIIqAIKmAMI8QUTkenxLLzreJIHATGgBwCyBwC4BwDCBwMyLTHIBwaACAA&sclient=gws-wiz">✨ Modo AI</a>
                 </div>
             </div>
 
             <div class="filtros-busqueda">
-                <div class="filtro-item activo" data-filtro="web"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-globe w-4 h-4" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path><path d="M2 12h20"></path></svg>Web</div>
-                <div class="filtro-item" data-filtro="imagenes"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image w-4 h-4" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"></rect><circle cx="9" cy="9" r="2"></circle><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"></path></svg>Imágenes</div>
-                <div class="filtro-item" data-filtro="video"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-video w-4 h-4" aria-hidden="true"><path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5"></path><rect x="2" y="6" width="14" height="12" rx="2"></rect></svg>Videos</div>
-                <div class="filtro-item" data-filtro="noticias"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-newspaper w-4 h-4" aria-hidden="true"><path d="M15 18h-5"></path><path d="M18 14h-8"></path><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-4 0v-9a2 2 0 0 1 2-2h2"></path><rect width="8" height="4" x="10" y="6" rx="1"></rect></svg>Noticias</div>
+                <div class="filtro-item activo" data-filtro="web"><svg xmlns="http://www.w3.org/2000/svg" width="24"
+                        height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-globe w-4 h-4"
+                        aria-hidden="true">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path>
+                        <path d="M2 12h20"></path>
+                    </svg>Web</div>
+                <div class="filtro-item" data-filtro="imagenes"><svg xmlns="http://www.w3.org/2000/svg" width="24"
+                        height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image w-4 h-4"
+                        aria-hidden="true">
+                        <rect width="18" height="18" x="3" y="3" rx="2" ry="2"></rect>
+                        <circle cx="9" cy="9" r="2"></circle>
+                        <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"></path>
+                    </svg>Imágenes</div>
+                <div class="filtro-item" data-filtro="video"><svg xmlns="http://www.w3.org/2000/svg" width="24"
+                        height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-video w-4 h-4"
+                        aria-hidden="true">
+                        <path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5"></path>
+                        <rect x="2" y="6" width="14" height="12" rx="2"></rect>
+                    </svg>Videos</div>
+                <div class="filtro-item" data-filtro="noticias"><svg xmlns="http://www.w3.org/2000/svg" width="24"
+                        height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-newspaper w-4 h-4"
+                        aria-hidden="true">
+                        <path d="M15 18h-5"></path>
+                        <path d="M18 14h-8"></path>
+                        <path
+                            d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-4 0v-9a2 2 0 0 1 2-2h2">
+                        </path>
+                        <rect width="8" height="4" x="10" y="6" rx="1"></rect>
+                    </svg>Noticias</div>
             </div>
         </div>
 
@@ -441,11 +638,27 @@
     </div>
 
     <div class="agregar-icono">
-        <button id="btn-agregar" title="Agregar acceso directo">+</button>
+        <button id="btn-agregar" title="Agregar acceso directo"><svg xmlns="http://www.w3.org/2000/svg" width="24"
+                height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round"
+                class="lucide lucide-plus w-8 h-8 text-white/20 group-hover:text-white/60" aria-hidden="true">
+                <path d="M5 12h14"></path>
+                <path d="M12 5v14"></path>
+            </svg></button>
     </div>
 
     <button id="btn-personalizar" class="btn-personalizar" title="Personalizar fondo">
-        <span class="btn-personalizar-icono">🎨</span>
+        <span class="btn-personalizar-icono"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
+                viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round" class="lucide lucide-palette w-6 h-6" aria-hidden="true">
+                <path
+                    d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z">
+                </path>
+                <circle cx="13.5" cy="6.5" r=".5" fill="currentColor"></circle>
+                <circle cx="17.5" cy="10.5" r=".5" fill="currentColor"></circle>
+                <circle cx="6.5" cy="12.5" r=".5" fill="currentColor"></circle>
+                <circle cx="8.5" cy="7.5" r=".5" fill="currentColor"></circle>
+            </svg></span>
     </button>
 </body>
 

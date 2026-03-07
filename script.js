@@ -344,6 +344,12 @@ function cerrarSesion() {
         unsubscribeCategories = null;
     }
     
+    // Cancelar listener de notas
+    if (window.unsubscribeNotas) {
+        window.unsubscribeNotas();
+        window.unsubscribeNotas = null;
+    }
+    
     localStorage.removeItem('starTab_lastUser');
     localStorage.removeItem('starTab_auth_data');
     
@@ -1417,7 +1423,7 @@ async function renderizarIconos(ignorarCache = false) {
             const boxShadow = estilos.tieneFondo ? '0 4px 15px rgba(0,0,0,0.2)' : 'none';
 
             return `
-                <a href="${icono.url}" class="icono-item" target="_blank" data-index="${index}" style="animation: aparecerIcono 0.3s cubic-bezier(0.2, 0, 0, 1) ${index * 0.03}s both">
+                    <a href="${icono.url}" class="icono-item" target="_self" data-index="${index}" style="animation: aparecerIcono 0.3s cubic-bezier(0.2, 0, 0, 1) ${index * 0.03}s both">
                     <div class="icono-contenedor">
                         <img src="${icono.icono}" alt="${icono.nombre}" loading="lazy">
                     </div>
@@ -1458,7 +1464,7 @@ function cargarIconosRapidos(sinAnimacion = false) {
         
         const nuevoHTML = iconosDefault.map((icono, index) => {
             return `
-                <a href="${icono.url}" class="icono-item" target="_blank" data-index="${index}"
+                <a href="${icono.url}" class="icono-item" target="_self" data-index="${index}"
                    style="${estiloAnimacion} animation-delay: ${index * 0.05}s">
                     <div class="icono-contenedor">
                         <img src="${icono.icono}" alt="${icono.nombre}" loading="lazy">
@@ -1837,6 +1843,39 @@ function inicializarBarraBusqueda() {
     inicializarReconocimientoVoz();
 }
 
+// NUEVA FUNCIÓN: Inicializar doble clic en buscadores
+function inicializarDobleClickBuscadores() {
+    const circulosBuscadores = document.querySelectorAll('.circulo-buscador');
+    
+    circulosBuscadores.forEach(circulo => {
+        circulo.addEventListener('dblclick', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const buscador = circulo.dataset.buscador;
+            let urlPaginaPrincipal = '';
+            
+            // Definir la URL principal de cada buscador
+            switch(buscador) {
+                case 'google':
+                    urlPaginaPrincipal = 'https://www.google.com';
+                    break;
+                case 'bing':
+                    urlPaginaPrincipal = 'https://www.bing.com';
+                    break;
+                case 'duckduckgo':
+                    urlPaginaPrincipal = 'https://duckduckgo.com';
+                    break;
+                default:
+                    return;
+            }
+            
+            // Abrir en una nueva pestaña
+            window.open(urlPaginaPrincipal, '_self');
+        });
+    });
+}
+
 function actualizarBuscadorUI() {
     document.querySelectorAll('.circulo-buscador').forEach(c => {
         c.classList.toggle('activo', c.dataset.buscador === estado.buscadorActual);
@@ -2090,12 +2129,26 @@ function abrirModalEdicion(index, icono) {
         colorValor: document.getElementById('color-valor')
     };
 
+    // Resetear el campo de archivo primero
+    const fileInput = document.getElementById('icono-file');
+    const fileName = document.getElementById('file-name');
+    const fileText = document.querySelector('.file-text');
+    
+    if (fileInput) fileInput.value = '';
+    if (fileName) fileName.textContent = '';
+    document.querySelector('.file-label')?.classList.remove('seleccionado');
+    if (fileText) fileText.textContent = '+';
+
     const estilos = { ...ESTILOS_DEFAULT, ...(icono.estilos || {}) };
 
     elementos.titulo.textContent = 'Editar acceso directo';
     elementos.nombre.value = icono.nombre || '';
     elementos.url.value = icono.url || '';
+    
+    // FORZAR la actualización del campo de icono y la vista previa
     elementos.icono.value = icono.icono || '';
+    elementos.previewImg.src = icono.icono || './img/icons/interrogacion.png';
+    
     elementos.tieneFondo.checked = estilos.tieneFondo || false;
     elementos.colorFondo.value = estilos.colorFondo || '#667eea';
     if (elementos.colorValor) elementos.colorValor.textContent = estilos.colorFondo || '#667eea';
@@ -2105,6 +2158,13 @@ function abrirModalEdicion(index, icono) {
     elementos.tamanoValor.textContent = `${elementos.tamanoIcono.value}%`;
     elementos.colorFondoContainer.style.display = elementos.tieneFondo.checked ? 'flex' : 'none';
 
+    // Actualizar el nombre en la vista previa
+    const previewNombre = document.getElementById('preview-nombre');
+    if (previewNombre) {
+        previewNombre.textContent = icono.nombre || '';
+    }
+
+    // Forzar la actualización de la vista previa
     actualizarPreviewDesdeModal(elementos);
     
     modal.classList.add('modal-abierto');
@@ -2139,8 +2199,17 @@ function resetearModalIconos(elementos) {
     document.querySelector('.file-label')?.classList.remove('seleccionado');
     if (fileText) fileText.textContent = '+';
     
-    Object.assign(elementos.previewIcono.style, { backgroundColor: 'transparent', borderRadius: '12%', boxShadow: 'none' });
-    Object.assign(elementos.previewImg.style, { width: '74%', height: '74%' });
+    Object.assign(elementos.previewIcono.style, { 
+        backgroundColor: 'transparent', 
+        borderRadius: '12%', 
+        boxShadow: 'none' 
+    });
+    Object.assign(elementos.previewImg.style, { 
+        width: '74%', 
+        height: '74%' 
+    });
+    
+    // Usar la imagen de interrogación por defecto
     elementos.previewImg.src = './img/icons/interrogacion.png';
 }
 
@@ -2434,11 +2503,21 @@ function inicializarNota() {
         if (e.target === notaDOM.modal) cerrarModalNota(notaDOM);
     });
 
+    // Variable para controlar si el cambio viene de Firebase
+    let ignorarSiguienteCambio = false;
+
     notaDOM.textarea?.addEventListener('input', (e) => {
+        if (ignorarSiguienteCambio) return;
+        
         const texto = e.target.value;
         actualizarContadorCaracteres(texto, notaDOM);
         
-        if (estado.isAuthenticated) {
+        if (estado.isAuthenticated && currentUser && db) {
+            // Cambiar ícono a "sincronizando"
+            notaDOM.syncIcon.style.animation = 'girar 1s infinite linear';
+            notaDOM.syncText.textContent = 'Guardando...';
+            
+            // Guardar en tiempo real
             guardarNotaEnTiempoReal(notaEstado.notaActual, texto, notaDOM);
         } else {
             notaEstado.notas[notaEstado.notaActual].contenido = texto;
@@ -2466,6 +2545,70 @@ function inicializarNota() {
             cerrarModalNota(notaDOM);
         }
     });
+
+    // Inicializar listener de tiempo real para notas
+    if (estado.isAuthenticated && currentUser && db) {
+        iniciarListenerNotas(notaDOM);
+    }
+}
+
+// ===== FUNCIÓN NUEVA: Listener en tiempo real para notas =====
+function iniciarListenerNotas(notaDOM) {
+    if (!currentUser || !userDocRef || !db) return;
+
+    // Variable para evitar bucles
+    let ignorarSiguienteCambio = false;
+
+    // Escuchar cambios en el documento del usuario
+    const unsubscribe = userDocRef.onSnapshot((doc) => {
+        if (!doc.exists) return;
+        
+        const data = doc.data();
+        if (!data || !data.notas) return;
+
+        // Verificar si hay cambios en las notas
+        const notasFirebase = data.notas;
+        let hayCambios = false;
+
+        for (let i = 1; i <= 5; i++) {
+            const notaFirebase = notasFirebase[`nota${i}`];
+            if (notaFirebase !== undefined && notaFirebase !== notaEstado.notas[i].contenido) {
+                notaEstado.notas[i].contenido = notaFirebase;
+                hayCambios = true;
+            }
+        }
+
+        // Si hay cambios y la nota actual es la que se modificó, actualizar el textarea
+        if (hayCambios) {
+            ignorarSiguienteCambio = true;
+            
+            // Actualizar la nota actual si está abierta
+            if (notaDOM.modal?.classList.contains('nota-modal-abierto')) {
+                const notaActual = notaEstado.notaActual;
+                const contenidoFirebase = notasFirebase[`nota${notaActual}`];
+                
+                if (contenidoFirebase !== undefined && 
+                    contenidoFirebase !== notaDOM.textarea.value) {
+                    notaDOM.textarea.value = contenidoFirebase;
+                    actualizarContadorCaracteres(contenidoFirebase, notaDOM);
+                }
+            }
+            
+            // Mostrar indicador de sincronización
+            notaDOM.syncIcon.style.animation = 'none';
+            notaDOM.syncIcon.style.transform = 'scale(1)';
+            notaDOM.syncText.textContent = 'Sincronizado';
+            
+            setTimeout(() => {
+                ignorarSiguienteCambio = false;
+            }, 100);
+        }
+    }, (error) => {
+        console.error('Error en listener de notas:', error);
+    });
+
+    // Guardar la función para poder cancelarla al cerrar sesión
+    window.unsubscribeNotas = unsubscribe;
 }
 
 function cargarNotasIniciales(notaDOM) {
@@ -2495,6 +2638,12 @@ async function cargarNotasDeFirebase(notaDOM) {
             }
             cargarNota(notaEstado.notaActual, notaDOM);
         }
+        
+        // Iniciar listener de tiempo real después de cargar los datos iniciales
+        if (!window.unsubscribeNotas) {
+            iniciarListenerNotas(notaDOM);
+        }
+        
     } catch (error) {
         console.error('Error al cargar notas:', error);
     }
@@ -2522,11 +2671,26 @@ function guardarNotaEnTiempoReal(notaNum, texto, notaDOM) {
             const updateData = {};
             updateData[`notas.nota${notaNum}`] = texto;
             updateData['metadata.ultimaModificacion'] = firebase.firestore.FieldValue.serverTimestamp();
+            
             await userDocRef.set(updateData, { merge: true });
+            
+            // Actualizar ícono de sincronización
+            notaDOM.syncIcon.style.animation = 'none';
+            notaDOM.syncIcon.style.transform = 'scale(1)';
+            notaDOM.syncText.textContent = 'Sincronizado';
+            
         } catch (error) {
             console.error('Error al guardar nota:', error);
+            notaDOM.syncIcon.style.animation = 'none';
+            notaDOM.syncIcon.innerHTML = '⚠️';
+            notaDOM.syncText.textContent = 'Error al guardar';
+            
+            setTimeout(() => {
+                notaDOM.syncIcon.innerHTML = '🔄';
+                notaDOM.syncText.textContent = 'Sincronizado';
+            }, 3000);
         }
-    }, 1000);
+    }, 500); // Reducido a 500ms para mejor feedback
 }
 
 function actualizarContadorCaracteres(texto, notaDOM) {
@@ -2609,6 +2773,7 @@ document.addEventListener('DOMContentLoaded', () => {
     cachearElementos();
     
     inicializarBarraBusqueda();
+    inicializarDobleClickBuscadores(); // NUEVA FUNCIÓN AGREGADA AQUÍ
     inicializarAutenticacion();
     inicializarNota();
     
@@ -2645,6 +2810,26 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('Conexión restaurada, sincronizando...');
         if (currentUser && currentUser.uid && estado.firebaseInicializado) {
             cargarCategoriasUsuario(currentUser.uid);
+            
+            // Reiniciar listener de notas
+            if (window.unsubscribeNotas) {
+                window.unsubscribeNotas();
+                window.unsubscribeNotas = null;
+            }
+            
+            const notaDOM = {
+                icono: document.getElementById('nota-icono'),
+                modal: document.getElementById('nota-modal'),
+                cerrar: document.getElementById('nota-modal-cerrar'),
+                textarea: document.getElementById('nota-textarea'),
+                charCount: document.getElementById('nota-char-count'),
+                syncIcon: document.getElementById('nota-sync-icon'),
+                syncText: document.getElementById('nota-sync-text'),
+                copiarBtn: document.getElementById('nota-btn-copiar'),
+                notaBtns: document.querySelectorAll('.nota-btn-numero')
+            };
+            
+            iniciarListenerNotas(notaDOM);
         }
     });
 
