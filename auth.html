@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -17,12 +18,12 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #090d1c 0%, #210c29 100%);
             padding: 20px;
         }
 
         .auth-card {
-            background: rgba(255, 255, 255, 0.95);
+            background: rgb(167 167 167 / 12%);
             backdrop-filter: blur(10px);
             border-radius: 24px;
             padding: 48px 40px;
@@ -31,6 +32,8 @@
             box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
             text-align: center;
             animation: slideUp 0.6s ease;
+            box-shadow: rgba(94, 94, 94, 0.44) 0px 0px 0px 1px;
+            background: rgb(37 37 37 / 27%);
         }
 
         @keyframes slideUp {
@@ -38,6 +41,7 @@
                 opacity: 0;
                 transform: translateY(20px);
             }
+
             to {
                 opacity: 1;
                 transform: translateY(0);
@@ -47,26 +51,27 @@
         .logo {
             width: 80px;
             height: 80px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            /* background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); */
             border-radius: 20px;
             display: flex;
             align-items: center;
             justify-content: center;
-            margin: 0 auto 24px;
+            margin: 0 auto 4px;
             font-size: 40px;
             color: white;
-            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+            /* background: black; */
+            /* box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4); */
         }
 
         h1 {
             font-size: 28px;
-            color: #1a1a1a;
+            color: #e5e5e5;
             margin-bottom: 8px;
             font-weight: 600;
         }
 
         .subtitle {
-            color: #666;
+            color: #b5b5b5;
             margin-bottom: 32px;
             font-size: 16px;
         }
@@ -131,8 +136,13 @@
         }
 
         @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
         }
 
         .btn-content {
@@ -143,12 +153,12 @@
         }
 
         .info-box {
-            background: #f8fafc;
+            background: #00000024;
             border-radius: 12px;
             padding: 16px;
             font-size: 13px;
-            color: #64748b;
-            border: 1px solid #e2e8f0;
+            color: #bbbbbb;
+            border: 1px solid #ffffff3d;
             margin-top: 16px;
         }
 
@@ -163,9 +173,10 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
 </head>
+
 <body>
     <div class="auth-card">
-        <div class="logo">⭐</div>
+        <div class="logo"><img src="./img/icons/startab_3.2.svg" style="height: 68px;"></div>
         <h1>StarTab</h1>
         <p class="subtitle">Inicia sesión para sincronizar tus accesos directos y notas</p>
 
@@ -182,7 +193,7 @@
                 Tus datos se sincronizarán automáticamente con la extensión StarTab.
                 Una vez autenticado, vuelve a la extensión y recarga la página.
             </p>
-            <p style="margin-top: 12px;">
+            <p style="margin-top: 12px;display: none;">
                 <code>✨ Listo en segundos</code>
             </p>
         </div>
@@ -190,4 +201,5 @@
 
     <script src="auth.js"></script>
 </body>
+
 </html>
