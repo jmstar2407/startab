@@ -1,4 +1,5 @@
-// Configuración de Firebase (la misma que en la extensión)
+// auth.js - Para GitHub Pages
+// Configuración de Firebase
 const firebaseConfig = {
     apiKey: "AIzaSyBU8DyN2kRcDq0fxB20qRUXWBHV0E-0d6A",
     authDomain: "startab-44e48.firebaseapp.com",
@@ -13,6 +14,13 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const provider = new firebase.auth.GoogleAuthProvider();
 
+// Configurar proveedor
+provider.addScope('profile');
+provider.addScope('email');
+provider.setCustomParameters({
+    prompt: 'select_account'
+});
+
 // Elementos DOM
 const googleBtn = document.getElementById('googleSignIn');
 const statusDiv = document.getElementById('status');
@@ -24,85 +32,33 @@ function showStatus(message, type = 'info') {
     statusDiv.style.display = 'block';
 }
 
-// Función para enviar token a la extensión
-async function sendTokenToExtension(user) {
+// Función para enviar datos a la extensión
+function sendToExtension(userData) {
+    // Método 1: PostMessage (si la extensión abrió esta ventana)
+    if (window.opener && !window.opener.closed) {
+        try {
+            window.opener.postMessage({
+                type: 'STAR_TAB_AUTH_SUCCESS',
+                user: userData
+            }, '*');
+            return true;
+        } catch (e) {
+            console.log('Error en postMessage:', e);
+        }
+    }
+    
+    // Método 2: Guardar en localStorage (la extensión hará polling)
     try {
-        // Obtener token de Firebase
-        const token = await user.getIdToken();
-        
-        // Datos completos del usuario
-        const userData = {
-            uid: user.uid,
-            email: user.email,
-            displayName: user.displayName,
-            photoURL: user.photoURL,
-            token: token,
-            timestamp: Date.now()
-        };
-
-        // Intentar enviar a la extensión (si está abierta)
-        // Usamos window.opener para comunicación entre pestañas
-        if (window.opener && !window.opener.closed) {
-            try {
-                window.opener.postMessage({
-                    type: 'STAR_TAB_AUTH_SUCCESS',
-                    user: userData
-                }, '*'); // En producción, especifica tu origen
-                
-                showStatus('✅ ¡Autenticación exitosa! Puedes cerrar esta ventana.', 'success');
-                
-                // Auto-cerrar después de 3 segundos
-                setTimeout(() => {
-                    window.close();
-                }, 3000);
-                
-                return;
-            } catch (e) {
-                console.log('No se pudo comunicar con la ventana padre');
-            }
-        }
-
-        // Si no hay opener, usar chrome.runtime si estamos en extensión
-        if (window.chrome?.runtime?.id) {
-            try {
-                chrome.runtime.sendMessage({
-                    type: 'AUTH_TOKEN',
-                    user: userData
-                });
-                
-                showStatus('✅ Token enviado a la extensión', 'success');
-                return;
-            } catch (e) {
-                console.log('No se pudo enviar mensaje a la extensión');
-            }
-        }
-
-        // Si llegamos aquí, mostrar código para copiar manualmente
-        showStatus(`
-            ✅ Autenticación exitosa!
-            
-            Copia este código y pégalo en la extensión:
-            ${token.substring(0, 20)}...${token.substring(token.length - 20)}
-            
-            O simplemente recarga la extensión.
-        `, 'success');
-        
-        // Guardar en localStorage como respaldo
-        localStorage.setItem('starTab_lastAuth', JSON.stringify({
-            user: {
-                uid: user.uid,
-                email: user.email,
-                displayName: user.displayName,
-                photoURL: user.photoURL
-            },
-            token: token,
+        localStorage.setItem('starTab_auth_data', JSON.stringify({
+            ...userData,
             timestamp: Date.now()
         }));
-        
-    } catch (error) {
-        console.error('Error al obtener token:', error);
-        showStatus('Error al procesar autenticación', 'error');
+        return true;
+    } catch (e) {
+        console.log('Error en localStorage:', e);
     }
+    
+    return false;
 }
 
 // Manejar clic en botón de Google
@@ -117,7 +73,30 @@ googleBtn.addEventListener('click', async () => {
         const user = result.user;
         
         console.log('Usuario autenticado:', user.email);
-        await sendTokenToExtension(user);
+        
+        // Obtener token
+        const token = await user.getIdToken();
+        
+        // Datos del usuario
+        const userData = {
+            uid: user.uid,
+            email: user.email,
+            displayName: user.displayName,
+            photoURL: user.photoURL,
+            token: token,
+            emailVerified: user.emailVerified,
+            timestamp: Date.now()
+        };
+
+        // Enviar a la extensión
+        const sent = sendToExtension(userData);
+        
+        if (sent) {
+            showStatus('✅ ¡Autenticación exitosa! Puedes cerrar esta ventana.', 'success');
+            setTimeout(() => window.close(), 2000);
+        } else {
+            showStatus('✅ Autenticación exitosa! Vuelve a la extensión y recarga.', 'success');
+        }
         
     } catch (error) {
         console.error('Error de autenticación:', error);
@@ -143,8 +122,17 @@ googleBtn.addEventListener('click', async () => {
 // Comprobar si hay sesión activa al cargar
 auth.onAuthStateChanged(async (user) => {
     if (user) {
-        showStatus('Sesión activa - enviando token...', 'info');
-        await sendTokenToExtension(user);
+        showStatus('Sesión activa - enviando datos...', 'info');
+        const token = await user.getIdToken();
+        sendToExtension({
+            uid: user.uid,
+            email: user.email,
+            displayName: user.displayName,
+            photoURL: user.photoURL,
+            token: token,
+            emailVerified: user.emailVerified,
+            timestamp: Date.now()
+        });
     }
 });
 
@@ -156,23 +144,15 @@ window.addEventListener('message', (event) => {
             user.getIdToken().then(token => {
                 event.source.postMessage({
                     type: 'STAR_TAB_TOKEN_RESPONSE',
-                    token: token,
                     user: {
                         uid: user.uid,
                         email: user.email,
                         displayName: user.displayName,
-                        photoURL: user.photoURL
+                        photoURL: user.photoURL,
+                        token: token
                     }
                 }, event.origin);
             });
         }
     }
 });
-
-// Auto-cerrar si viene de la extensión y ya estaba autenticado
-if (window.opener && !window.opener.closed) {
-    const user = auth.currentUser;
-    if (user) {
-        sendTokenToExtension(user);
-    }
-}

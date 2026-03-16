@@ -59,7 +59,7 @@ const FONDO_DEFAULT = {
 const CATEGORIA_GENERAL = {
     id: 'general',
     nombre: 'General',
-    editable: true, // Cambiado de false a true
+    editable: true,
     orden: 1,
     background: { ...FONDO_DEFAULT }
 };
@@ -344,12 +344,6 @@ function cerrarSesion() {
         unsubscribeCategories = null;
     }
     
-    // Cancelar listener de notas
-    if (window.unsubscribeNotas) {
-        window.unsubscribeNotas();
-        window.unsubscribeNotas = null;
-    }
-    
     localStorage.removeItem('starTab_lastUser');
     localStorage.removeItem('starTab_auth_data');
     
@@ -497,7 +491,7 @@ async function crearCategoriaGeneralEnFirebase() {
         const categoriaRef = userDocRef.collection('categorias').doc('general');
         await categoriaRef.set({
             nombre: 'General',
-            editable: true, // Cambiado de false a true
+            editable: true,
             orden: 1,
             background: { ...FONDO_DEFAULT },
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -539,7 +533,7 @@ function inicializarAutenticacion() {
         DOM.logoutBtn.addEventListener('click', cerrarSesion);
     }
 
-    // NUEVO: Event listener para el botón de backup
+    // Event listener para el botón de backup
     const backupBtn = document.getElementById('backup-btn');
     if (backupBtn) {
         backupBtn.addEventListener('click', descargarBackup);
@@ -554,8 +548,8 @@ function inicializarAutenticacion() {
     if (DOM.userAvatar) {
         DOM.userAvatar.addEventListener('click', (e) => {
             e.stopPropagation();
-            const display = DOM.userDropdown.style.display;
-            DOM.userDropdown.style.display = display === 'none' ? 'block' : 'none';
+            const isVisible = DOM.userDropdown.style.display === 'block';
+            DOM.userDropdown.style.display = isVisible ? 'none' : 'block';
         });
     }
 }
@@ -623,10 +617,23 @@ async function cargarCategoriasUsuario(uid) {
 
         userDocRef = db.collection('users').doc(uid);
         
-        // Cargar backup local primero
+        // Cargar backup local PRIMERO
         const localBackup = cargarBackupLocal();
         if (localBackup && localBackup.categorias) {
             categorias = localBackup.categorias;
+            
+            // Restaurar el fondo desde localStorage si existe
+            const fondoGuardado = localStorage.getItem('starTab_fondo_rapido');
+            if (fondoGuardado) {
+                try {
+                    const fondoConfig = JSON.parse(fondoGuardado);
+                    const categoriaActual = categorias.find(c => c.id === estado.categoriaActual);
+                    if (categoriaActual) {
+                        categoriaActual.background = fondoConfig;
+                    }
+                } catch (e) {}
+            }
+            
             await cargarIconosCategoriaActual();
             renderizarCategorias();
             aplicarFondoCategoria(estado.categoriaActual);
@@ -642,7 +649,6 @@ async function cargarCategoriasUsuario(uid) {
 
             const firestoreCategorias = [];
             
-            // Procesar categorías de Firebase
             snapshot.forEach(doc => {
                 const data = doc.data();
                 firestoreCategorias.push({
@@ -666,11 +672,10 @@ async function cargarCategoriasUsuario(uid) {
                     id: 'general'
                 });
                 
-                // Guardar en Firebase
                 try {
                     await userDocRef.collection('categorias').doc('general').set({
                         nombre: 'General',
-                        editable: true, // Cambiado de false a true
+                        editable: true,
                         orden: 1,
                         background: { ...FONDO_DEFAULT }
                     });
@@ -679,13 +684,31 @@ async function cargarCategoriasUsuario(uid) {
                 }
             }
 
-            // Comparar con categorías actuales
+            // OBTENER FONDO GUARDADO LOCALMENTE
+            const fondoGuardado = localStorage.getItem('starTab_fondo_rapido');
+            let fondoLocal = null;
+            if (fondoGuardado) {
+                try {
+                    fondoLocal = JSON.parse(fondoGuardado);
+                } catch (e) {}
+            }
+
+            // APLICAR FONDO LOCAL A LA CATEGORÍA ACTUAL
+            if (fondoLocal) {
+                const categoriaActual = firestoreCategorias.find(c => c.id === estado.categoriaActual);
+                if (categoriaActual) {
+                    categoriaActual.background = fondoLocal;
+                }
+            }
+
+            // Comparar con categorías actuales pero PRESERVANDO EL FONDO LOCAL
             const categoriasActualesStr = JSON.stringify(categorias.map(c => ({
                 id: c.id,
                 nombre: c.nombre,
                 editable: c.editable,
                 orden: c.orden,
-                background: c.background
+                // No incluir background en la comparación para preservar cambios locales
+                background: null
             })));
             
             const categoriasNuevasStr = JSON.stringify(firestoreCategorias.map(c => ({
@@ -693,11 +716,21 @@ async function cargarCategoriasUsuario(uid) {
                 nombre: c.nombre,
                 editable: c.editable,
                 orden: c.orden,
-                background: c.background
+                background: null
             })));
 
+            // Solo actualizar si hay cambios en estructura (no en fondo)
             if (categoriasActualesStr !== categoriasNuevasStr) {
                 console.log('Categorías actualizadas desde Firebase');
+                
+                // Preservar los fondos locales
+                firestoreCategorias.forEach(catFire => {
+                    const catLocal = categorias.find(c => c.id === catFire.id);
+                    if (catLocal && catLocal.background) {
+                        catFire.background = catLocal.background;
+                    }
+                });
+                
                 categorias = firestoreCategorias;
                 
                 // Validar categoría actual
@@ -708,7 +741,6 @@ async function cargarCategoriasUsuario(uid) {
                 
                 await cargarIconosCategoriaActual();
                 renderizarCategorias();
-                aplicarFondoCategoria(estado.categoriaActual);
                 guardarBackupLocal();
                 
                 // Reinicializar drag & drop
@@ -716,6 +748,10 @@ async function cargarCategoriasUsuario(uid) {
                     setTimeout(() => inicializarDragAndDropCategorias(), 100);
                 }
             }
+            
+            // SIEMPRE aplicar el fondo actual después de cualquier cambio
+            aplicarFondoCategoria(estado.categoriaActual);
+
         }, (error) => {
             console.error('Error en snapshot de categorías:', error);
         });
@@ -902,6 +938,14 @@ function cargarCategoriasLocales() {
 
     if (backup && backup.categorias && backup.categorias.length > 0) {
         categorias = backup.categorias;
+        
+        // SIEMPRE priorizar el fondo guardado en localStorage
+        if (fondoGuardado) {
+            const categoriaActual = categorias.find(c => c.id === estado.categoriaActual);
+            if (categoriaActual) {
+                categoriaActual.background = fondoGuardado;
+            }
+        }
     } else {
         categorias = [{
             ...CATEGORIA_GENERAL,
@@ -914,13 +958,15 @@ function cargarCategoriasLocales() {
     if (generalIndex === -1) {
         categorias.unshift({ ...CATEGORIA_GENERAL });
     } else {
-        // Asegurar que tiene orden 1
         if (categorias[generalIndex].orden === undefined) {
-            categorias[generalIndex].orden = 1; // Cambiado de 0 a 1
+            categorias[generalIndex].orden = 1;
         }
-        // Asegurar que es editable
         if (categorias[generalIndex].editable === undefined) {
             categorias[generalIndex].editable = true;
+        }
+        // Asegurar que el fondo de General también use el localStorage
+        if (fondoGuardado && categorias[generalIndex].id === estado.categoriaActual) {
+            categorias[generalIndex].background = fondoGuardado;
         }
     }
 
@@ -928,6 +974,14 @@ function cargarCategoriasLocales() {
     if (!categorias.some(c => c.id === estado.categoriaActual)) {
         estado.categoriaActual = 'general';
         localStorage.setItem('categoriaSeleccionada', 'general');
+        
+        // Aplicar fondo guardado a General
+        if (fondoGuardado) {
+            const general = categorias.find(c => c.id === 'general');
+            if (general) {
+                general.background = fondoGuardado;
+            }
+        }
     }
 
     // Cargar iconos
@@ -1041,61 +1095,61 @@ function inicializarDragAndDropCategorias() {
         });
 
         wrapper.addEventListener('drop', async (e) => {
-    e.preventDefault();
-    wrapper.classList.remove('drag-over');
-    
-    if (wrapper === draggedItem) return;
+            e.preventDefault();
+            wrapper.classList.remove('drag-over');
+            
+            if (wrapper === draggedItem) return;
 
-    const fromId = e.dataTransfer.getData('text/plain');
-    const toId = wrapper.dataset.categoriaId;
+            const fromId = e.dataTransfer.getData('text/plain');
+            const toId = wrapper.dataset.categoriaId;
 
-    if (fromId === toId) return;
+            if (fromId === toId) return;
 
-    // Reordenar categorías
-    const fromIndex = categorias.findIndex(c => c.id === fromId);
-    const toIndex = categorias.findIndex(c => c.id === toId);
+            // Reordenar categorías
+            const fromIndex = categorias.findIndex(c => c.id === fromId);
+            const toIndex = categorias.findIndex(c => c.id === toId);
 
-    if (fromIndex === -1 || toIndex === -1) return;
+            if (fromIndex === -1 || toIndex === -1) return;
 
-    // Mover el elemento
-    const [movedCategory] = categorias.splice(fromIndex, 1);
-    categorias.splice(toIndex, 0, movedCategory);
+            // Mover el elemento
+            const [movedCategory] = categorias.splice(fromIndex, 1);
+            categorias.splice(toIndex, 0, movedCategory);
 
-    // Actualizar órdenes empezando desde 1
-    categorias.forEach((cat, index) => {
-        cat.orden = index + 1; // Cambiado de index a index + 1
-    });
+            // Actualizar órdenes empezando desde 1
+            categorias.forEach((cat, index) => {
+                cat.orden = index + 1;
+            });
 
-    // Guardar cambios en Firebase
-    if (currentUser && db) {
-        try {
-            const batch = db.batch();
-            for (const cat of categorias) {
-                const catRef = userDocRef.collection('categorias').doc(cat.id);
-                batch.set(catRef, {
-                    nombre: cat.nombre,
-                    editable: cat.editable,
-                    orden: cat.orden,
-                    background: cat.background
-                }, { merge: true });
+            // Guardar cambios en Firebase
+            if (currentUser && db) {
+                try {
+                    const batch = db.batch();
+                    for (const cat of categorias) {
+                        const catRef = userDocRef.collection('categorias').doc(cat.id);
+                        batch.set(catRef, {
+                            nombre: cat.nombre,
+                            editable: cat.editable,
+                            orden: cat.orden,
+                            background: cat.background
+                        }, { merge: true });
+                    }
+                    await batch.commit();
+                } catch (error) {
+                    console.error('Error guardando orden de categorías:', error);
+                }
             }
-            await batch.commit();
-        } catch (error) {
-            console.error('Error guardando orden de categorías:', error);
-        }
-    }
 
-    // Guardar backup local
-    guardarBackupLocal();
+            // Guardar backup local
+            guardarBackupLocal();
 
-    // Actualizar UI
-    renderizarCategorias();
-    
-    // Si la categoría actual cambió de posición, mantenerla seleccionada
-    if (estado.categoriaActual === fromId || estado.categoriaActual === toId) {
-        actualizarCategoriasUI();
-    }
-});
+            // Actualizar UI
+            renderizarCategorias();
+            
+            // Si la categoría actual cambió de posición, mantenerla seleccionada
+            if (estado.categoriaActual === fromId || estado.categoriaActual === toId) {
+                actualizarCategoriasUI();
+            }
+        });
     });
 
     container.addEventListener('dragover', (e) => e.preventDefault());
@@ -1421,15 +1475,44 @@ async function renderizarIconos(ignorarCache = false) {
             const estilos = { ...ESTILOS_DEFAULT, ...(icono.estilos || {}) };
             const bgColor = estilos.tieneFondo && estilos.colorFondo ? estilos.colorFondo : 'transparent';
             const boxShadow = estilos.tieneFondo ? '0 4px 15px rgba(0,0,0,0.2)' : 'none';
+            
+            // Calcular el tamaño para la imagen
+            const tamanoImagen = `${estilos.tamanoIcono || 74}%`;
 
             return `
-                    <a href="${icono.url}" class="icono-item" target="_self" data-index="${index}" style="animation: aparecerIcono 0.3s cubic-bezier(0.2, 0, 0, 1) ${index * 0.03}s both">
-                    <div class="icono-contenedor">
-                        <img src="${icono.icono}" alt="${icono.nombre}" loading="lazy">
+                <a href="${icono.url}" 
+                   class="icono-item" 
+                   target="_self" 
+                   data-index="${index}" 
+                   style="animation: aparecerIcono 0.3s cubic-bezier(0.2, 0, 0, 1) ${index * 0.03}s both;">
+                    <div class="icono-contenedor" 
+                         style="background-color: ${bgColor}; 
+                                border-radius: ${estilos.radioBorde || 50}%; 
+                                box-shadow: ${boxShadow};
+                                width: 100px;
+                                height: 100px;
+                                display: flex;
+                                align-items: center;
+                                justify-content: center;
+                                margin-bottom: 0.5rem;
+                                transition: all 0.3s ease;">
+                        <img src="${icono.icono}" 
+                             alt="${icono.nombre}" 
+                             loading="lazy"
+                             style="width: ${tamanoImagen};
+                                    height: ${tamanoImagen};
+                                    object-fit: contain;
+                                    transition: all 0.3s ease;">
                     </div>
                     
                     <div class="btn-incognito-small" title="Abrir en incógnito" data-url="${icono.url}">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-hat-glasses-icon lucide-hat-glasses"><path d="M14 18a2 2 0 0 0-4 0"/><path d="m19 11-2.11-6.657a2 2 0 0 0-2.752-1.148l-1.276.61A2 2 0 0 1 12 4H8.5a2 2 0 0 0-1.925 1.456L5 11"/><path d="M2 11h20"/><circle cx="17" cy="18" r="3"/><circle cx="7" cy="18" r="3"/></svg>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-hat-glasses-icon lucide-hat-glasses">
+                            <path d="M14 18a2 2 0 0 0-4 0"/>
+                            <path d="m19 11-2.11-6.657a2 2 0 0 0-2.752-1.148l-1.276.61A2 2 0 0 1 12 4H8.5a2 2 0 0 0-1.925 1.456L5 11"/>
+                            <path d="M2 11h20"/>
+                            <circle cx="17" cy="18" r="3"/>
+                            <circle cx="7" cy="18" r="3"/>
+                        </svg>
                     </div>
 
                     <span>${icono.nombre}</span>
@@ -1578,24 +1661,45 @@ function mostrarMenuContextual(event, icono) {
 // ===== FUNCIONES DE FONDO CORREGIDAS =====
 let _fondoToken = 0;
 let _ultimaCategoriaFondo = null;
+// Inicializar desde lo que fondo-rapido.js ya aplicó (si aplicó algo)
+let _fondoActivoConfig = window._fondoActivoConfig || null;
+
+function _fondoConfigIgual(a, b) {
+    if (!a || !b) return false;
+    return a.tipo === b.tipo &&
+        a.url === b.url &&
+        a.colorInicio === b.colorInicio &&
+        a.colorFin === b.colorFin &&
+        a.opacidad === b.opacidad &&
+        a.desenfoque === b.desenfoque;
+}
 
 async function aplicarFondoCategoria(categoriaId) {
-    // Permitir aplicar incluso si es la misma categoría (para cambios inmediatos)
     const categoria = categorias.find(c => c.id === categoriaId);
     if (!categoria || !categoria.background) return;
 
-    const miToken = ++_fondoToken;
     const fondoConfig = categoria.background;
 
-    // Precargar si es necesario
+    // ✅ SI el fondo en pantalla ya es exactamente este, no hacer nada.
+    // Esto evita que el video se reinicie cuando Firebase dispara onSnapshot
+    // o cuando cargarCategoriasLocales/cargarIconosCategoriaActual llaman aquí de nuevo.
+    const fondoActualEl = document.getElementById('fondo-activo');
+    if (fondoActualEl && _fondoConfigIgual(_fondoActivoConfig, fondoConfig)) {
+        // Solo actualizar el token para que futuros cambios no sean cancelados
+        _ultimaCategoriaFondo = categoriaId;
+        guardarFondoLocalStorage(fondoConfig);
+        return;
+    }
+
+    const miToken = ++_fondoToken;
+
+    // Precargar solo imágenes (no precargar video — ya lo tiene fondo-rapido.js)
     if (fondoConfig.tipo === 'imagen' && fondoConfig.url) {
         await precargarImagen(fondoConfig.url);
-    } else if (fondoConfig.tipo === 'video' && fondoConfig.url) {
-        await precargarVideo(fondoConfig.url);
     }
 
     if (miToken !== _fondoToken) return;
-    
+
     _ultimaCategoriaFondo = categoriaId;
     aplicarFondoConFade(fondoConfig);
 }
@@ -1606,19 +1710,6 @@ function precargarImagen(url) {
         img.onload = () => resolve();
         img.onerror = () => resolve();
         img.src = url;
-    });
-}
-
-function precargarVideo(url) {
-    return new Promise((resolve) => {
-        const video = document.createElement('video');
-        video.preload = 'auto';
-        video.muted = true;
-        video.playsInline = true;
-        video.oncanplay = () => resolve();
-        video.onerror = () => resolve();
-        video.src = url;
-        setTimeout(resolve, 5000);
     });
 }
 
@@ -1648,7 +1739,7 @@ function aplicarFondoConFade(fondoConfig) {
 
     document.body.insertBefore(nuevoFondo, fondoActual || document.body.firstChild);
     aplicarEstiloFondo(nuevoFondo, fondoConfig);
-    
+
     // Forzar reflow
     nuevoFondo.offsetHeight;
 
@@ -1673,6 +1764,8 @@ function aplicarFondoConFade(fondoConfig) {
             if (fondoActual) {
                 fondoActual.remove();
             }
+            // ✅ Registrar qué config está ahora en pantalla
+            _fondoActivoConfig = { ...fondoConfig };
         }, DURACION_FADE);
     });
 
@@ -1694,6 +1787,7 @@ function guardarFondoLocalStorage(fondoConfig) {
         
         if (fondoActual !== nuevoFondo) {
             localStorage.setItem('starTab_fondo_rapido', nuevoFondo);
+            console.log('Fondo guardado en localStorage');
         }
     } catch(e) {
         console.log('Error guardando fondo en localStorage:', e);
@@ -1778,17 +1872,35 @@ async function guardarFondoCategoria(nuevaConfiguracion) {
         colorFin: nuevaConfiguracion.colorFin
     };
 
-    // Guardar en Firebase
-    if (currentUser && db) {
+    // GUARDAR EN LOCALSTORAGE SIEMPRE PRIMERO
+    guardarFondoLocalStorage(categoria.background);
+    
+    // Guardar en Firebase SOLO si hay conexión
+    if (currentUser && db && navigator.onLine) {
         await actualizarCategoriaEnFirebase(estado.categoriaActual, {
             background: categoria.background
         });
+    } else {
+        console.log('Sin conexión: fondo guardado solo localmente');
+        // Programar sincronización cuando vuelva la conexión
+        if (!window._fondoPendienteSincronizar) {
+            window._fondoPendienteSincronizar = true;
+            window.addEventListener('online', async function sincronizarFondoPendiente() {
+                if (currentUser && db) {
+                    await actualizarCategoriaEnFirebase(estado.categoriaActual, {
+                        background: categoria.background
+                    });
+                    window.removeEventListener('online', sincronizarFondoPendiente);
+                    window._fondoPendienteSincronizar = false;
+                    console.log('Fondo sincronizado con Firebase al recuperar conexión');
+                }
+            });
+        }
     }
 
     // APLICAR INMEDIATAMENTE
     aplicarFondoCategoria(estado.categoriaActual);
     
-    guardarFondoLocalStorage(categoria.background);
     guardarBackupLocal();
 }
 
@@ -1900,7 +2012,8 @@ function realizarBusqueda() {
         url += encodeURIComponent(termino);
     }
     
-    window.open(url, '_blank');
+    // CAMBIO AQUÍ: '_blank' → '_self' o window.location.href
+    window.location.href = url; // Se abre en la MISMA pestaña
 }
 
 function inicializarReconocimientoVoz() {
@@ -2223,9 +2336,11 @@ function cerrarModalIconos(elementos) {
     }
     
     modal.classList.remove('modal-abierto');
+    modal.classList.add('modal-cerrando');
     setTimeout(() => {
+        modal.classList.remove('modal-cerrando');
         modal.style.display = 'none';
-    }, 300);
+    }, 280);
 }
 
 function actualizarProgresoRange(input) {
@@ -2467,7 +2582,11 @@ function actualizarPreviewFondo(elementos) {
 
 function cerrarModalPersonalizar(modal) {
     modal.classList.remove('modal-personalizar-abierto');
-    setTimeout(() => modal.style.display = 'none', 300);
+    modal.classList.add('modal-personalizar-cerrando');
+    setTimeout(() => {
+        modal.classList.remove('modal-personalizar-cerrando');
+        modal.style.display = 'none';
+    }, 280);
 }
 
 // ===== FUNCIONES DE NOTAS =====
@@ -2503,21 +2622,11 @@ function inicializarNota() {
         if (e.target === notaDOM.modal) cerrarModalNota(notaDOM);
     });
 
-    // Variable para controlar si el cambio viene de Firebase
-    let ignorarSiguienteCambio = false;
-
     notaDOM.textarea?.addEventListener('input', (e) => {
-        if (ignorarSiguienteCambio) return;
-        
         const texto = e.target.value;
         actualizarContadorCaracteres(texto, notaDOM);
         
-        if (estado.isAuthenticated && currentUser && db) {
-            // Cambiar ícono a "sincronizando"
-            notaDOM.syncIcon.style.animation = 'girar 1s infinite linear';
-            notaDOM.syncText.textContent = 'Guardando...';
-            
-            // Guardar en tiempo real
+        if (estado.isAuthenticated) {
             guardarNotaEnTiempoReal(notaEstado.notaActual, texto, notaDOM);
         } else {
             notaEstado.notas[notaEstado.notaActual].contenido = texto;
@@ -2545,70 +2654,6 @@ function inicializarNota() {
             cerrarModalNota(notaDOM);
         }
     });
-
-    // Inicializar listener de tiempo real para notas
-    if (estado.isAuthenticated && currentUser && db) {
-        iniciarListenerNotas(notaDOM);
-    }
-}
-
-// ===== FUNCIÓN NUEVA: Listener en tiempo real para notas =====
-function iniciarListenerNotas(notaDOM) {
-    if (!currentUser || !userDocRef || !db) return;
-
-    // Variable para evitar bucles
-    let ignorarSiguienteCambio = false;
-
-    // Escuchar cambios en el documento del usuario
-    const unsubscribe = userDocRef.onSnapshot((doc) => {
-        if (!doc.exists) return;
-        
-        const data = doc.data();
-        if (!data || !data.notas) return;
-
-        // Verificar si hay cambios en las notas
-        const notasFirebase = data.notas;
-        let hayCambios = false;
-
-        for (let i = 1; i <= 5; i++) {
-            const notaFirebase = notasFirebase[`nota${i}`];
-            if (notaFirebase !== undefined && notaFirebase !== notaEstado.notas[i].contenido) {
-                notaEstado.notas[i].contenido = notaFirebase;
-                hayCambios = true;
-            }
-        }
-
-        // Si hay cambios y la nota actual es la que se modificó, actualizar el textarea
-        if (hayCambios) {
-            ignorarSiguienteCambio = true;
-            
-            // Actualizar la nota actual si está abierta
-            if (notaDOM.modal?.classList.contains('nota-modal-abierto')) {
-                const notaActual = notaEstado.notaActual;
-                const contenidoFirebase = notasFirebase[`nota${notaActual}`];
-                
-                if (contenidoFirebase !== undefined && 
-                    contenidoFirebase !== notaDOM.textarea.value) {
-                    notaDOM.textarea.value = contenidoFirebase;
-                    actualizarContadorCaracteres(contenidoFirebase, notaDOM);
-                }
-            }
-            
-            // Mostrar indicador de sincronización
-            notaDOM.syncIcon.style.animation = 'none';
-            notaDOM.syncIcon.style.transform = 'scale(1)';
-            notaDOM.syncText.textContent = 'Sincronizado';
-            
-            setTimeout(() => {
-                ignorarSiguienteCambio = false;
-            }, 100);
-        }
-    }, (error) => {
-        console.error('Error en listener de notas:', error);
-    });
-
-    // Guardar la función para poder cancelarla al cerrar sesión
-    window.unsubscribeNotas = unsubscribe;
 }
 
 function cargarNotasIniciales(notaDOM) {
@@ -2638,12 +2683,6 @@ async function cargarNotasDeFirebase(notaDOM) {
             }
             cargarNota(notaEstado.notaActual, notaDOM);
         }
-        
-        // Iniciar listener de tiempo real después de cargar los datos iniciales
-        if (!window.unsubscribeNotas) {
-            iniciarListenerNotas(notaDOM);
-        }
-        
     } catch (error) {
         console.error('Error al cargar notas:', error);
     }
@@ -2671,26 +2710,11 @@ function guardarNotaEnTiempoReal(notaNum, texto, notaDOM) {
             const updateData = {};
             updateData[`notas.nota${notaNum}`] = texto;
             updateData['metadata.ultimaModificacion'] = firebase.firestore.FieldValue.serverTimestamp();
-            
             await userDocRef.set(updateData, { merge: true });
-            
-            // Actualizar ícono de sincronización
-            notaDOM.syncIcon.style.animation = 'none';
-            notaDOM.syncIcon.style.transform = 'scale(1)';
-            notaDOM.syncText.textContent = 'Sincronizado';
-            
         } catch (error) {
             console.error('Error al guardar nota:', error);
-            notaDOM.syncIcon.style.animation = 'none';
-            notaDOM.syncIcon.innerHTML = '⚠️';
-            notaDOM.syncText.textContent = 'Error al guardar';
-            
-            setTimeout(() => {
-                notaDOM.syncIcon.innerHTML = '🔄';
-                notaDOM.syncText.textContent = 'Sincronizado';
-            }, 3000);
         }
-    }, 500); // Reducido a 500ms para mejor feedback
+    }, 1000);
 }
 
 function actualizarContadorCaracteres(texto, notaDOM) {
@@ -2704,10 +2728,13 @@ function actualizarContadorCaracteres(texto, notaDOM) {
 
 function abrirModalNota(notaDOM) {
     if (!notaDOM.modal) return;
-    
+
+    notaDOM.modal.style.display = 'flex';
+    notaDOM.modal.classList.remove('nota-modal-cerrando');
+    void notaDOM.modal.offsetWidth;
     notaDOM.modal.classList.add('nota-modal-abierto');
     document.body.style.overflow = 'hidden';
-    
+
     setTimeout(() => {
         notaDOM.textarea?.focus();
     }, 300);
@@ -2715,9 +2742,14 @@ function abrirModalNota(notaDOM) {
 
 function cerrarModalNota(notaDOM) {
     if (!notaDOM.modal) return;
-    
+
     notaDOM.modal.classList.remove('nota-modal-abierto');
-    document.body.style.overflow = '';
+    notaDOM.modal.classList.add('nota-modal-cerrando');
+    setTimeout(() => {
+        notaDOM.modal.classList.remove('nota-modal-cerrando');
+        notaDOM.modal.style.display = 'none';
+        document.body.style.overflow = '';
+    }, 280);
 }
 
 function copiarNota(notaDOM) {
@@ -2766,6 +2798,23 @@ function habilitarEdicion(habilitar) {
     }
 }
 
+// ===== INDICADOR DE CONEXIÓN EN TIEMPO REAL =====
+function actualizarIndicadorConexion(online) {
+    const indicator = document.getElementById('conexion-indicator');
+    const dot       = document.getElementById('conexion-dot');
+    const text      = document.getElementById('conexion-text');
+    if (!indicator || !dot || !text) return;
+
+    if (online) {
+        indicator.classList.remove('offline', 'checking');
+        text.textContent = 'En línea';
+    } else {
+        indicator.classList.remove('checking');
+        indicator.classList.add('offline');
+        text.textContent = 'Sin conexión';
+    }
+}
+
 // ===== INICIALIZACIÓN PRINCIPAL =====
 document.addEventListener('DOMContentLoaded', () => {
     document.body.classList.add('no-animation');
@@ -2773,7 +2822,7 @@ document.addEventListener('DOMContentLoaded', () => {
     cachearElementos();
     
     inicializarBarraBusqueda();
-    inicializarDobleClickBuscadores(); // NUEVA FUNCIÓN AGREGADA AQUÍ
+    inicializarDobleClickBuscadores();
     inicializarAutenticacion();
     inicializarNota();
     
@@ -2808,30 +2857,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
     window.addEventListener('online', () => {
         console.log('Conexión restaurada, sincronizando...');
+        actualizarIndicadorConexion(true);
         if (currentUser && currentUser.uid && estado.firebaseInicializado) {
             cargarCategoriasUsuario(currentUser.uid);
-            
-            // Reiniciar listener de notas
-            if (window.unsubscribeNotas) {
-                window.unsubscribeNotas();
-                window.unsubscribeNotas = null;
-            }
-            
-            const notaDOM = {
-                icono: document.getElementById('nota-icono'),
-                modal: document.getElementById('nota-modal'),
-                cerrar: document.getElementById('nota-modal-cerrar'),
-                textarea: document.getElementById('nota-textarea'),
-                charCount: document.getElementById('nota-char-count'),
-                syncIcon: document.getElementById('nota-sync-icon'),
-                syncText: document.getElementById('nota-sync-text'),
-                copiarBtn: document.getElementById('nota-btn-copiar'),
-                notaBtns: document.querySelectorAll('.nota-btn-numero')
-            };
-            
-            iniciarListenerNotas(notaDOM);
         }
     });
+
+    window.addEventListener('offline', () => {
+        console.log('Sin conexión');
+        actualizarIndicadorConexion(false);
+    });
+
+    // Estado inicial
+    actualizarIndicadorConexion(navigator.onLine);
 
     // Manejador de clics para el botón de incógnito
     document.getElementById('contenedor-iconos')?.addEventListener('click', (e) => {
@@ -2871,4 +2909,11 @@ window.addEventListener('load', () => {
     });
 });
 
-/* 1 */
+// Listener para el evento online (fondo pendiente)
+window.addEventListener('online', function() {
+    console.log('Conexión restaurada - verificando fondos pendientes');
+    // No hacer nada automático, solo verificar si hay fondos pendientes
+    if (window._fondoPendienteSincronizar) {
+        console.log('Hay fondos pendientes de sincronizar');
+    }
+});
