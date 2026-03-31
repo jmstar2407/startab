@@ -77,13 +77,15 @@ googleBtn.addEventListener('click', async () => {
         // Obtener token
         const token = await user.getIdToken();
         
-        // Datos del usuario
+        // Datos del usuario — incluir accessToken para que la extensión
+        // pueda autenticar Firebase Auth localmente con signInWithCredential
         const userData = {
             uid: user.uid,
             email: user.email,
             displayName: user.displayName,
             photoURL: user.photoURL,
             token: token,
+            accessToken: result.credential?.accessToken || null,
             emailVerified: user.emailVerified,
             timestamp: Date.now()
         };
