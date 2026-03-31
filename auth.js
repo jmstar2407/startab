@@ -85,7 +85,8 @@ googleBtn.addEventListener('click', async () => {
             photoURL: user.photoURL,
             token: token,
             emailVerified: user.emailVerified,
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            tokenExpiry: Date.now() + (55 * 60 * 1000) // referencia: expira en ~55 min
         };
 
         // Enviar a la extensión
@@ -123,7 +124,8 @@ googleBtn.addEventListener('click', async () => {
 auth.onAuthStateChanged(async (user) => {
     if (user) {
         showStatus('Sesión activa - enviando datos...', 'info');
-        const token = await user.getIdToken();
+        // Siempre forzar renovación del token (true = forzar refresh)
+        const token = await user.getIdToken(true);
         sendToExtension({
             uid: user.uid,
             email: user.email,
@@ -131,7 +133,8 @@ auth.onAuthStateChanged(async (user) => {
             photoURL: user.photoURL,
             token: token,
             emailVerified: user.emailVerified,
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            tokenExpiry: Date.now() + (55 * 60 * 1000)
         });
     }
 });
