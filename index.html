@@ -8,6 +8,7 @@
     <title>Nueva pestaña</title>
     <link rel="icon" href="img/icons/startab_3.svg" type="image/svg+xml">
     <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="multimedia.css">
     <style>
         /* Botón de sincronización Firebase al lado del backup */
         .backup-row {
@@ -56,6 +57,7 @@
 
     <script src="fondo-rapido.js" defer></script>
     <script src="tab-counter.js" defer></script>
+    <script src="multimedia.js" defer></script>
 </head>
 
 <body>
@@ -142,6 +144,144 @@
         </div>
         <span class="nota-icono-tooltip">Notas rápidas (Ctrl+N)</span>
     </div>
+
+    <!-- CENTRO MULTIMEDIA · SESIONES DEL NAVEGADOR -->
+    <div class="multimedia-button-container" id="multimedia-button-container">
+        <button class="multimedia-button" id="multimedia-button" type="button" aria-label="Centro multimedia" title="Centro multimedia">
+            <svg class="multimedia-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="3" y="5" width="18" height="14" rx="4"></rect>
+                <path d="m10 9 5 3-5 3Z"></path>
+            </svg>
+            <span class="multimedia-eq" aria-hidden="true"><i></i><i></i><i></i></span>
+            <span class="multimedia-badge" id="multimedia-badge" hidden>0</span>
+        </button>
+        <span class="multimedia-tooltip" id="multimedia-tooltip">Centro multimedia</span>
+    </div>
+
+    <!-- MODAL CENTRO MULTIMEDIA -->
+    <div class="multimedia-modal" id="multimedia-modal" aria-hidden="true" role="presentation">
+        <div class="multimedia-backdrop" id="multimedia-backdrop"></div>
+        <section class="multimedia-modal-panel" role="dialog" aria-modal="true" aria-labelledby="multimedia-modal-title">
+            <aside class="multimedia-sidebar" aria-label="Fuentes multimedia">
+                <div class="multimedia-sidebar-head">
+                    <span class="multimedia-kicker">StarTab · NATIVE MEDIA</span>
+                    <h3 id="multimedia-modal-title">Controles multimedia</h3>
+                    <p>Sesiones multimedia sincronizadas. La reproducción se resalta sin alterar el orden.</p>
+                </div>
+                <div class="multimedia-source-list" id="multimedia-source-list"></div>
+            </aside>
+
+            <main class="multimedia-main">
+                <header class="multimedia-topbar">
+                    <div class="multimedia-topbar-copy">
+                        <strong>Control multimedia del navegador</strong>
+                        <span>Estado y controles sincronizados en tiempo real</span>
+                    </div>
+                    <div class="multimedia-topbar-actions">
+                        <button class="multimedia-principal-toggle" id="multimedia-principal-toggle" type="button" aria-pressed="false" title="Convertir este navegador en el dispositivo principal">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <rect x="3" y="4" width="18" height="12" rx="3"></rect>
+                                <path d="M8 20h8"></path><path d="M12 16v4"></path>
+                                <path d="M8.5 9.5 11 12l4.5-5"></path>
+                            </svg>
+                            <span id="multimedia-principal-text">Hacer principal</span>
+                            <i aria-hidden="true"></i>
+                        </button>
+                        <span class="multimedia-sync-pill" id="multimedia-sync-pill"><i></i><span id="multimedia-sync-text">SYNC GLOBAL</span></span>
+                        <button class="multimedia-close" id="multimedia-close" type="button" aria-label="Cerrar">×</button>
+                    </div>
+                </header>
+
+                <div class="multimedia-empty" id="multimedia-empty">
+                    <div class="multimedia-empty-orb" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M9 18V5l10-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="16" cy="16" r="3"></circle>
+                        </svg>
+                    </div>
+                    <h4>No se detectó multimedia abierta</h4>
+                    <p>Aparecerán aquí las sesiones que hayan entrado en reproducción o se integren con Media Session. El contenido precargado que nunca se ha reproducido no se mostrará.</p>
+                </div>
+
+                <div class="multimedia-player" id="multimedia-player" hidden>
+                    <div class="multimedia-artwork-shell">
+                        <img class="multimedia-artwork" id="multimedia-artwork" alt="Carátula multimedia" hidden>
+                        <div class="multimedia-artwork-fallback" id="multimedia-artwork-fallback" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l10-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="16" cy="16" r="3"></circle></svg>
+                        </div>
+                    </div>
+
+                    <div class="multimedia-track">
+                        <span class="multimedia-playback-badge" id="multimedia-playback-badge" data-state="paused">EN PAUSA</span>
+                        <h2 id="multimedia-title">Contenido multimedia</h2>
+                        <p id="multimedia-artist">Reproducción del navegador</p>
+                        <span class="multimedia-site-chip"><img id="multimedia-favicon" alt="" hidden><span id="multimedia-site">Pestaña</span></span>
+                    </div>
+
+                    <div class="multimedia-progress-wrap">
+                        <div class="multimedia-range-shell" id="multimedia-seek-fill">
+                            <span class="multimedia-range-track"></span>
+                            <input class="multimedia-range" id="multimedia-seek" type="range" min="0" max="100" step="0.1" value="0" aria-label="Posición de reproducción">
+                        </div>
+                        <div class="multimedia-time"><span id="multimedia-current">0:00</span><span id="multimedia-duration">–:––</span></div>
+                    </div>
+
+                    <div class="multimedia-controls">
+                        <button class="multimedia-control" id="multimedia-prev" type="button" title="Pista anterior" aria-label="Pista anterior" disabled>
+                            <svg viewBox="0 0 24 24"><path d="M19 20 9 12l10-8v16Z"></path><path d="M5 19V5"></path></svg>
+                        </button>
+                        <button class="multimedia-control multimedia-control-seekjump" id="multimedia-back10" type="button" title="Retroceder 10 segundos" aria-label="Retroceder 10 segundos" disabled>
+                            <span aria-hidden="true">↶</span><small>10</small>
+                        </button>
+                        <button class="multimedia-control multimedia-control-main" id="multimedia-play" type="button" aria-label="Reproducir" data-playback-state="paused">
+                            <span class="multimedia-main-glyph" aria-hidden="true"></span>
+                        </button>
+                        <button class="multimedia-control multimedia-control-seekjump" id="multimedia-forward10" type="button" title="Avanzar 10 segundos" aria-label="Avanzar 10 segundos" disabled>
+                            <span aria-hidden="true">↷</span><small>10</small>
+                        </button>
+                        <button class="multimedia-control" id="multimedia-next" type="button" title="Pista siguiente" aria-label="Pista siguiente" disabled>
+                            <svg viewBox="0 0 24 24"><path d="m5 4 10 8-10 8V4Z"></path><path d="M19 5v14"></path></svg>
+                        </button>
+                    </div>
+
+                    <div class="multimedia-bottom">
+                        <div class="multimedia-volume-group">
+                            <svg id="multimedia-volume-icon" data-level="high" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Z"></path><path d="M15.5 8.5a5 5 0 0 1 0 7"></path><path d="M18 6a8 8 0 0 1 0 12"></path></svg>
+                            <div class="multimedia-range-shell multimedia-volume-fill" id="multimedia-volume-fill">
+                                <span class="multimedia-range-track multimedia-volume-track"></span>
+                                <input class="multimedia-range" id="multimedia-volume" type="range" min="0" max="100" step="1" value="100" aria-label="Volumen">
+                            </div>
+                            <span class="multimedia-volume-value" id="multimedia-volume-value">100%</span>
+                        </div>
+                        <button class="multimedia-open-tab" id="multimedia-open-tab" type="button">Abrir pestaña ↗</button>
+                    </div>
+                    <div class="multimedia-unavailable" id="multimedia-unavailable" hidden></div>
+                </div>
+            </main>
+        </section>
+    </div>
+
+    <!-- INFORMACIÓN EN VIVO · USD/DOP + CLIMA SANTO DOMINGO -->
+    <section class="live-info-strip" id="live-info-strip" aria-label="Información en vivo">
+        <div class="live-info-card live-info-usd" id="live-info-usd" title="Tipo de cambio USD a peso dominicano">
+            <span class="live-info-icon live-info-dollar" aria-hidden="true">$</span>
+            <span class="live-info-copy">
+                <span class="live-info-label" id="live-usd-label">USD · Venta BC</span>
+                <strong class="live-info-value" id="live-usd-value">RD$ --.--</strong>
+            </span>
+            <span class="live-info-dot" id="live-usd-dot" aria-hidden="true"></span>
+            <a class="live-info-source" id="live-usd-source" href="https://www.bancentral.gov.do/" target="_blank" rel="noopener noreferrer" title="Fuente: Banco Central de la República Dominicana" aria-label="Fuente del tipo de cambio: Banco Central de la República Dominicana">↗</a>
+        </div>
+
+        <div class="live-info-card live-info-weather" id="live-info-weather" title="Clima actual en Santo Domingo">
+            <span class="live-weather-icon" id="live-weather-icon" aria-hidden="true">☀️</span>
+            <span class="live-info-copy">
+                <span class="live-info-label" id="live-weather-label">Santo Domingo</span>
+                <strong class="live-info-value" id="live-weather-value">--°C</strong>
+            </span>
+            <span class="live-info-dot" id="live-weather-dot" aria-hidden="true"></span>
+            <a class="live-info-source" href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer" title="Fuente: Open-Meteo" aria-label="Fuente del clima: Open-Meteo">↗</a>
+        </div>
+    </section>
 
     <!-- NOTAS RÁPIDAS · WORKSPACE CLOUD EN TIEMPO REAL -->
     <div class="nota-modal" id="nota-modal" role="presentation">

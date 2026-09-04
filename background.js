@@ -139,3 +139,308 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 });
 
 rebuildContextMenus(true);
+
+/* ============================================================================
+   StarTab · Global Media Registry 3.0
+   Registro central compartido por TODAS las páginas StarTab.
+   Los agentes de cada web publican aquí su estado y el service worker lo
+   distribuye en tiempo real a cada nueva pestaña de StarTab abierta.
+   ============================================================================ */
+const MEDIA_REGISTRY_KEY = 'starTab_mediaRegistry_v4';
+let mediaRegistry = Object.create(null);
+let mediaRegistryLoaded = false;
+let mediaPersistTimer = null;
+let mediaLastPersistAt = 0;
+
+function mediaSessionKey(tabId, frameId) {
+  return `${tabId}:${Number.isInteger(frameId) ? frameId : 0}`;
+}
+
+function mediaText(value, max = 1024) {
+  return String(value || '').slice(0, max);
+}
+
+async function ensureMediaRegistryLoaded() {
+  if (mediaRegistryLoaded) return;
+  mediaRegistryLoaded = true;
+  try {
+    const data = await chrome.storage.session.get(MEDIA_REGISTRY_KEY);
+    const saved = data?.[MEDIA_REGISTRY_KEY];
+    if (saved && typeof saved === 'object' && !Array.isArray(saved)) {
+      mediaRegistry = saved;
+      // Migración suave de registros anteriores: dar a cada sesión un orden
+      // de llegada persistente. updatedAt sólo refleja actividad y jamás debe
+      // cambiar la posición visual de una fuente multimedia.
+      const legacy = Object.values(mediaRegistry)
+        .filter(Boolean)
+        .sort((a, b) => (Number(a.updatedAt) || 0) - (Number(b.updatedAt) || 0));
+      const seed = Date.now() - legacy.length;
+      legacy.forEach((session, index) => {
+        if (!Number.isFinite(Number(session.firstSeenAt))) {
+          session.firstSeenAt = Number(session.updatedAt) || (seed + index);
+        }
+      });
+    }
+  } catch (_) {
+    mediaRegistry = Object.create(null);
+  }
+  await pruneMediaRegistryAgainstOpenTabs();
+}
+
+function scheduleMediaRegistryPersist() {
+  if (mediaPersistTimer) return;
+  const elapsed = Date.now() - mediaLastPersistAt;
+  const delay = elapsed >= 1400 ? 80 : Math.max(80, 1400 - elapsed);
+  mediaPersistTimer = setTimeout(async () => {
+    mediaPersistTimer = null;
+    mediaLastPersistAt = Date.now();
+    try {
+      await chrome.storage.session.set({ [MEDIA_REGISTRY_KEY]: mediaRegistry });
+    } catch (_) {}
+  }, delay);
+}
+
+function exportedMediaSessions() {
+  // Orden estable y compartido por todas las pestañas StarTab. El estado de
+  // reproducción sólo afecta el resaltado, nunca la posición de la tarjeta.
+  return Object.values(mediaRegistry)
+    .filter(session => session?.nativeEligible !== false)
+    .sort((a, b) => {
+      const af = Number(a.firstSeenAt) || Number(a.updatedAt) || 0;
+      const bf = Number(b.firstSeenAt) || Number(b.updatedAt) || 0;
+      return af - bf || (Number(a.tabId) || 0) - (Number(b.tabId) || 0) || (Number(a.frameId) || 0) - (Number(b.frameId) || 0);
+    });
+}
+
+async function broadcastMediaRegistry() {
+  const message = { type: 'STARTAB_MEDIA_REGISTRY_UPDATE', sessions: exportedMediaSessions() };
+  try {
+    await chrome.runtime.sendMessage(message);
+  } catch (_) {}
+}
+
+async function pruneMediaRegistryAgainstOpenTabs() {
+  try {
+    const tabs = await chrome.tabs.query({});
+    const open = new Map(tabs.filter(tab => Number.isInteger(tab.id)).map(tab => [tab.id, tab]));
+    let changed = false;
+    for (const [key, session] of Object.entries(mediaRegistry)) {
+      const tab = open.get(session.tabId);
+      if (!tab) {
+        delete mediaRegistry[key];
+        changed = true;
+        continue;
+      }
+      // Si una pestaña navegó y el agente anterior quedó persistido, se elimina.
+      if (session.pageUrl && tab.url && session.pageUrl !== tab.url && !tab.url.startsWith(session.pageUrl + '#')) {
+        delete mediaRegistry[key];
+        changed = true;
+      }
+    }
+    if (changed) scheduleMediaRegistryPersist();
+  } catch (_) {}
+}
+
+function removeMediaForTab(tabId) {
+  let changed = false;
+  for (const [key, session] of Object.entries(mediaRegistry)) {
+    if (session.tabId === tabId) {
+      delete mediaRegistry[key];
+      changed = true;
+    }
+  }
+  if (changed) {
+    scheduleMediaRegistryPersist();
+    broadcastMediaRegistry();
+  }
+}
+
+function sanitizeMediaPayload(payload, sender) {
+  const tab = sender?.tab;
+  if (!tab || !Number.isInteger(tab.id)) return null;
+  const frameId = Number.isInteger(sender.frameId) ? sender.frameId : 0;
+  const playbackState = ['playing', 'paused', 'ended'].includes(payload?.playbackState)
+    ? payload.playbackState
+    : 'paused';
+  return {
+    key: mediaSessionKey(tab.id, frameId),
+    tabId: tab.id,
+    frameId,
+    windowId: tab.windowId,
+    tabTitle: mediaText(tab.title, 500),
+    pageUrl: mediaText(payload?.pageUrl || tab.url, 4096),
+    host: mediaText(payload?.host, 300),
+    favicon: mediaText(tab.favIconUrl, 4096),
+    title: mediaText(payload?.title || tab.title || 'Contenido multimedia', 1000),
+    artist: mediaText(payload?.artist, 1000),
+    album: mediaText(payload?.album, 1000),
+    artwork: mediaText(payload?.artwork, 8192),
+    playbackState,
+    currentTime: Math.max(0, Number(payload?.currentTime) || 0),
+    duration: Math.max(0, Number(payload?.duration) || 0),
+    playbackRate: Math.max(0.1, Math.min(16, Number(payload?.playbackRate) || 1)),
+    volume: Math.max(0, Math.min(1, Number(payload?.volume) || 0)),
+    muted: !!payload?.muted,
+    canSeek: !!payload?.canSeek,
+    canSeekBackward: !!payload?.canSeekBackward,
+    canSeekForward: !!payload?.canSeekForward,
+    canPrev: !!payload?.canPrev,
+    canNext: !!payload?.canNext,
+    canVolume: payload?.canVolume !== false,
+    transportAdapter: mediaText(payload?.transportAdapter, 100),
+    mediaKind: payload?.mediaKind === 'video' ? 'video' : 'audio',
+    nativeEligible: payload?.nativeEligible !== false,
+    controllable: true,
+    readyState: Number(payload?.readyState) || 0,
+    updatedAt: Date.now()
+  };
+}
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (!message?.type?.startsWith?.('STARTAB_MEDIA_')) return;
+
+  if (message.type === 'STARTAB_MEDIA_STATE') {
+    ensureMediaRegistryLoaded().then(() => {
+      const session = sanitizeMediaPayload(message.payload, sender);
+      if (!session) return;
+
+      const previous = mediaRegistry[session.key];
+      let tabFirstSeenAt = Number(previous?.firstSeenAt) || 0;
+      if (!tabFirstSeenAt) {
+        for (const existing of Object.values(mediaRegistry)) {
+          if (existing?.tabId !== session.tabId) continue;
+          const value = Number(existing.firstSeenAt) || 0;
+          if (value && (!tabFirstSeenAt || value < tabFirstSeenAt)) tabFirstSeenAt = value;
+        }
+      }
+      session.firstSeenAt = tabFirstSeenAt || Date.now();
+
+      mediaRegistry[session.key] = session;
+      scheduleMediaRegistryPersist();
+      broadcastMediaRegistry();
+    });
+    return;
+  }
+
+  if (message.type === 'STARTAB_MEDIA_REMOVE_FRAME') {
+    ensureMediaRegistryLoaded().then(() => {
+      const tabId = sender?.tab?.id;
+      if (!Number.isInteger(tabId)) return;
+      const key = mediaSessionKey(tabId, Number.isInteger(sender.frameId) ? sender.frameId : 0);
+      if (!mediaRegistry[key]) return;
+      delete mediaRegistry[key];
+      scheduleMediaRegistryPersist();
+      broadcastMediaRegistry();
+    });
+    return;
+  }
+
+  if (message.type === 'STARTAB_MEDIA_GET_REGISTRY') {
+    ensureMediaRegistryLoaded().then(() => {
+      sendResponse({ ok: true, sessions: exportedMediaSessions() });
+    }).catch(error => sendResponse({ ok: false, reason: String(error?.message || error), sessions: [] }));
+    return true;
+  }
+
+  if (message.type === 'STARTAB_MEDIA_CONTROL') {
+    (async () => {
+      await ensureMediaRegistryLoaded();
+      const tabId = Number(message?.target?.tabId);
+      const frameId = Number(message?.target?.frameId) || 0;
+      if (!Number.isInteger(tabId)) {
+        sendResponse({ ok: false, reason: 'invalid-target' });
+        return;
+      }
+      const key = mediaSessionKey(tabId, frameId);
+      const session = mediaRegistry[key];
+      if (!session) {
+        sendResponse({ ok: false, reason: 'media-session-not-found' });
+        return;
+      }
+      try {
+        const result = await chrome.tabs.sendMessage(
+          tabId,
+          { type: 'STARTAB_MEDIA_COMMAND', command: message.command || {} },
+          { frameId }
+        );
+        if (result?.ok && result?.state && typeof result.state === 'object') {
+          // El agente devuelve el estado post-comando. Lo promovemos de inmediato
+          // al registro central para que TODAS las pestañas StarTab cambien a la vez.
+          const refreshed = sanitizeMediaPayload(result.state, {
+            tab: {
+              id: session.tabId,
+              windowId: session.windowId,
+              title: session.tabTitle,
+              url: session.pageUrl,
+              favIconUrl: session.favicon
+            },
+            frameId: session.frameId
+          });
+          if (refreshed) {
+            refreshed.favicon = session.favicon || refreshed.favicon;
+            refreshed.tabTitle = session.tabTitle || refreshed.tabTitle;
+            refreshed.firstSeenAt = Number(session.firstSeenAt) || Date.now();
+            mediaRegistry[key] = refreshed;
+            scheduleMediaRegistryPersist();
+            broadcastMediaRegistry();
+            result.state = refreshed;
+          }
+        } else if (!result?.ok && (message?.command?.action === 'prev' || message?.command?.action === 'next')) {
+          const field = message.command.action === 'prev' ? 'canPrev' : 'canNext';
+          session[field] = false;
+          session.updatedAt = Date.now();
+          mediaRegistry[key] = session;
+          scheduleMediaRegistryPersist();
+          broadcastMediaRegistry();
+        }
+        sendResponse(result || { ok: false, reason: 'no-agent-response' });
+      } catch (error) {
+        sendResponse({ ok: false, reason: String(error?.message || error) });
+      }
+    })();
+    return true;
+  }
+});
+
+chrome.tabs.onRemoved.addListener(tabId => {
+  ensureMediaRegistryLoaded().then(() => removeMediaForTab(tabId));
+});
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (changeInfo.status === 'loading' || changeInfo.url) {
+    ensureMediaRegistryLoaded().then(() => removeMediaForTab(tabId));
+  }
+});
+
+async function bootstrapMediaAgents() {
+  await ensureMediaRegistryLoaded();
+  try {
+    const tabs = await chrome.tabs.query({});
+    await Promise.allSettled(tabs
+      .filter(tab => Number.isInteger(tab.id) && /^https?:\/\//i.test(tab.url || ''))
+      .map(async tab => {
+        try {
+          await chrome.scripting.executeScript({
+            target: { tabId: tab.id, allFrames: true },
+            files: ['media-session-bridge.js'],
+            world: 'MAIN'
+          });
+        } catch (_) {}
+        try {
+          await chrome.scripting.executeScript({
+            target: { tabId: tab.id, allFrames: true },
+            files: ['media-agent.js'],
+            world: 'ISOLATED'
+          });
+        } catch (_) {}
+      })
+    );
+  } catch (_) {}
+}
+
+chrome.runtime.onInstalled.addListener(() => bootstrapMediaAgents());
+chrome.runtime.onStartup.addListener(() => bootstrapMediaAgents());
+// También al arrancar/rearrancar el service worker: así una recarga manual de
+// la extensión conecta las pestañas que ya estaban abiertas sin obligar a
+// cerrar StarTab. Los agentes/bridge tienen guardas contra doble inyección.
+bootstrapMediaAgents();

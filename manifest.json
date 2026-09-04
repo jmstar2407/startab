@@ -8,6 +8,7 @@
   },
   "permissions": [
     "tabs",
+    "scripting",
     "storage",
     "tabGroups",
     "unlimitedStorage",
@@ -47,5 +48,33 @@
   },
   "background": {
     "service_worker": "background.js"
-  }
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "media-session-bridge.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true,
+      "match_about_blank": true,
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "media-agent.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true,
+      "match_about_blank": true,
+      "world": "ISOLATED"
+    }
+  ]
 }
