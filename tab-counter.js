@@ -153,7 +153,7 @@
                     <div class="startab-tab-heading">
                         <div class="startab-tab-symbol"><span></span><span></span><span></span></div>
                         <div>
-                            <div class="startab-tab-kicker">STAR TAB · WORKSPACE</div>
+                            <div class="startab-tab-kicker">StarTab · WORKSPACE</div>
                             <h2 id="startab-tab-title">Centro de pestañas</h2>
                             <p id="startab-tab-subtitle">Navega entre todas tus pestañas y ventanas.</p>
                         </div>

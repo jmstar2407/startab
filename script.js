@@ -71,7 +71,7 @@ let notaTimeouts = {};
 let notaDOMActual = null;
 let notaSyncResetTimer = null;
 let notaMapaFirebaseVisto = false;
-const NOTA_SAVE_DEBOUNCE = 320;
+const NOTA_SAVE_DEBOUNCE = 5000;
 const notaClienteId = (() => {
     const key = 'startab_notes_client_id';
     try {
@@ -4749,9 +4749,10 @@ function conectarNotasTiempoReal(ref = userDocRef) {
             const meta = notasMeta[key] || {};
             const vieneDeEsteCliente = meta.clientId === notaClienteId;
 
-            // Si esta misma nota tiene una edición local todavía sin confirmar,
-            // no permitimos que un snapshot remoto anterior pise lo que se escribe.
-            if (nota.pendiente && !vieneDeEsteCliente && remoto !== nota.contenido) continue;
+            // Mientras exista una edición local pendiente, ningún snapshot distinto
+            // puede pisar lo que el usuario está escribiendo, incluso si el
+            // snapshot anterior lleva el mismo clientId de este dispositivo.
+            if (nota.pendiente && remoto !== nota.contenido) continue;
 
             if (remoto !== nota.contenido) {
                 nota.contenido = remoto;
@@ -4814,7 +4815,7 @@ function guardarNotaEnTiempoReal(notaNum, texto, notaDOM = obtenerNotaDOM()) {
         return;
     }
 
-    actualizarEstadoNotaSync(navigator.onLine ? 'guardando' : 'offline', navigator.onLine ? 'Guardando cambios…' : 'Sin conexión · se sincronizará después', notaDOM);
+    actualizarEstadoNotaSync(navigator.onLine ? 'guardando' : 'offline', navigator.onLine ? 'Cambios pendientes · guardado en 5 s' : 'Sin conexión · se sincronizará después', notaDOM);
     if (notaTimeouts[notaNum]) clearTimeout(notaTimeouts[notaNum]);
     nota.pendingUid = currentUser.uid;
     nota.pendingRef = userDocRef;
@@ -4980,7 +4981,7 @@ function actualizarEstadoNotaSync(tipo, texto, notaDOM = obtenerNotaDOM()) {
         const hints = {
             sincronizado: 'Cambios reflejados en todos tus dispositivos',
             remoto: 'Firebase recibió un cambio de otro dispositivo',
-            guardando: 'Guardando sin interrumpir tu escritura',
+            guardando: 'Se guardará tras 5 segundos sin escribir',
             sincronizando: 'Estableciendo canal en tiempo real',
             offline: 'Firestore conservará la escritura hasta recuperar Internet',
             error: 'La copia local se mantiene protegida',
