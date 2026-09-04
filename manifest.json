@@ -1,16 +1,21 @@
 {
   "manifest_version": 3,
   "name": "StarTab - Nueva Pestaña",
-  "version": "1.0",
+  "version": "1.4",
   "description": "Página personalizada para nueva pestaña con sincronización en la nube",
   "chrome_url_overrides": {
     "newtab": "index.html"
   },
-"permissions": [
-  "tabs",
-  "storage",
-    "tabGroups"
-],
+  "permissions": [
+    "tabs",
+    "storage",
+    "tabGroups",
+    "unlimitedStorage",
+    "windows",
+    "debugger",
+    "activeTab",
+    "contextMenus"
+  ],
   "host_permissions": [
     "https://accounts.google.com/*",
     "https://oauth2.googleapis.com/*",
@@ -21,10 +26,12 @@
     "https://*.gstatic.com/*",
     "https://firestore.googleapis.com/*",
     "https://securetoken.googleapis.com/*",
-    "https://identitytoolkit.googleapis.com/*"
+    "https://identitytoolkit.googleapis.com/*",
+    "http://*/*",
+    "https://*/*"
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src https://accounts.google.com https://oauth2.googleapis.com https://www.googleapis.com https://*.firebase.com https://*.firebaseio.com https://*.googleapis.com https://*.gstatic.com https://firestore.googleapis.com https://securetoken.googleapis.com https://identitytoolkit.googleapis.com"
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src https://accounts.google.com https://oauth2.googleapis.com https://www.googleapis.com https://*.firebase.com https://*.firebaseio.com https://*.googleapis.com https://*.gstatic.com https://firestore.googleapis.com https://securetoken.googleapis.com https://identitytoolkit.googleapis.com https: http:; img-src 'self' data: blob: https: http:"
   },
   "oauth2": {
     "client_id": "427918393457-crgqe77q3e6jr7bigvmhlhel473dbogp.apps.googleusercontent.com",
@@ -37,5 +44,8 @@
     "16": "icono.png",
     "48": "icono.png",
     "128": "icono.png"
+  },
+  "background": {
+    "service_worker": "background.js"
   }
 }

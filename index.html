@@ -8,6 +8,45 @@
     <title>Nueva pestaña</title>
     <link rel="icon" href="img/icons/startab_3.svg" type="image/svg+xml">
     <link rel="stylesheet" href="styles.css">
+    <style>
+        /* Botón de sincronización Firebase al lado del backup */
+        .backup-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .backup-row .backup-btn {
+            flex: 1;
+        }
+        .refresh-btn {
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background 0.2s, transform 0.2s;
+            padding: 0;
+            color: inherit;
+        }
+        .refresh-btn:hover {
+            background: rgba(102,126,234,0.25);
+            transform: rotate(30deg);
+        }
+        .refresh-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .refresh-icon {
+            line-height: 1;
+        }
+    </style>
 
     <script src="lib/firebase-app-compat.js" defer></script>
     <script src="lib/firebase-firestore-compat.js" defer></script>
@@ -20,55 +59,66 @@
 </head>
 
 <body>
-    <!-- BOTÓN DE AUTENTICACIÓN -->
-    <div class="auth-container" id="auth-container">
-        <button class="auth-btn" id="auth-btn">
-            <span class="auth-btn-text">Iniciar sesión</span>
-        </button>
-        <div class="user-menu" id="user-menu" style="display: none;">
-            <img src="" alt="Perfil" class="user-avatar" id="user-avatar" loading="lazy">
-            <div class="user-dropdown" id="user-dropdown">
-                <div class="user-info">
-                    <span class="user-name" id="user-name"></span>
-                    <span class="user-email" id="user-email"></span>
-                </div>
-                <div class="dropdown-divider"></div>
-                <button class="backup-btn" id="backup-btn">
-                    <span class="backup-icon">💾</span>
-                    Descargar backup
-                </button>
-                <div class="dropdown-divider"></div>
-                <button class="logout-btn" id="logout-btn">
-                    <span class="logout-icon">🚪</span>
-                    Cerrar sesión
-                </button>
-            </div>
-        </div>
-    </div>
+    <!-- BARRA SUPERIOR: CONTADOR DE PESTAÑAS + PERFIL/LOGIN -->
+    <div class="top-bar-actions" id="top-bar-actions">
 
-
-    <!-- CONTADOR DE PESTAÑAS MEJORADO -->
-    <div class="tab-counter-container" id="tab-counter-container" title="Estadísticas de ventanas y pestañas">
-        <div class="tab-counter">
-            <span class="tab-counter-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
-                    viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                    stroke-linejoin="round" class="lucide lucide-app-window-mac-icon lucide-app-window-mac">
-                    <rect width="20" height="16" x="2" y="4" rx="2" />
-                    <path d="M6 8h.01" />
-                    <path d="M10 8h.01" />
-                    <path d="M14 8h.01" />
-                </svg></span>
-            <div class="tab-counter-info">
-                <div class="tab-counter-item">
-                    <span class="tab-counter-label">Ventanas:</span>
-                    <span class="tab-counter-value" id="tab-counter-windows">0</span>
-                </div>
-                <div class="tab-counter-item">
-                    <span class="tab-counter-label">Pestañas:</span>
-                    <span class="tab-counter-value" id="tab-counter-tabs">0</span>
+        <!-- CONTADOR DE PESTAÑAS MEJORADO -->
+        <div class="tab-counter-container" id="tab-counter-container" title="Estadísticas de ventanas y pestañas">
+            <div class="tab-counter">
+                <span class="tab-counter-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
+                        viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round" class="lucide lucide-app-window-mac-icon lucide-app-window-mac">
+                        <rect width="20" height="16" x="2" y="4" rx="2" />
+                        <path d="M6 8h.01" />
+                        <path d="M10 8h.01" />
+                        <path d="M14 8h.01" />
+                    </svg></span>
+                <div class="tab-counter-info">
+                    <div class="tab-counter-item">
+                        <span class="tab-counter-label">Ventanas:</span>
+                        <span class="tab-counter-value" id="tab-counter-windows">0</span>
+                    </div>
+                    <div class="tab-counter-item">
+                        <span class="tab-counter-label">Pestañas:</span>
+                        <span class="tab-counter-value" id="tab-counter-tabs">0</span>
+                    </div>
                 </div>
             </div>
         </div>
+
+        <!-- BOTÓN DE AUTENTICACIÓN -->
+        <div class="auth-container" id="auth-container">
+            <button class="auth-btn" id="auth-btn" title="Iniciar sesión" aria-label="Iniciar sesión">
+                <img class="auth-btn-icon" src="img/icons/log_in_1.png" alt="Iniciar sesión">
+            </button>
+            <div class="user-menu" id="user-menu" style="display: none;">
+                <img src="" alt="Perfil" class="user-avatar" id="user-avatar" loading="lazy">
+                <div class="user-dropdown" id="user-dropdown">
+                    <div class="user-info">
+                        <span class="user-name" id="user-name"></span>
+                        <span class="user-email" id="user-email"></span>
+                    </div>
+                    <div class="dropdown-divider"></div>
+                    <div class="backup-row">
+                        <button class="backup-btn" id="backup-btn">
+                            <span class="backup-icon">💾</span>
+                            Descargar backup
+                        </button>
+                        <button class="refresh-btn" id="refresh-firebase-btn" title="Sincronizar desde Firebase (sobreescribe datos locales)">
+                            <span class="refresh-icon">🔄</span>
+                        </button>
+                    </div>
+                    <div class="dropdown-divider"></div>
+                    <button class="logout-btn" id="logout-btn">
+                        <span class="logout-icon">🚪</span>
+                        Cerrar sesión
+                    </button>
+                    <div class="dropdown-divider"></div>
+                    <div class="startab-version">StarTab v1.4</div>
+                </div>
+            </div>
+        </div>
+
     </div>
 
     <!-- INDICADOR DE CONEXIÓN -->
@@ -93,43 +143,89 @@
         <span class="nota-icono-tooltip">Notas rápidas (Ctrl+N)</span>
     </div>
 
-    <!-- MODAL DE NOTA MODERNO -->
-    <div class="nota-modal" id="nota-modal">
-        <div class="nota-modal-contenido">
-            <div class="nota-modal-header">
-                <h2 class="nota-modal-titulo">
-                    <span class="nota-modal-icono">📝</span>
-                    Notas rápidas
-                </h2>
-                <button class="nota-modal-cerrar" id="nota-modal-cerrar">×</button>
-            </div>
-            <div class="nota-modal-body">
-                <div class="notes-box">
-                    <textarea class="nota-textarea" id="nota-textarea" placeholder="Nota 1 - Escribe aquí..."
-                        spellcheck="false"></textarea>
-                    <div class="nota-stats">
-                        <span id="nota-char-count">0 caracteres</span>
+    <!-- NOTAS RÁPIDAS · WORKSPACE CLOUD EN TIEMPO REAL -->
+    <div class="nota-modal" id="nota-modal" role="presentation">
+        <div class="nota-modal-backdrop" data-close-notes></div>
+        <section class="nota-modal-contenido" role="dialog" aria-modal="true" aria-labelledby="nota-modal-title" aria-describedby="nota-modal-subtitle">
+            <header class="nota-modal-header">
+                <div class="nota-modal-heading">
+                    <div class="nota-modal-symbol" aria-hidden="true"><span></span><span></span><span></span></div>
+                    <div class="nota-modal-heading-copy">
+                        <div class="nota-modal-kicker">STAR TAB · CLOUD NOTES</div>
+                        <h2 class="nota-modal-titulo" id="nota-modal-title">Notas rápidas</h2>
+                        <p id="nota-modal-subtitle">Escribe aquí y tus dispositivos se actualizan automáticamente.</p>
                     </div>
                 </div>
-                <div class="nota-botones-container">
-                    <button class="nota-btn-numero activo" data-nota="1" title="Nota 1 (Ctrl+1)">1</button>
-                    <button class="nota-btn-numero" data-nota="2" title="Nota 2 (Ctrl+2)">2</button>
-                    <button class="nota-btn-numero" data-nota="3" title="Nota 3 (Ctrl+3)">3</button>
-                    <button class="nota-btn-numero" data-nota="4" title="Nota 4 (Ctrl+4)">4</button>
-                    <button class="nota-btn-numero" data-nota="5" title="Nota 5 (Ctrl+5)">5</button>
+                <div class="nota-modal-actions">
+                    <div class="nota-cloud-status" id="nota-cloud-status" aria-live="polite">
+                        <span class="nota-sync-icon sincronizando" id="nota-sync-icon" aria-hidden="true"></span>
+                        <span class="nota-sync-text" id="nota-sync-text">Conectando…</span>
+                    </div>
+                    <button class="nota-modal-cerrar" id="nota-modal-cerrar" type="button" title="Cerrar (Esc)" aria-label="Cerrar">×</button>
                 </div>
+            </header>
+
+            <div class="nota-workspace">
+                <aside class="nota-sidebar" aria-label="Lista de notas">
+                    <div class="nota-sidebar-head">
+                        <div>
+                            <strong>Tus notas</strong>
+                            <span>5 espacios rápidos</span>
+                        </div>
+                        <span class="nota-live-badge"><i></i>LIVE</span>
+                    </div>
+
+                    <div class="nota-botones-container" role="tablist" aria-label="Notas rápidas">
+                        <button class="nota-btn-numero activo" data-nota="1" type="button" role="tab" aria-selected="true" title="Nota 1 (Ctrl+1)">
+                            <span class="nota-list-index">01</span><span class="nota-list-copy"><strong>Nota 1</strong><small data-nota-preview="1">Vacía</small></span><i class="nota-list-dot"></i>
+                        </button>
+                        <button class="nota-btn-numero" data-nota="2" type="button" role="tab" aria-selected="false" title="Nota 2 (Ctrl+2)">
+                            <span class="nota-list-index">02</span><span class="nota-list-copy"><strong>Nota 2</strong><small data-nota-preview="2">Vacía</small></span><i class="nota-list-dot"></i>
+                        </button>
+                        <button class="nota-btn-numero" data-nota="3" type="button" role="tab" aria-selected="false" title="Nota 3 (Ctrl+3)">
+                            <span class="nota-list-index">03</span><span class="nota-list-copy"><strong>Nota 3</strong><small data-nota-preview="3">Vacía</small></span><i class="nota-list-dot"></i>
+                        </button>
+                        <button class="nota-btn-numero" data-nota="4" type="button" role="tab" aria-selected="false" title="Nota 4 (Ctrl+4)">
+                            <span class="nota-list-index">04</span><span class="nota-list-copy"><strong>Nota 4</strong><small data-nota-preview="4">Vacía</small></span><i class="nota-list-dot"></i>
+                        </button>
+                        <button class="nota-btn-numero" data-nota="5" type="button" role="tab" aria-selected="false" title="Nota 5 (Ctrl+5)">
+                            <span class="nota-list-index">05</span><span class="nota-list-copy"><strong>Nota 5</strong><small data-nota-preview="5">Vacía</small></span><i class="nota-list-dot"></i>
+                        </button>
+                    </div>
+
+                    <div class="nota-sidebar-foot">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 16.5A4.5 4.5 0 0 0 17.5 8h-.7A7 7 0 1 0 5 14.7"></path><path d="M8 17h8"></path><path d="m13 14 3 3-3 3"></path></svg>
+                        <span>Firebase sincroniza los cambios entre tus dispositivos.</span>
+                    </div>
+                </aside>
+
+                <main class="nota-editor-panel">
+                    <div class="nota-editor-toolbar">
+                        <div class="nota-editor-identidad">
+                            <span class="nota-editor-orb"></span>
+                            <div><strong id="nota-current-label">Nota 1</strong><small id="nota-editor-hint">Sincronización bidireccional en tiempo real</small></div>
+                        </div>
+                        <span class="nota-editor-shortcut"><kbd>Ctrl</kbd><kbd>1–5</kbd></span>
+                    </div>
+
+                    <div class="notes-box">
+                        <textarea class="nota-textarea" id="nota-textarea" placeholder="Escribe algo…" spellcheck="true" autocomplete="off" aria-label="Contenido de la nota"></textarea>
+                    </div>
+
+                    <footer class="nota-modal-footer">
+                        <div class="nota-footer-info">
+                            <span id="nota-char-count">0 caracteres · 0 palabras</span>
+                            <span class="nota-footer-separator"></span>
+                            <span id="nota-last-sync">Lista para escribir</span>
+                        </div>
+                        <button class="nota-btn nota-btn-copiar" id="nota-btn-copiar" type="button" title="Copiar nota">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"></path></svg>
+                            <span>Copiar</span>
+                        </button>
+                    </footer>
+                </main>
             </div>
-            <div class="nota-modal-footer">
-                <div class="nota-footer-info">
-                    <span class="nota-sync-icon" id="nota-sync-icon">🔄</span>
-                    <span class="nota-sync-text" id="nota-sync-text">Sincronizado</span>
-                </div>
-                <button class="nota-btn nota-btn-copiar" id="nota-btn-copiar">
-                    <span class="nota-btn-icono">📋</span>
-                    Copiar nota
-                </button>
-            </div>
-        </div>
+        </section>
     </div>
 
     <!-- MODAL DE ICONOS (AGREGAR/EDITAR) -->
@@ -144,9 +240,9 @@
                     <h3>Vista previa</h3>
                     <div class="preview-container">
                         <div class="preview-icono" id="preview-icono"
-                            style="background-color:transparent; border-radius:12%; width:150px; height:150px; display:flex; align-items:center; justify-content:center; margin:0 auto;box-shadow: 0px 12px 27px 12px rgb(0 0 0 / 24%);">
+                            style="background-color:transparent; border-radius:0%; width:150px; height:150px; display:flex; align-items:center; justify-content:center; margin:0 auto;box-shadow: 0px 12px 27px 12px rgb(0 0 0 / 24%);">
                             <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 24 24' fill='%23666'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3C/svg%3E"
-                                alt="Preview" id="preview-img" style="width:74%; height:74%; object-fit:contain;"
+                                alt="Preview" id="preview-img" style="width:100%; height:100%; object-fit:contain; border-radius:0%;"
                                 loading="lazy">
                         </div>
                         <span id="preview-nombre"
@@ -167,7 +263,7 @@
 
                         <!-- <div class="control-separador"></div> -->
                         <div
-                            style="display: inline-flex;gap: 1.5rem;width: 100%;justify-content: space-between;margin-bottom: 2rem;">
+                            class="shortcut-fields-row shortcut-fields-row-main" style="display: inline-flex;gap: 1.5rem;width: 100%;justify-content: space-between;margin-bottom: 2rem;">
                             <div class="control-grupo">
                                 <label><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
                                         viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -193,7 +289,7 @@
                             </div>
                         </div>
 
-                        <div style="display: inline-flex;gap: 1.5rem;width: 100%;justify-content: space-between;">
+                        <div class="shortcut-fields-row shortcut-fields-row-icon" style="display: inline-flex;gap: 1.5rem;width: 100%;justify-content: space-between;">
                             <div class="control-grupo">
                                 <label><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
                                         viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -210,12 +306,16 @@
                                 <input type="url" id="icono-sitio" placeholder="https://ejemplo.com/icono.png"
                                     class="control-input">
                             </div>
-                            <div class="control-grupo" style="width: 80px;">
-                                <label>upload</label>
+                            <div class="control-grupo control-grupo-subir-icono" style="width: 92px;">
+                                <label>Subir</label>
                                 <div class="file-upload-container">
                                     <input type="file" id="icono-file" accept="image/*" class="file-input">
-                                    <label for="icono-file" class="file-label">
-                                        <span class="file-text">+</span>
+                                    <label for="icono-file" class="file-label" title="Subir imagen" aria-label="Subir imagen">
+                                        <span class="file-text" aria-hidden="true">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"></path>
+                                            </svg>
+                                        </span>
                                     </label>
                                     <div class="file-name" id="file-name"></div>
                                 </div>
@@ -240,7 +340,7 @@
 
 
                         <div
-                            style="display: inline-flex;gap: 1.5rem;width: 100%;justify-content: space-between;margin-bottom: 3rem;">
+                            class="shortcut-fields-row shortcut-fields-row-ranges" style="display: inline-flex;gap: 1.5rem;width: 100%;justify-content: space-between;margin-bottom: 3rem;">
                             <div class="control-grupo">
                                 <div class="control-label">
                                     <label id="barras_1"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
@@ -252,9 +352,9 @@
                                             <path d="M3 9h18"></path>
                                             <path d="M9 21V9"></path>
                                         </svg>Borde redondeado</label>
-                                    <span class="control-valor" id="radio-valor">50%</span>
+                                    <span class="control-valor" id="radio-valor">0%</span>
                                 </div>
-                                <input type="range" id="radio-borde-icono" min="0" max="100" value="50"
+                                <input type="range" id="radio-borde-icono" min="0" max="100" value="0"
                                     class="control-range">
                                 <!-- <div class="range-marks"><span>0%</span><span>50%</span><span>100%</span></div> -->
                             </div>
@@ -270,9 +370,9 @@
                                             <path d="M3 16v3a2 2 0 0 0 2 2h3"></path>
                                             <path d="M16 21h3a2 2 0 0 0 2-2v-3"></path>
                                         </svg>Tamaño del icono</label>
-                                    <span class="control-valor" id="tamano-valor">74%</span>
+                                    <span class="control-valor" id="tamano-valor">100%</span>
                                 </div>
-                                <input type="range" id="tamano-icono" min="30" max="100" value="74"
+                                <input type="range" id="tamano-icono" min="30" max="100" value="100"
                                     class="control-range">
                                 <!--  <div class="range-marks"><span>30%</span><span>65%</span><span>100%</span></div> -->
                             </div>
@@ -305,13 +405,13 @@
                     <label>Tipo de fondo:</label>
 
                     <!-- Input oculto para mantener compatibilidad con el JS -->
-                    <input type="hidden" id="fondo-tipo" value="gradiente">
+                    <input type="hidden" id="fondo-tipo" value="imagen">
 
                     <div class="button-select" id="fondo-tipo-buttons">
-                        <button type="button" class="btn-tipo activo" data-value="gradiente" id="gradient_1">
+                        <button type="button" class="btn-tipo" data-value="gradiente" id="gradient_1">
                             Gradiente
                         </button>
-                        <button type="button" class="btn-tipo" data-value="imagen" id="imagen_1">
+                        <button type="button" class="btn-tipo activo" data-value="imagen" id="imagen_1">
                             Imagen
                         </button>
                         <button type="button" class="btn-tipo" data-value="video" id="video_1">
@@ -454,8 +554,17 @@
                             <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path>
                             <path d="M2 12h20"></path>
                         </svg>URL personalizada (opcional):</label>
-                    <input type="url" id="fondo-url-input" placeholder="https://ejemplo.com/imagen.jpg o video.mp4"
-                        class="control-input">
+                    <div class="fondo-url-row">
+                        <input type="url" id="fondo-url-input" placeholder="https://ejemplo.com/imagen.jpg o video.mp4"
+                            class="control-input">
+                        <button type="button" id="fondo-imagen-file-btn" class="fondo-imagen-file-btn" title="Subir imagen desde el dispositivo" aria-label="Subir imagen desde el dispositivo">
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M4 5a2 2 0 0 1 2-2h5l2 2h5a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"></path>
+                                <path d="M8 14l2.5-3 2 2.5 1.5-2 3 4.5"></path>
+                            </svg>
+                        </button>
+                        <input type="file" id="fondo-imagen-file" accept="image/*" hidden>
+                    </div>
                 </div>
 
                 <div class="personalizar-input-group" id="grupo-colores">
@@ -652,6 +761,7 @@
             </svg></button>
     </div>
 
+    <div class="acciones-personalizacion-flotantes" id="acciones-personalizacion-flotantes">
     <button id="btn-personalizar" class="btn-personalizar" title="Personalizar fondo">
         <span class="btn-personalizar-icono"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
                 viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
@@ -665,6 +775,102 @@
                 <circle cx="8.5" cy="7.5" r=".5" fill="currentColor"></circle>
             </svg></span>
     </button>
+
+    <button id="btn-redimensionar" class="btn-redimensionar" title="Redimensionar y ajustar accesos" aria-label="Redimensionar y ajustar accesos">
+        <span class="btn-redimensionar-icono">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M8 3H5a2 2 0 0 0-2 2v3"></path>
+                <path d="M21 8V5a2 2 0 0 0-2-2h-3"></path>
+                <path d="M16 21h3a2 2 0 0 0 2-2v-3"></path>
+                <path d="M3 16v3a2 2 0 0 0 2 2h3"></path>
+                <path d="m9 9 6 6"></path>
+                <path d="m15 9-6 6"></path>
+            </svg>
+        </span>
+    </button>
+    </div>
+
+    <div id="panel-redimensionar-backdrop" class="panel-redimensionar-backdrop" aria-hidden="true"></div>
+    <aside id="panel-redimensionar" class="panel-redimensionar" aria-hidden="true">
+        <div class="panel-redimensionar-header">
+            <div>
+                <span class="panel-redimensionar-kicker">StarTab</span>
+                <h2>Personalización</h2>
+                <p>Ajusta tu espacio de trabajo en tiempo real.</p>
+            </div>
+            <button id="cerrar-panel-redimensionar" class="startab-tab-close panel-redimensionar-cerrar" type="button" title="Cerrar (Esc)" aria-label="Cerrar">×</button>
+        </div>
+
+        <div class="redim-tabs" role="tablist" aria-label="Secciones de personalización">
+            <button class="redim-tab activo" id="redim-tab-iconos" type="button" role="tab" aria-selected="true" aria-controls="redim-panel-iconos">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="6" height="6" rx="1"></rect><rect x="14" y="4" width="6" height="6" rx="1"></rect><rect x="4" y="14" width="6" height="6" rx="1"></rect><rect x="14" y="14" width="6" height="6" rx="1"></rect></svg>
+                <span>Accesos directos</span>
+            </button>
+            <button class="redim-tab" id="redim-tab-busqueda" type="button" role="tab" aria-selected="false" aria-controls="redim-panel-busqueda">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg>
+                <span>Barra de búsqueda</span>
+            </button>
+        </div>
+
+        <div class="panel-redimensionar-scroll">
+            <section class="redim-seccion redim-tab-panel" id="redim-panel-busqueda" role="tabpanel" aria-labelledby="redim-tab-busqueda" hidden>
+                <div class="redim-seccion-titulo"><span>Barra de búsqueda</span><small>contenedor-busqueda</small></div>
+                <label class="redim-control">
+                    <span><span class="redim-label"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18"></path><path d="m8 7 4-4 4 4"></path><path d="m8 17 4 4 4-4"></path></svg><b>Posición vertical</b></span><output id="valor-busqueda-y">0 px</output></span>
+                    <input id="redim-busqueda-y" type="range" min="-180" max="180" value="0" step="1">
+                </label>
+                <label class="redim-control">
+                    <span><span class="redim-label"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3"></path><path d="M16 3h3a2 2 0 0 1 2 2v3"></path><path d="M8 21H5a2 2 0 0 1-2-2v-3"></path><path d="M16 21h3a2 2 0 0 0 2-2v-3"></path></svg><b>Tamaño</b></span><output id="valor-busqueda-size">100%</output></span>
+                    <input id="redim-busqueda-size" type="range" min="70" max="130" value="100" step="1">
+                </label>
+            </section>
+
+            <section class="redim-seccion redim-tab-panel activo" id="redim-panel-iconos" role="tabpanel" aria-labelledby="redim-tab-iconos">
+                <div class="redim-seccion-titulo"><span>Accesos directos</span><small>contenedor-iconos</small></div>
+                <label class="redim-control">
+                    <span><span class="redim-label"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18"></path><path d="m8 7 4-4 4 4"></path><path d="m8 17 4 4 4-4"></path></svg><b>Posición vertical</b></span><output id="valor-iconos-y">0 px</output></span>
+                    <input id="redim-iconos-y" type="range" min="-180" max="180" value="0" step="1">
+                </label>
+                <label class="redim-control">
+                    <span><span class="redim-label"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4z"></path><path d="m8 8 8 8"></path><path d="m16 8-8 8"></path></svg><b>Tamaño del contenedor</b></span><output id="valor-iconos-size">100%</output></span>
+                    <input id="redim-iconos-size" type="range" min="70" max="130" value="100" step="1">
+                </label>
+                <label class="redim-control">
+                    <span><span class="redim-label"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3"></path><path d="M16 3h3a2 2 0 0 1 2-2v3"></path><path d="M8 21H5a2 2 0 0 1-2-2v-3"></path><path d="M16 21h3a2 2 0 0 0 2-2v3"></path></svg><b>Tamaño del icono</b></span><output id="valor-icono-size">100%</output></span>
+                    <input id="redim-icono-size" type="range" min="25" max="100" value="100" step="1">
+                </label>
+                <div class="redim-switch-row">
+                    <div class="redim-label-text"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"></rect><path d="M7 7h10v10H7z"></path></svg><span><b>Fondo de los accesos</b><small>Mostrar fondo y borde del acceso directo</small></span></div>
+                    <label class="redim-switch"><input id="redim-icono-bg" type="checkbox" checked><span></span></label>
+                </div>
+                <label class="redim-control">
+                    <span><span class="redim-label"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="6"></rect><path d="M4 10h3"></path></svg><b>Bordes redondeados</b></span><output id="valor-icono-radius">12 px</output></span>
+                    <input id="redim-icono-radius" type="range" min="0" max="40" value="12" step="1">
+                </label>
+                <label class="redim-control">
+                    <span><span class="redim-label"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14"></path><path d="M5 12h14"></path><path d="M5 18h14"></path><path d="m8 3-3 3 3 3"></path></svg><b>Alineación</b></span><output id="valor-icono-align">Izquierda</output></span>
+                    <select id="redim-icono-align" class="redim-select">
+                        <option value="left" selected>Izquierda</option>
+                        <option value="center">Centro</option>
+                        <option value="right">Derecha</option>
+                    </select>
+                </label>
+                <label class="redim-control">
+                    <span><span class="redim-label"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16"></path><path d="M4 12h16"></path><path d="M4 19h16"></path><path d="M7 3v4"></path><path d="M12 10v4"></path><path d="M17 17v4"></path></svg><b>Filas</b></span><output id="valor-icono-rows">2</output></span>
+                    <input id="redim-icono-rows" type="range" min="1" max="4" value="2" step="1">
+                </label>
+                <label class="redim-control">
+                    <span><span class="redim-label"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4v16"></path><path d="M12 4v16"></path><path d="M19 4v16"></path><path d="M3 7h4"></path><path d="M10 12h4"></path><path d="M17 17h4"></path></svg><b>Columnas</b></span><output id="valor-icono-columns">8</output></span>
+                    <input id="redim-icono-columns" type="range" min="5" max="14" value="8" step="1">
+                </label>
+            </section>
+        </div>
+
+        <div class="panel-redimensionar-footer">
+            <button id="restablecer-redimensionar" type="button">Restablecer</button>
+            <span>Se guarda automáticamente en tu perfil de StarTab.</span>
+        </div>
+    </aside>
 </body>
 
 </html>

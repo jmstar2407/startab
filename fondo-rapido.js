@@ -50,6 +50,7 @@
                 const video = document.createElement('video');
                 video.src = cfg.url;
                 video.autoplay = true;
+                video.preload = 'auto';
                 video.loop = true;
                 video.muted = true;
                 video.playsInline = true;
