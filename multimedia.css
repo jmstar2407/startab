@@ -1121,3 +1121,90 @@ body.multimedia-modal-open { overflow: hidden; }
     .multimedia-topbar-copy span { display: none; }
     .multimedia-sidebar-head p { display: none; }
 }
+
+/* ============================================================================
+   StarTab · Web Remote Mode 6.0
+   Cuando index.html se abre como sitio web normal, el Media Hub se convierte
+   en un panel remoto puro. Nunca intenta usar APIs chrome.* ni asumir que el
+   teléfono puede capturar/reproducir las pestañas de la PC.
+   ============================================================================ */
+html[data-startab-media-mode="web"] .multimedia-principal-toggle.is-web-remote:disabled {
+    opacity: 1;
+    cursor: default;
+    color: rgba(206, 228, 255, .9);
+    border-color: rgba(113, 177, 255, .18);
+    background: linear-gradient(145deg, rgba(68, 130, 219, .10), rgba(104, 88, 198, .075));
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.035);
+}
+html[data-startab-media-mode="web"] .multimedia-principal-toggle.is-web-remote > i {
+    background: #8fc0ff;
+    box-shadow: 0 0 0 4px rgba(143,192,255,.06), 0 0 12px rgba(111,176,255,.18);
+}
+html[data-startab-media-mode="web"] .multimedia-modal-panel {
+    box-shadow: 0 34px 100px rgba(0,0,0,.50), inset 0 1px 0 rgba(255,255,255,.065), 0 0 0 1px rgba(108,171,255,.025);
+}
+html[data-startab-media-mode="web"] .multimedia-topbar-copy span {
+    color: rgba(195, 217, 255, .45);
+}
+
+@media (max-width: 760px) {
+    /* Sin sesiones no dejamos una franja vacía donde normalmente vive la lista
+       horizontal de fuentes. El estado de conexión ocupa toda el área útil. */
+    .multimedia-modal:not(.has-sources) .multimedia-sidebar {
+        display: none;
+    }
+    .multimedia-modal:not(.has-sources) .multimedia-modal-panel {
+        grid-template-rows: minmax(0, 1fr);
+    }
+    html[data-startab-media-mode="web"] .multimedia-modal-panel {
+        border-radius: 22px;
+    }
+}
+
+@media (max-width: 500px) {
+    html[data-startab-media-mode="web"] .multimedia-topbar {
+        align-items: flex-start;
+        gap: 10px;
+    }
+    html[data-startab-media-mode="web"] .multimedia-topbar-copy {
+        min-width: 0;
+        flex: 1 1 auto;
+    }
+    html[data-startab-media-mode="web"] .multimedia-topbar-copy strong {
+        font-size: 11px;
+        line-height: 1.25;
+    }
+    html[data-startab-media-mode="web"] .multimedia-topbar-copy span {
+        display: block;
+        max-width: 190px;
+        font-size: 8.5px;
+        line-height: 1.35;
+    }
+    html[data-startab-media-mode="web"] .multimedia-principal-toggle {
+        width: auto;
+        max-width: 132px;
+        padding: 0 8px;
+        flex: 0 0 auto;
+    }
+    html[data-startab-media-mode="web"] .multimedia-principal-toggle span {
+        display: inline;
+        font-size: 7.3px;
+        letter-spacing: .055em;
+    }
+    html[data-startab-media-mode="web"] .multimedia-principal-toggle > i {
+        display: block;
+    }
+    html[data-startab-media-mode="web"] .multimedia-principal-toggle svg {
+        display: none;
+    }
+    html[data-startab-media-mode="web"] .multimedia-empty {
+        padding: 12px 8px 24px;
+        box-sizing: border-box;
+    }
+    html[data-startab-media-mode="web"] .multimedia-empty-orb {
+        width: 74px;
+        height: 74px;
+        border-radius: 23px;
+        margin-bottom: 16px;
+    }
+}

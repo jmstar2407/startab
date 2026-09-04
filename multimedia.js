@@ -1,5 +1,5 @@
 /* ============================================================================
-   StarTab · Media Hub 5.0 · Stable Professional UI
+   StarTab · Media Hub 6.0 · Extension + Web Remote
    UI de nueva pestaña conectada al registro multimedia global del service worker.
    Todas las instancias de StarTab comparten exactamente el mismo estado.
    ============================================================================ */
@@ -7,6 +7,21 @@
   'use strict';
 
   const $ = id => document.getElementById(id);
+
+  // StarTab puede ejecutarse como extensión de Chrome o como web normal.
+  // En modo extensión existe acceso al registro multimedia local y el dispositivo
+  // puede convertirse en principal. En modo web NO tocamos APIs chrome.*: la
+  // interfaz funciona exclusivamente como panel remoto conectado a Firestore.
+  const extensionApi = (() => {
+    try {
+      if (typeof chrome !== 'undefined' && chrome?.runtime?.id && typeof chrome.runtime.sendMessage === 'function') return chrome;
+    } catch (_) {}
+    try {
+      if (typeof browser !== 'undefined' && browser?.runtime?.id && typeof browser.runtime.sendMessage === 'function') return browser;
+    } catch (_) {}
+    return null;
+  })();
+  const isExtensionRuntime = !!extensionApi;
 
   const mediaDeviceId = (() => {
     const key = 'startab_media_remote_device_id_v1';
@@ -113,10 +128,14 @@
     principalText: $('multimedia-principal-text'),
     playbackBadge: $('multimedia-playback-badge'),
     main: document.querySelector('#multimedia-modal .multimedia-main'),
-    topbar: document.querySelector('#multimedia-modal .multimedia-topbar')
+    topbar: document.querySelector('#multimedia-modal .multimedia-topbar'),
+    topbarTitle: document.querySelector('#multimedia-modal .multimedia-topbar-copy strong'),
+    topbarSubtitle: document.querySelector('#multimedia-modal .multimedia-topbar-copy span')
   };
 
-  if (!dom.button || !dom.modal || !chrome?.runtime) return;
+  if (!dom.button || !dom.modal) return;
+  document.documentElement.dataset.startabMediaMode = isExtensionRuntime ? 'extension' : 'web';
+  dom.modal.dataset.mode = isExtensionRuntime ? 'extension' : 'web';
 
   const clamp = (n, min, max) => Math.min(max, Math.max(min, Number(n) || 0));
   const formatTime = seconds => {
@@ -130,8 +149,9 @@
   };
 
   function safeRuntimeMessage(message) {
+    if (!isExtensionRuntime) return Promise.reject(new Error('extension-runtime-unavailable'));
     try {
-      return chrome.runtime.sendMessage(message);
+      return extensionApi.runtime.sendMessage(message);
     } catch (error) {
       return Promise.reject(error);
     }
@@ -209,6 +229,14 @@
   }
 
   async function loadRegistry() {
+    // La web normal no posee un registro local de pestañas. Su fuente de verdad
+    // es Firestore y por eso nunca debe fallar el modal por ausencia de chrome.*.
+    if (!isExtensionRuntime) {
+      setSyncState(true);
+      if (state.remote.viewingRemote) applyRemoteSessionsIfNeeded();
+      else if (state.registryOrigin !== 'web') applyRegistry([], 'web');
+      return;
+    }
     try {
       const response = await safeRuntimeMessage({ type: 'STARTAB_MEDIA_GET_REGISTRY' });
       if (response?.ok) {
@@ -247,42 +275,76 @@
     const remote = state.remote;
     const loggedIn = firebaseRemoteReady();
     remote.principalOnline = principalIsFresh(remote.principal);
+    const remoteView = remote.viewingRemote && !remote.isPrincipal;
+    const canBecomePrincipal = loggedIn && isExtensionRuntime;
 
     if (dom.principalToggle) {
-      dom.principalToggle.disabled = !loggedIn || remote.busy;
+      dom.principalToggle.disabled = remote.busy || !canBecomePrincipal;
       dom.principalToggle.classList.toggle('is-principal', remote.isPrincipal);
-      dom.principalToggle.classList.toggle('is-remote', !remote.isPrincipal && remote.viewingRemote);
+      dom.principalToggle.classList.toggle('is-remote', remoteView);
+      dom.principalToggle.classList.toggle('is-web-remote', !isExtensionRuntime);
       dom.principalToggle.setAttribute('aria-pressed', remote.isPrincipal ? 'true' : 'false');
       if (dom.principalText) {
-        dom.principalText.textContent = remote.isPrincipal
-          ? 'Dispositivo principal'
-          : remote.viewingRemote
-            ? 'Controlando principal'
-            : 'Hacer principal';
+        dom.principalText.textContent = isExtensionRuntime
+          ? (remote.isPrincipal ? 'Dispositivo principal' : remoteView ? 'Controlando principal' : 'Hacer principal')
+          : (!loggedIn ? 'Inicia sesión' : remoteView ? 'Controlando principal' : 'Panel remoto');
       }
       dom.principalToggle.title = !loggedIn
-        ? 'Inicia sesión en StarTab para sincronizar el control multimedia entre dispositivos'
-        : remote.isPrincipal
-          ? 'Este navegador es el dispositivo principal. Pulsa para desactivarlo.'
-          : remote.viewingRemote
-            ? `Control remoto de ${remote.principal?.deviceLabel || 'otro dispositivo'}. Pulsa para convertir este dispositivo en principal.`
-            : 'Convertir este navegador en el dispositivo principal';
+        ? 'Inicia sesión en StarTab para ver y controlar tu dispositivo principal'
+        : !isExtensionRuntime
+          ? (remoteView
+              ? `Panel remoto conectado a ${remote.principal?.deviceLabel || 'tu dispositivo principal'}`
+              : 'Este StarTab está abierto como web: funciona como panel remoto. El dispositivo principal debe ser StarTab ejecutándose como extensión.')
+          : remote.isPrincipal
+            ? 'Este navegador es el dispositivo principal. Pulsa para desactivarlo.'
+            : remoteView
+              ? `Control remoto de ${remote.principal?.deviceLabel || 'otro dispositivo'}. Pulsa para convertir este dispositivo en principal.`
+              : 'Convertir este navegador en el dispositivo principal';
+    }
+
+    if (dom.topbarTitle) {
+      dom.topbarTitle.textContent = isExtensionRuntime
+        ? 'Control multimedia del navegador'
+        : 'Control remoto del dispositivo principal';
+    }
+    if (dom.topbarSubtitle) {
+      dom.topbarSubtitle.textContent = !isExtensionRuntime
+        ? (!loggedIn
+            ? 'Inicia sesión para enlazar este panel con tu StarTab principal'
+            : remoteView
+              ? `Conectado en tiempo real a ${remote.principal?.deviceLabel || 'tu dispositivo principal'}`
+              : 'Esperando un StarTab principal conectado con esta misma cuenta')
+        : 'Estado y controles sincronizados en tiempo real';
     }
 
     if (dom.syncPill) {
-      const online = state.runtimeOnline && (!remote.viewingRemote || remote.principalOnline);
-      dom.syncPill.classList.toggle('is-offline', !online);
-      if (dom.syncText) {
-        dom.syncText.textContent = !online
-          ? (remote.viewingRemote ? 'PRINCIPAL OFFLINE' : 'RECONECTANDO')
+      let online = true;
+      let label = 'SYNC GLOBAL';
+      if (!loggedIn) {
+        online = false;
+        label = 'SIN SESIÓN';
+      } else if (!isExtensionRuntime) {
+        if (remoteView) {
+          online = remote.principalOnline && remote.firebaseConnected;
+          label = online ? 'REMOTE · CLOUD' : 'PRINCIPAL OFFLINE';
+        } else {
+          online = remote.firebaseConnected;
+          label = online ? 'ESPERANDO PC' : 'CONECTANDO';
+        }
+      } else {
+        online = state.runtimeOnline && (!remoteView || remote.principalOnline);
+        label = !online
+          ? (remoteView ? 'PRINCIPAL OFFLINE' : 'RECONECTANDO')
           : remote.isPrincipal
             ? 'PRINCIPAL · CLOUD'
-            : remote.viewingRemote
+            : remoteView
               ? 'CONTROL REMOTO'
               : remote.firebaseConnected
                 ? 'SYNC CLOUD'
                 : 'SYNC GLOBAL';
       }
+      dom.syncPill.classList.toggle('is-offline', !online);
+      if (dom.syncText) dom.syncText.textContent = label;
     }
 
     if (remote.firebaseError && dom.syncPill) {
@@ -294,11 +356,17 @@
     }
 
     if (dom.emptyTitle && dom.emptyCopy) {
-      if (remote.viewingRemote) {
+      if (!loggedIn && !isExtensionRuntime) {
+        dom.emptyTitle.textContent = 'Inicia sesión para usar el control remoto';
+        dom.emptyCopy.textContent = 'Usa la misma cuenta de StarTab que tienes iniciada en la PC principal. Al entrar, este panel detectará automáticamente sus reproducciones.';
+      } else if (remoteView) {
         dom.emptyTitle.textContent = remote.principalOnline ? 'Sin multimedia en el principal' : 'Dispositivo principal sin conexión';
         dom.emptyCopy.textContent = remote.principalOnline
           ? 'Cuando el dispositivo principal reproduzca música o video, sus sesiones aparecerán aquí automáticamente y podrás controlarlas a distancia.'
           : 'Se conserva la última conexión del dispositivo principal. Los controles volverán a habilitarse automáticamente cuando StarTab recupere comunicación.';
+      } else if (!isExtensionRuntime) {
+        dom.emptyTitle.textContent = 'Esperando dispositivo principal';
+        dom.emptyCopy.textContent = 'En tu PC abre StarTab como extensión, entra con esta misma cuenta y pulsa “Hacer principal”. Este panel web se conectará automáticamente sin recargar la página.';
       } else {
         dom.emptyTitle.textContent = 'No se detectó multimedia abierta';
         dom.emptyCopy.textContent = 'Aparecerán aquí las sesiones que hayan entrado en reproducción o se integren con Media Session. El contenido precargado que nunca se ha reproducido no se mostrará.';
@@ -306,10 +374,10 @@
     }
 
     if (dom.openTab) {
-      const remoteView = remote.viewingRemote && !remote.isPrincipal;
-      dom.openTab.disabled = remoteView;
-      dom.openTab.textContent = remoteView ? 'Pestaña en principal' : 'Abrir pestaña ↗';
-      dom.openTab.title = remoteView
+      const blocked = !isExtensionRuntime || remoteView;
+      dom.openTab.disabled = blocked;
+      dom.openTab.textContent = blocked ? 'Pestaña en principal' : 'Abrir pestaña ↗';
+      dom.openTab.title = blocked
         ? 'La pestaña está abierta en el dispositivo principal'
         : 'Abrir esta pestaña';
     }
@@ -390,7 +458,7 @@
 
   async function publishPrincipalState(force = false) {
     const remote = state.remote;
-    if (!remote.isPrincipal || !remote.isLeader || !remote.refs?.state || !firebaseRemoteReady()) return;
+    if (!isExtensionRuntime || !remote.isPrincipal || !remote.isLeader || !remote.refs?.state || !firebaseRemoteReady()) return;
     const sessions = normalizeSessions(state.localRawSessions).map(serializeRemoteSession);
     if (!principalStateNeedsPublish(sessions, force)) return;
     const fingerprint = remoteStableFingerprint(sessions);
@@ -472,7 +540,7 @@
 
   async function handleRemoteCommandSnapshot(snapshot) {
     const remote = state.remote;
-    if (!remote.isPrincipal || !remote.isLeader || !snapshot?.exists) return;
+    if (!isExtensionRuntime || !remote.isPrincipal || !remote.isLeader || !snapshot?.exists) return;
     const data = snapshot.data() || {};
     if (!data.id || data.id === remote.lastCommandId) return;
     if (data.targetDeviceId !== mediaDeviceId) return;
@@ -514,16 +582,20 @@
     const principal = snapshot?.exists ? (snapshot.data() || {}) : null;
     remote.principal = principal;
     remote.principalOnline = principalIsFresh(principal);
-    remote.isPrincipal = !!principal?.active && principal?.deviceId === mediaDeviceId;
-    remote.viewingRemote = !!principal?.active && principal?.deviceId && principal.deviceId !== mediaDeviceId;
+    remote.isPrincipal = isExtensionRuntime && !!principal?.active && principal?.deviceId === mediaDeviceId;
+    // Una web normal siempre es panel remoto: nunca puede apropiarse del rol
+    // principal porque no tiene acceso a las pestañas/reproductores de la PC.
+    remote.viewingRemote = !!principal?.active && !!principal?.deviceId && !remote.isPrincipal;
 
     if (remote.isPrincipal) {
       if (state.registryOrigin !== 'local') applyRegistry(state.localRawSessions, 'local');
       schedulePrincipalStatePublish(true);
     } else if (remote.viewingRemote) {
       applyRemoteSessionsIfNeeded();
-    } else if (state.registryOrigin !== 'local') {
-      applyRegistry(state.localRawSessions, 'local');
+    } else {
+      const fallbackOrigin = isExtensionRuntime ? 'local' : 'web';
+      const fallbackSessions = isExtensionRuntime ? state.localRawSessions : [];
+      if (state.registryOrigin !== fallbackOrigin || state.sessions.size) applyRegistry(fallbackSessions, fallbackOrigin);
     }
     renderRemoteRole();
   }
@@ -545,7 +617,9 @@
         state.remote.isPrincipal = false;
         state.remote.viewingRemote = false;
         state.remote.remoteRawSessions = [];
-        if (state.registryOrigin !== 'local') applyRegistry(state.localRawSessions, 'local');
+        const fallbackOrigin = isExtensionRuntime ? 'local' : 'web';
+        const fallbackSessions = isExtensionRuntime ? state.localRawSessions : [];
+        if (state.registryOrigin !== fallbackOrigin || state.sessions.size) applyRegistry(fallbackSessions, fallbackOrigin);
       }
       renderRemoteRole();
       return false;
@@ -584,6 +658,10 @@
   }
 
   async function togglePrincipalDevice() {
+    if (!isExtensionRuntime) {
+      renderRemoteRole();
+      return;
+    }
     if (state.remote.busy || !connectRemoteFirebase() || !state.remote.refs?.principal) return;
     state.remote.busy = true;
     renderRemoteRole();
@@ -623,6 +701,7 @@
   }
 
   async function tryAcquireRemoteLeader() {
+    if (!isExtensionRuntime) return;
     if (state.remote.isLeader || state.remote.leaderRequesting) return;
     state.remote.leaderRequesting = true;
     if (!navigator.locks?.request) {
@@ -673,6 +752,7 @@
   }, 3000);
 
   window.addEventListener('beforeunload', () => {
+    if (!isExtensionRuntime) return;
     try { state.remote.releaseLeader?.(); } catch (_) {}
   });
 
@@ -688,11 +768,12 @@
 
     dom.button.classList.toggle('is-playing', playing);
     dom.button.dataset.state = playing ? 'playing' : (total ? 'paused' : 'idle');
+    const hubName = isExtensionRuntime ? 'Centro multimedia' : 'Control multimedia remoto';
     dom.button.setAttribute('aria-label', playing
-      ? `Centro multimedia: ${playingCount} reproduciendo de ${total} fuente${total === 1 ? '' : 's'}`
+      ? `${hubName}: ${playingCount} reproduciendo de ${total} fuente${total === 1 ? '' : 's'}`
       : total
-        ? `Centro multimedia: ${total} fuente${total === 1 ? '' : 's'} en pausa`
-        : 'Centro multimedia del navegador');
+        ? `${hubName}: ${total} fuente${total === 1 ? '' : 's'} en pausa`
+        : isExtensionRuntime ? 'Centro multimedia del navegador' : 'Control multimedia remoto del dispositivo principal');
 
     dom.badge.textContent = String(total);
     dom.badge.hidden = total === 0;
@@ -700,7 +781,9 @@
       ? `${playingCount} reproduciendo · ${total} sincronizada${total === 1 ? '' : 's'}`
       : total
         ? `${total} fuente${total === 1 ? '' : 's'} sincronizada${total === 1 ? '' : 's'}`
-        : 'Controles multimedia del navegador · sincronización global';
+        : isExtensionRuntime
+          ? 'Controles multimedia del navegador · sincronización global'
+          : 'Control remoto de tu dispositivo principal';
   }
 
   function mediaFallbackSvg(kind) {
@@ -784,6 +867,7 @@
 
   function renderSources() {
     const sessions = orderedSessions();
+    dom.modal.classList.toggle('has-sources', sessions.length > 0);
     const existing = new Map(
       [...dom.sourceList.querySelectorAll('.multimedia-source')]
         .map(node => [Number(node.dataset.tabId), node])
@@ -1084,12 +1168,12 @@
   });
 
   dom.openTab.addEventListener('click', async () => {
-    if (state.remote.viewingRemote && !state.remote.isPrincipal) return;
+    if (!isExtensionRuntime || (state.remote.viewingRemote && !state.remote.isPrincipal)) return;
     const session = state.sessions.get(dom.openTab.dataset.key);
     if (!session) return;
     try {
-      await chrome.tabs.update(session.tabId, { active: true });
-      if (Number.isInteger(session.windowId)) await chrome.windows.update(session.windowId, { focused: true });
+      await extensionApi.tabs.update(session.tabId, { active: true });
+      if (Number.isInteger(session.windowId)) await extensionApi.windows.update(session.windowId, { focused: true });
     } catch (_) {}
   });
 
@@ -1097,14 +1181,16 @@
     if (event.key === 'Escape' && state.modalOpen) closeModal();
   });
 
-  chrome.runtime.onMessage.addListener(message => {
-    if (message?.type === 'STARTAB_MEDIA_REGISTRY_UPDATE') {
-      setSyncState(true);
-      state.localRawSessions = message.sessions || [];
-      if (!state.remote.viewingRemote || state.remote.isPrincipal) applyRegistry(state.localRawSessions, 'local');
-      if (state.remote.isPrincipal) schedulePrincipalStatePublish(false);
-    }
-  });
+  if (isExtensionRuntime && extensionApi.runtime?.onMessage) {
+    extensionApi.runtime.onMessage.addListener(message => {
+      if (message?.type === 'STARTAB_MEDIA_REGISTRY_UPDATE') {
+        setSyncState(true);
+        state.localRawSessions = message.sessions || [];
+        if (!state.remote.viewingRemote || state.remote.isPrincipal) applyRegistry(state.localRawSessions, 'local');
+        if (state.remote.isPrincipal) schedulePrincipalStatePublish(false);
+      }
+    });
+  }
 
   // Una animación local de progreso a 4 FPS mantiene la barra suave sin hacer
   // consultas repetitivas al resto de pestañas ni despertar el service worker.
@@ -1132,6 +1218,6 @@
 
   renderRemoteRole();
   connectRemoteFirebase();
-  void tryAcquireRemoteLeader();
+  if (isExtensionRuntime) void tryAcquireRemoteLeader();
   loadRegistry();
 })();
