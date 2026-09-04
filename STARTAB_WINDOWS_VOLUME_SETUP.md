@@ -1,0 +1,52 @@
+# StarTab · Volumen real de Windows v2
+
+## Arquitectura simplificada
+
+El agente Windows **ya no usa Firebase** y no necesita Email/Password, Node.js, npm ni un servidor HTTP local.
+
+Flujo:
+
+`Windows Core Audio ↔ StartabWindowsVolume.exe ↔ Native Messaging ↔ StarTab ↔ Firestore ↔ StarTab móvil`
+
+- `StartabWindowsVolume.exe` solo controla y observa el volumen real de Windows.
+- La extensión StarTab mantiene la conexión con el EXE.
+- StarTab es quien publica estado y escucha órdenes en Firestore.
+- Desde móvil se escribe la orden en Firestore; StarTab del PC la recibe y la entrega al EXE.
+
+## 1. Compilar
+
+En Windows, entra en `windows-native-host` y ejecuta:
+
+`build.bat`
+
+Se generará:
+
+`windows-native-host\dist\StartabWindowsVolume.exe`
+
+Necesitas .NET SDK 8+ **solo para compilar**. El EXE publicado es autocontenido.
+
+## 2. Instalar el Native Messaging Host
+
+1. Abre `chrome://extensions`.
+2. Activa `Modo de desarrollador`.
+3. Copia el ID de StarTab.
+4. Ejecuta `StartabWindowsVolume.exe` con doble clic y pega ese ID.
+5. Recarga StarTab.
+
+También puedes ejecutar:
+
+`StartabWindowsVolume.exe --install ID_DE_LA_EXTENSION`
+
+No requiere administrador: se registra bajo `HKCU` y se copia a `%LOCALAPPDATA%\StarTab\WindowsVolume`.
+
+## 3. Firestore
+
+El agente no necesita ningún proveedor de Firebase Authentication.
+
+StarTab utiliza `users/{uid}/windowsDevices/{deviceId}`. Si tus reglas ya protegen todo `users/{uid}`, conserva esa protección. En `windows-native-host/firestore.rules.snippet` hay un bloque mínimo de referencia.
+
+## 4. Funcionamiento remoto
+
+Mientras Chrome/Edge y la extensión estén ejecutándose en el PC, el service worker mantiene el enlace Native Messaging y un documento offscreen de StarTab mantiene la sincronización Firestore. No hace falta dejar abierta una pestaña de Startab.
+
+Los cambios hechos desde el mezclador/teclas de Windows llegan por callbacks de Core Audio; no se hace polling del volumen. Solo se actualiza periódicamente la presencia del dispositivo para determinar si está online.

@@ -1,0 +1,6 @@
+// Añade este bloque DENTRO de tu match /databases/{database}/documents actual.
+// El EXE no toca Firestore. Solo StarTab (usuario autenticado) lee/escribe estos documentos.
+
+match /users/{uid}/windowsDevices/{deviceId} {
+  allow read, create, update, delete: if request.auth != null && request.auth.uid == uid;
+}

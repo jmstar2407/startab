@@ -1,1016 +1,812 @@
 <!-- StarTab.html -->
 <!DOCTYPE html>
+
 <html lang="es">
-
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Nueva pestaña</title>
-    <link rel="icon" href="img/icons/startab_3.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="styles.css">
-    <link rel="stylesheet" href="multimedia.css">
-    <style>
-        /* Botón de sincronización Firebase al lado del backup */
-        .backup-row {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-        .backup-row .backup-btn {
-            flex: 1;
-        }
-        .refresh-btn {
-            flex-shrink: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            width: 36px;
-            height: 36px;
-            background: rgba(255,255,255,0.08);
-            border: 1px solid rgba(255,255,255,0.15);
-            border-radius: 10px;
-            cursor: pointer;
-            font-size: 16px;
-            transition: background 0.2s, transform 0.2s;
-            padding: 0;
-            color: inherit;
-        }
-        .refresh-btn:hover {
-            background: rgba(102,126,234,0.25);
-            transform: rotate(30deg);
-        }
-        .refresh-btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            transform: none;
-        }
-        .refresh-icon {
-            line-height: 1;
-        }
-    </style>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport"/>
+<title>Nueva pestaña</title>
+<link href="img/icons/startab_3.svg" rel="icon" type="image/svg+xml"/>
+<link href="startab.min.css" rel="stylesheet"/>
 
-    <script src="lib/firebase-app-compat.js" defer></script>
-    <script src="lib/firebase-firestore-compat.js" defer></script>
-    <script src="lib/firebase-auth-compat.js" defer></script>
-
-    <script src="script.js" defer></script>
-
-    <script src="fondo-rapido.js" defer></script>
-    <script src="tab-counter.js" defer></script>
-    <script src="multimedia.js" defer></script>
+<script defer="" src="lib/firebase.bundle.js"></script>
+<script defer="" src="startab.bundle.js"></script>
+<script defer="" src="windows-system-volume.js"></script>
 </head>
-
 <body>
-    <!-- BARRA SUPERIOR: CONTADOR DE PESTAÑAS + PERFIL/LOGIN -->
-    <div class="top-bar-actions" id="top-bar-actions">
-
-        <!-- CONTADOR DE PESTAÑAS MEJORADO -->
-        <div class="tab-counter-container" id="tab-counter-container" title="Estadísticas de ventanas y pestañas">
-            <div class="tab-counter">
-                <span class="tab-counter-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
-                        viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                        stroke-linejoin="round" class="lucide lucide-app-window-mac-icon lucide-app-window-mac">
-                        <rect width="20" height="16" x="2" y="4" rx="2" />
-                        <path d="M6 8h.01" />
-                        <path d="M10 8h.01" />
-                        <path d="M14 8h.01" />
-                    </svg></span>
-                <div class="tab-counter-info">
-                    <div class="tab-counter-item">
-                        <span class="tab-counter-label">Ventanas:</span>
-                        <span class="tab-counter-value" id="tab-counter-windows">0</span>
-                    </div>
-                    <div class="tab-counter-item">
-                        <span class="tab-counter-label">Pestañas:</span>
-                        <span class="tab-counter-value" id="tab-counter-tabs">0</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- BOTÓN DE AUTENTICACIÓN -->
-        <div class="auth-container" id="auth-container">
-            <button class="auth-btn" id="auth-btn" title="Iniciar sesión" aria-label="Iniciar sesión">
-                <img class="auth-btn-icon" src="img/icons/log_in_1.png" alt="Iniciar sesión">
-            </button>
-            <div class="user-menu" id="user-menu" style="display: none;">
-                <img src="" alt="Perfil" class="user-avatar" id="user-avatar" loading="lazy">
-                <div class="user-dropdown" id="user-dropdown">
-                    <div class="user-info">
-                        <span class="user-name" id="user-name"></span>
-                        <span class="user-email" id="user-email"></span>
-                    </div>
-                    <div class="dropdown-divider"></div>
-                    <div class="backup-row">
-                        <button class="backup-btn" id="backup-btn">
-                            <span class="backup-icon">💾</span>
+<!-- BARRA SUPERIOR: CONTADOR DE PESTAÑAS + PERFIL/LOGIN -->
+<div class="top-bar-actions" id="top-bar-actions">
+<!-- CONTADOR DE PESTAÑAS MEJORADO -->
+<div class="tab-counter-container" id="tab-counter-container" title="Estadísticas de ventanas y pestañas">
+<div class="tab-counter">
+<span class="tab-counter-icon"><svg class="lucide lucide-app-window-mac-icon lucide-app-window-mac" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
+<rect height="16" rx="2" width="20" x="2" y="4"></rect>
+<path d="M6 8h.01"></path>
+<path d="M10 8h.01"></path>
+<path d="M14 8h.01"></path>
+</svg></span>
+<div class="tab-counter-info">
+<div class="tab-counter-item">
+<span class="tab-counter-label">Ventanas:</span>
+<span class="tab-counter-value" id="tab-counter-windows">0</span>
+</div>
+<div class="tab-counter-item">
+<span class="tab-counter-label">Pestañas:</span>
+<span class="tab-counter-value" id="tab-counter-tabs">0</span>
+</div>
+</div>
+</div>
+</div>
+<!-- BOTÓN DE AUTENTICACIÓN -->
+<div class="auth-container" id="auth-container">
+<button aria-label="Iniciar sesión" class="auth-btn" id="auth-btn" title="Iniciar sesión">
+<img alt="Iniciar sesión" class="auth-btn-icon" src="img/icons/log_in_1.png"/>
+</button>
+<div class="user-menu" id="user-menu" style="display: none;">
+<img alt="Perfil" class="user-avatar" id="user-avatar" loading="lazy" src=""/>
+<div class="user-dropdown" id="user-dropdown">
+<div class="user-info">
+<span class="user-name" id="user-name"></span>
+<span class="user-email" id="user-email"></span>
+</div>
+<div class="dropdown-divider"></div>
+<div class="backup-row">
+<button class="backup-btn" id="backup-btn">
+<span class="backup-icon">💾</span>
                             Descargar backup
                         </button>
-                        <button class="refresh-btn" id="refresh-firebase-btn" title="Sincronizar desde Firebase (sobreescribe datos locales)">
-                            <span class="refresh-icon">🔄</span>
-                        </button>
-                    </div>
-                    <div class="dropdown-divider"></div>
-                    <button class="logout-btn" id="logout-btn">
-                        <span class="logout-icon">🚪</span>
+<button class="refresh-btn" id="refresh-firebase-btn" title="Sincronizar desde Firebase (sobreescribe datos locales)">
+<span class="refresh-icon">🔄</span>
+</button>
+</div>
+<div class="dropdown-divider"></div>
+<button class="logout-btn" id="logout-btn">
+<span class="logout-icon">🚪</span>
                         Cerrar sesión
                     </button>
-                    <div class="dropdown-divider"></div>
-                    <div class="startab-version">StarTab v1.4</div>
-                </div>
-            </div>
-        </div>
-
-    </div>
-
-    <!-- INDICADOR DE CONEXIÓN -->
-    <div class="conexion-indicator" id="conexion-indicator" title="Estado de conexión">
-        <span class="conexion-dot" id="conexion-dot"></span>
-        <span class="conexion-text" id="conexion-text">En línea</span>
-    </div>
-
-    <!-- ICONO DE NOTA MODERNO -->
-    <div class="nota-icono-container" id="nota-icono">
-        <div class="nota-icono">
-            <span class="nota-icono-emoji"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
-                    viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                    stroke-linejoin="round" class="lucide lucide-file-text w-6 h-6" aria-hidden="true">
-                    <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"></path>
-                    <path d="M14 2v4a2 2 0 0 0 2 2h4"></path>
-                    <path d="M10 9H8"></path>
-                    <path d="M16 13H8"></path>
-                    <path d="M16 17H8"></path>
-                </svg></span>
-        </div>
-        <span class="nota-icono-tooltip">Notas rápidas (Ctrl+N)</span>
-    </div>
-
-    <!-- CENTRO MULTIMEDIA · SESIONES DEL NAVEGADOR -->
-    <div class="multimedia-button-container" id="multimedia-button-container">
-        <button class="multimedia-button" id="multimedia-button" type="button" aria-label="Centro multimedia" title="Centro multimedia">
-            <svg class="multimedia-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <rect x="3" y="5" width="18" height="14" rx="4"></rect>
-                <path d="m10 9 5 3-5 3Z"></path>
-            </svg>
-            <span class="multimedia-eq" aria-hidden="true"><i></i><i></i><i></i></span>
-            <span class="multimedia-badge" id="multimedia-badge" hidden>0</span>
-        </button>
-        <span class="multimedia-tooltip" id="multimedia-tooltip">Centro multimedia</span>
-    </div>
-
-    <!-- MODAL CENTRO MULTIMEDIA -->
-    <div class="multimedia-modal" id="multimedia-modal" aria-hidden="true" role="presentation">
-        <div class="multimedia-backdrop" id="multimedia-backdrop"></div>
-        <section class="multimedia-modal-panel" role="dialog" aria-modal="true" aria-labelledby="multimedia-modal-title">
-            <aside class="multimedia-sidebar" aria-label="Fuentes multimedia">
-                <div class="multimedia-sidebar-head">
-                    <span class="multimedia-kicker">StarTab · NATIVE MEDIA</span>
-                    <h3 id="multimedia-modal-title">Controles multimedia</h3>
-                    <p>Sesiones multimedia sincronizadas. La reproducción se resalta sin alterar el orden.</p>
-                </div>
-                <div class="multimedia-source-list" id="multimedia-source-list"></div>
-            </aside>
-
-            <main class="multimedia-main">
-                <header class="multimedia-topbar">
-                    <div class="multimedia-topbar-copy">
-                        <strong>Control multimedia del navegador</strong>
-                        <span>Estado y controles sincronizados en tiempo real</span>
-                    </div>
-                    <div class="multimedia-topbar-actions">
-                        <button class="multimedia-principal-toggle" id="multimedia-principal-toggle" type="button" aria-pressed="false" title="Convertir este navegador en el dispositivo principal">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                <rect x="3" y="4" width="18" height="12" rx="3"></rect>
-                                <path d="M8 20h8"></path><path d="M12 16v4"></path>
-                                <path d="M8.5 9.5 11 12l4.5-5"></path>
-                            </svg>
-                            <span id="multimedia-principal-text">Hacer principal</span>
-                            <i aria-hidden="true"></i>
-                        </button>
-                        <span class="multimedia-sync-pill" id="multimedia-sync-pill"><i></i><span id="multimedia-sync-text">SYNC GLOBAL</span></span>
-                        <button class="multimedia-close" id="multimedia-close" type="button" aria-label="Cerrar">×</button>
-                    </div>
-                </header>
-
-                <div class="multimedia-empty" id="multimedia-empty">
-                    <div class="multimedia-empty-orb" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M9 18V5l10-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="16" cy="16" r="3"></circle>
-                        </svg>
-                    </div>
-                    <h4>No se detectó multimedia abierta</h4>
-                    <p>Aparecerán aquí las sesiones que hayan entrado en reproducción o se integren con Media Session. El contenido precargado que nunca se ha reproducido no se mostrará.</p>
-                </div>
-
-                <div class="multimedia-player" id="multimedia-player" hidden>
-                    <div class="multimedia-artwork-shell">
-                        <img class="multimedia-artwork" id="multimedia-artwork" alt="Carátula multimedia" hidden>
-                        <div class="multimedia-artwork-fallback" id="multimedia-artwork-fallback" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l10-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="16" cy="16" r="3"></circle></svg>
-                        </div>
-                    </div>
-
-                    <div class="multimedia-track">
-                        <span class="multimedia-playback-badge" id="multimedia-playback-badge" data-state="paused">EN PAUSA</span>
-                        <h2 id="multimedia-title">Contenido multimedia</h2>
-                        <p id="multimedia-artist">Reproducción del navegador</p>
-                        <span class="multimedia-site-chip"><img id="multimedia-favicon" alt="" hidden><span id="multimedia-site">Pestaña</span></span>
-                    </div>
-
-                    <div class="multimedia-progress-wrap">
-                        <div class="multimedia-range-shell" id="multimedia-seek-fill">
-                            <span class="multimedia-range-track"></span>
-                            <input class="multimedia-range" id="multimedia-seek" type="range" min="0" max="100" step="0.1" value="0" aria-label="Posición de reproducción">
-                        </div>
-                        <div class="multimedia-time"><span id="multimedia-current">0:00</span><span id="multimedia-duration">–:––</span></div>
-                    </div>
-
-                    <div class="multimedia-controls">
-                        <button class="multimedia-control" id="multimedia-prev" type="button" title="Pista anterior" aria-label="Pista anterior" disabled>
-                            <svg viewBox="0 0 24 24"><path d="M19 20 9 12l10-8v16Z"></path><path d="M5 19V5"></path></svg>
-                        </button>
-                        <button class="multimedia-control multimedia-control-seekjump" id="multimedia-back10" type="button" title="Retroceder 10 segundos" aria-label="Retroceder 10 segundos" disabled>
-                            <span aria-hidden="true">↶</span><small>10</small>
-                        </button>
-                        <button class="multimedia-control multimedia-control-main" id="multimedia-play" type="button" aria-label="Reproducir" data-playback-state="paused">
-                            <span class="multimedia-main-glyph" aria-hidden="true"></span>
-                        </button>
-                        <button class="multimedia-control multimedia-control-seekjump" id="multimedia-forward10" type="button" title="Avanzar 10 segundos" aria-label="Avanzar 10 segundos" disabled>
-                            <span aria-hidden="true">↷</span><small>10</small>
-                        </button>
-                        <button class="multimedia-control" id="multimedia-next" type="button" title="Pista siguiente" aria-label="Pista siguiente" disabled>
-                            <svg viewBox="0 0 24 24"><path d="m5 4 10 8-10 8V4Z"></path><path d="M19 5v14"></path></svg>
-                        </button>
-                    </div>
-
-                    <div class="multimedia-bottom">
-                        <div class="multimedia-volume-group">
-                            <svg id="multimedia-volume-icon" data-level="high" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Z"></path><path d="M15.5 8.5a5 5 0 0 1 0 7"></path><path d="M18 6a8 8 0 0 1 0 12"></path></svg>
-                            <div class="multimedia-range-shell multimedia-volume-fill" id="multimedia-volume-fill">
-                                <span class="multimedia-range-track multimedia-volume-track"></span>
-                                <input class="multimedia-range" id="multimedia-volume" type="range" min="0" max="100" step="1" value="100" aria-label="Volumen">
-                            </div>
-                            <span class="multimedia-volume-value" id="multimedia-volume-value">100%</span>
-                        </div>
-                        <button class="multimedia-open-tab" id="multimedia-open-tab" type="button">Abrir pestaña ↗</button>
-                    </div>
-                    <div class="multimedia-unavailable" id="multimedia-unavailable" hidden></div>
-                </div>
-            </main>
-        </section>
-    </div>
-
-    <!-- INFORMACIÓN EN VIVO · USD/DOP + CLIMA SANTO DOMINGO -->
-    <section class="live-info-strip" id="live-info-strip" aria-label="Información en vivo">
-        <div class="live-info-card live-info-usd" id="live-info-usd" title="Tipo de cambio USD a peso dominicano">
-            <span class="live-info-icon live-info-dollar" aria-hidden="true">$</span>
-            <span class="live-info-copy">
-                <span class="live-info-label" id="live-usd-label">USD · Venta BC</span>
-                <strong class="live-info-value" id="live-usd-value">RD$ --.--</strong>
-            </span>
-            <span class="live-info-dot" id="live-usd-dot" aria-hidden="true"></span>
-            <a class="live-info-source" id="live-usd-source" href="https://www.bancentral.gov.do/" target="_blank" rel="noopener noreferrer" title="Fuente: Banco Central de la República Dominicana" aria-label="Fuente del tipo de cambio: Banco Central de la República Dominicana">↗</a>
-        </div>
-
-        <div class="live-info-card live-info-weather" id="live-info-weather" title="Clima actual en Santo Domingo">
-            <span class="live-weather-icon" id="live-weather-icon" aria-hidden="true">☀️</span>
-            <span class="live-info-copy">
-                <span class="live-info-label" id="live-weather-label">Santo Domingo</span>
-                <strong class="live-info-value" id="live-weather-value">--°C</strong>
-            </span>
-            <span class="live-info-dot" id="live-weather-dot" aria-hidden="true"></span>
-            <a class="live-info-source" href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer" title="Fuente: Open-Meteo" aria-label="Fuente del clima: Open-Meteo">↗</a>
-        </div>
-    </section>
-
-    <!-- NOTAS RÁPIDAS · WORKSPACE CLOUD EN TIEMPO REAL -->
-    <div class="nota-modal" id="nota-modal" role="presentation">
-        <div class="nota-modal-backdrop" data-close-notes></div>
-        <section class="nota-modal-contenido" role="dialog" aria-modal="true" aria-labelledby="nota-modal-title" aria-describedby="nota-modal-subtitle">
-            <header class="nota-modal-header">
-                <div class="nota-modal-heading">
-                    <div class="nota-modal-symbol" aria-hidden="true"><span></span><span></span><span></span></div>
-                    <div class="nota-modal-heading-copy">
-                        <div class="nota-modal-kicker">StarTab · CLOUD NOTES</div>
-                        <h2 class="nota-modal-titulo" id="nota-modal-title">Notas rápidas</h2>
-                        <p id="nota-modal-subtitle">Escribe aquí y tus dispositivos se actualizan automáticamente.</p>
-                    </div>
-                </div>
-                <div class="nota-modal-actions">
-                    <div class="nota-cloud-status" id="nota-cloud-status" aria-live="polite">
-                        <span class="nota-sync-icon sincronizando" id="nota-sync-icon" aria-hidden="true"></span>
-                        <span class="nota-sync-text" id="nota-sync-text">Conectando…</span>
-                    </div>
-                    <button class="nota-modal-cerrar" id="nota-modal-cerrar" type="button" title="Cerrar (Esc)" aria-label="Cerrar">×</button>
-                </div>
-            </header>
-
-            <div class="nota-workspace">
-                <aside class="nota-sidebar" aria-label="Lista de notas">
-                    <div class="nota-sidebar-head">
-                        <div>
-                            <strong>Tus notas</strong>
-                            <span>5 espacios rápidos</span>
-                        </div>
-                        <span class="nota-live-badge"><i></i>LIVE</span>
-                    </div>
-
-                    <div class="nota-botones-container" role="tablist" aria-label="Notas rápidas">
-                        <button class="nota-btn-numero activo" data-nota="1" type="button" role="tab" aria-selected="true" title="Nota 1 (Ctrl+1)">
-                            <span class="nota-list-index">01</span><span class="nota-list-copy"><strong>Nota 1</strong><small data-nota-preview="1">Vacía</small></span><i class="nota-list-dot"></i>
-                        </button>
-                        <button class="nota-btn-numero" data-nota="2" type="button" role="tab" aria-selected="false" title="Nota 2 (Ctrl+2)">
-                            <span class="nota-list-index">02</span><span class="nota-list-copy"><strong>Nota 2</strong><small data-nota-preview="2">Vacía</small></span><i class="nota-list-dot"></i>
-                        </button>
-                        <button class="nota-btn-numero" data-nota="3" type="button" role="tab" aria-selected="false" title="Nota 3 (Ctrl+3)">
-                            <span class="nota-list-index">03</span><span class="nota-list-copy"><strong>Nota 3</strong><small data-nota-preview="3">Vacía</small></span><i class="nota-list-dot"></i>
-                        </button>
-                        <button class="nota-btn-numero" data-nota="4" type="button" role="tab" aria-selected="false" title="Nota 4 (Ctrl+4)">
-                            <span class="nota-list-index">04</span><span class="nota-list-copy"><strong>Nota 4</strong><small data-nota-preview="4">Vacía</small></span><i class="nota-list-dot"></i>
-                        </button>
-                        <button class="nota-btn-numero" data-nota="5" type="button" role="tab" aria-selected="false" title="Nota 5 (Ctrl+5)">
-                            <span class="nota-list-index">05</span><span class="nota-list-copy"><strong>Nota 5</strong><small data-nota-preview="5">Vacía</small></span><i class="nota-list-dot"></i>
-                        </button>
-                    </div>
-
-                    <div class="nota-sidebar-foot">
-                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 16.5A4.5 4.5 0 0 0 17.5 8h-.7A7 7 0 1 0 5 14.7"></path><path d="M8 17h8"></path><path d="m13 14 3 3-3 3"></path></svg>
-                        <span>Firebase sincroniza los cambios entre tus dispositivos.</span>
-                    </div>
-                </aside>
-
-                <main class="nota-editor-panel">
-                    <div class="nota-editor-toolbar">
-                        <div class="nota-editor-identidad">
-                            <span class="nota-editor-orb"></span>
-                            <div><strong id="nota-current-label">Nota 1</strong><small id="nota-editor-hint">Sincronización bidireccional en tiempo real</small></div>
-                        </div>
-                        <span class="nota-editor-shortcut"><kbd>Ctrl</kbd><kbd>1–5</kbd></span>
-                    </div>
-
-                    <div class="notes-box">
-                        <textarea class="nota-textarea" id="nota-textarea" placeholder="Escribe algo…" spellcheck="true" autocomplete="off" aria-label="Contenido de la nota"></textarea>
-                    </div>
-
-                    <footer class="nota-modal-footer">
-                        <div class="nota-footer-info">
-                            <span id="nota-char-count">0 caracteres · 0 palabras</span>
-                            <span class="nota-footer-separator"></span>
-                            <span id="nota-last-sync">Lista para escribir</span>
-                        </div>
-                        <button class="nota-btn nota-btn-copiar" id="nota-btn-copiar" type="button" title="Copiar nota">
-                            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"></path></svg>
-                            <span>Copiar</span>
-                        </button>
-                    </footer>
-                </main>
-            </div>
-        </section>
-    </div>
-
-    <!-- MODAL DE ICONOS (AGREGAR/EDITAR) -->
-    <div class="modal-moderno" id="modal-iconos">
-        <div class="modal-moderno-contenido">
-            <div class="modal-header">
-                <h2 style="display: none;">Agregar acceso directo</h2>
-                <button class="modal-cerrar" id="cerrar-modal-iconos" style="display: none;">×</button>
-
-
-                <div class="modal-preview">
-                    <h3>Vista previa</h3>
-                    <div class="preview-container">
-                        <div class="preview-icono" id="preview-icono"
-                            style="background-color:transparent; border-radius:0%; width:150px; height:150px; display:flex; align-items:center; justify-content:center; margin:0 auto;box-shadow: 0px 12px 27px 12px rgb(0 0 0 / 24%);">
-                            <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 24 24' fill='%23666'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3C/svg%3E"
-                                alt="Preview" id="preview-img" style="width:100%; height:100%; object-fit:contain; border-radius:0%;"
-                                loading="lazy">
-                        </div>
-                        <span id="preview-nombre"
-                            style="display: block;text-align: center;margin-top: 10px;font-size: 1rem;font-weight: 400;color: white;min-height: 22px;min-height: 22px;pointer-events: none;white-space: nowrap;overflow: hidden;text-overflow: ellipsis;max-width: 140px;"></span>
-                    </div>
-
-                </div>
-
-
-
-            </div>
-
-            <div class="modal-contenido-scroll">
-                <div class="modal-grid">
-
-                    <div class="modal-controles">
-                        <h3>Acceso directo</h3>
-
-                        <!-- <div class="control-separador"></div> -->
-                        <div
-                            class="shortcut-fields-row shortcut-fields-row-main" style="display: inline-flex;gap: 1.5rem;width: 100%;justify-content: space-between;margin-bottom: 2rem;">
-                            <div class="control-grupo">
-                                <label><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
-                                        viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                                        stroke-linecap="round" stroke-linejoin="round"
-                                        class="lucide lucide-type w-3 h-3" aria-hidden="true">
-                                        <path d="M12 4v16"></path>
-                                        <path d="M4 7V5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2"></path>
-                                        <path d="M9 20h6"></path>
-                                    </svg>Nombre del sitio</label>
-                                <input type="text" id="nombre-sitio" placeholder="Ej: Google" class="control-input">
-                            </div>
-                            <div class="control-grupo">
-                                <label><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
-                                        viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                                        stroke-linecap="round" stroke-linejoin="round"
-                                        class="lucide lucide-globe w-3 h-3" aria-hidden="true">
-                                        <circle cx="12" cy="12" r="10"></circle>
-                                        <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path>
-                                        <path d="M2 12h20"></path>
-                                    </svg>URL (Link)</label>
-                                <input type="url" id="url-sitio" placeholder="https://ejemplo.com"
-                                    class="control-input">
-                            </div>
-                        </div>
-
-                        <div class="shortcut-fields-row shortcut-fields-row-icon" style="display: inline-flex;gap: 1.5rem;width: 100%;justify-content: space-between;">
-                            <div class="control-grupo">
-                                <label><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
-                                        viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                                        stroke-linecap="round" stroke-linejoin="round"
-                                        class="lucide lucide-palette w-3 h-3" aria-hidden="true">
-                                        <path
-                                            d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z">
-                                        </path>
-                                        <circle cx="13.5" cy="6.5" r=".5" fill="currentColor"></circle>
-                                        <circle cx="17.5" cy="10.5" r=".5" fill="currentColor"></circle>
-                                        <circle cx="6.5" cy="12.5" r=".5" fill="currentColor"></circle>
-                                        <circle cx="8.5" cy="7.5" r=".5" fill="currentColor"></circle>
-                                    </svg>Icono (URL o Subir imagen)</label>
-                                <input type="url" id="icono-sitio" placeholder="https://ejemplo.com/icono.png"
-                                    class="control-input">
-                            </div>
-                            <div class="control-grupo control-grupo-subir-icono" style="width: 92px;">
-                                <label>Subir</label>
-                                <div class="file-upload-container">
-                                    <input type="file" id="icono-file" accept="image/*" class="file-input">
-                                    <label for="icono-file" class="file-label" title="Subir imagen" aria-label="Subir imagen">
-                                        <span class="file-text" aria-hidden="true">
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"></path>
-                                            </svg>
-                                        </span>
-                                    </label>
-                                    <div class="file-name" id="file-name"></div>
-                                </div>
-                            </div>
-                        </div>
-
-
-
-                        <div class="control-grupo">
-                            <div class="checkbox-container">
-                                <input type="checkbox" id="tiene-fondo-icono">
-                                <label for="tiene-fondo-icono">Agregar fondo al icono</label>
-                            </div>
-                        </div>
-                        <div class="control-grupo" id="color-fondo-container" style="display:none">
-                            <label>Color de fondo</label>
-                            <div class="color-picker-container">
-                                <input type="color" id="color-fondo-icono" value="#667eea">
-                                <span class="color-valor" id="color-valor">#667eea</span>
-                            </div>
-                        </div>
-
-
-                        <div
-                            class="shortcut-fields-row shortcut-fields-row-ranges" style="display: inline-flex;gap: 1.5rem;width: 100%;justify-content: space-between;margin-bottom: 3rem;">
-                            <div class="control-grupo">
-                                <div class="control-label">
-                                    <label id="barras_1"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
-                                            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                                            stroke-linecap="round" stroke-linejoin="round"
-                                            class="lucide lucide-panels-top-left w-3 h-3" aria-hidden="true"
-                                            style="color: #6d6d6d;">
-                                            <rect width="18" height="18" x="3" y="3" rx="2"></rect>
-                                            <path d="M3 9h18"></path>
-                                            <path d="M9 21V9"></path>
-                                        </svg>Borde redondeado</label>
-                                    <span class="control-valor" id="radio-valor">0%</span>
-                                </div>
-                                <input type="range" id="radio-borde-icono" min="0" max="100" value="0"
-                                    class="control-range">
-                                <!-- <div class="range-marks"><span>0%</span><span>50%</span><span>100%</span></div> -->
-                            </div>
-                            <div class="control-grupo">
-                                <div class="control-label">
-                                    <label id="barras_1"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
-                                            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                                            stroke-linecap="round" stroke-linejoin="round"
-                                            class="lucide lucide-maximize w-3 h-3" aria-hidden="true"
-                                            style="color: #6d6d6d;">
-                                            <path d="M8 3H5a2 2 0 0 0-2 2v3"></path>
-                                            <path d="M21 8V5a2 2 0 0 0-2-2h-3"></path>
-                                            <path d="M3 16v3a2 2 0 0 0 2 2h3"></path>
-                                            <path d="M16 21h3a2 2 0 0 0 2-2v-3"></path>
-                                        </svg>Tamaño del icono</label>
-                                    <span class="control-valor" id="tamano-valor">100%</span>
-                                </div>
-                                <input type="range" id="tamano-icono" min="30" max="100" value="100"
-                                    class="control-range">
-                                <!--  <div class="range-marks"><span>30%</span><span>65%</span><span>100%</span></div> -->
-                            </div>
-                        </div>
-
-                    </div>
-                </div>
-
-                <div class="modal-botones">
-                    <button class="btn-secundario" id="cancelar-icono">Cancelar</button>
-                    <button class="btn-primario" id="guardar-icono">Guardar</button>
-                </div>
-
-
-            </div>
-
-        </div>
-    </div>
-
-    <!-- MODAL DE PERSONALIZACIÓN DE FONDO -->
-    <div class="modal-personalizar" id="modal-personalizar">
-
-        <div class="modal-personalizar-contenido">
-            <div class="top-modal">
-                <h2>Personalizar fondo</h2>
-            </div>
-
-            <div class="body-modal">
-                <div class="personalizar-input-group">
-                    <label>Tipo de fondo:</label>
-
-                    <!-- Input oculto para mantener compatibilidad con el JS -->
-                    <input type="hidden" id="fondo-tipo" value="imagen">
-
-                    <div class="button-select" id="fondo-tipo-buttons">
-                        <button type="button" class="btn-tipo" data-value="gradiente" id="gradient_1">
+<div class="dropdown-divider"></div>
+<div class="startab-version">StarTab v1.4</div>
+</div>
+</div>
+</div>
+</div>
+<!-- INDICADOR DE CONEXIÓN -->
+<div class="conexion-indicator" id="conexion-indicator" title="Estado de conexión">
+<span class="conexion-dot" id="conexion-dot"></span>
+<span class="conexion-text" id="conexion-text">En línea</span>
+</div>
+<!-- ICONO DE NOTA MODERNO -->
+<div class="nota-icono-container" id="nota-icono">
+<div class="nota-icono">
+<span class="nota-icono-emoji"><svg aria-hidden="true" class="lucide lucide-file-text w-6 h-6" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
+<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"></path>
+<path d="M14 2v4a2 2 0 0 0 2 2h4"></path>
+<path d="M10 9H8"></path>
+<path d="M16 13H8"></path>
+<path d="M16 17H8"></path>
+</svg></span>
+</div>
+<span class="nota-icono-tooltip">Notas rápidas (Ctrl+N)</span>
+</div>
+<!-- CENTRO MULTIMEDIA · SESIONES DEL NAVEGADOR -->
+<div class="multimedia-button-container" id="multimedia-button-container">
+<button aria-label="Centro multimedia" class="multimedia-button" id="multimedia-button" title="Centro multimedia" type="button">
+<svg aria-hidden="true" class="multimedia-glyph" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" viewbox="0 0 24 24">
+<rect height="14" rx="4" width="18" x="3" y="5"></rect>
+<path d="m10 9 5 3-5 3Z"></path>
+</svg>
+<span aria-hidden="true" class="multimedia-eq"><i></i><i></i><i></i></span>
+<span class="multimedia-badge" hidden="" id="multimedia-badge">0</span>
+</button>
+<span class="multimedia-tooltip" id="multimedia-tooltip">Centro multimedia</span>
+</div>
+<!-- MODAL CENTRO MULTIMEDIA -->
+<div aria-hidden="true" class="multimedia-modal" id="multimedia-modal" role="presentation">
+<div class="multimedia-backdrop" id="multimedia-backdrop"></div>
+<section aria-labelledby="multimedia-modal-title" aria-modal="true" class="multimedia-modal-panel" role="dialog">
+<aside aria-label="Fuentes multimedia" class="multimedia-sidebar">
+<div class="multimedia-sidebar-head">
+<span class="multimedia-kicker">StarTab · NATIVE MEDIA</span>
+<h3 id="multimedia-modal-title">Controles multimedia</h3>
+<p>Sesiones multimedia sincronizadas. La reproducción se resalta sin alterar el orden.</p>
+</div>
+<div class="multimedia-source-list" id="multimedia-source-list"></div>
+</aside>
+<main class="multimedia-main">
+<header class="multimedia-topbar">
+<div class="multimedia-topbar-copy">
+<strong>Control multimedia del navegador</strong>
+<span>Estado y controles sincronizados en tiempo real</span>
+</div>
+<div class="multimedia-topbar-actions">
+<button aria-pressed="false" class="multimedia-principal-toggle" id="multimedia-principal-toggle" title="Convertir este navegador en el dispositivo principal" type="button">
+<svg aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" viewbox="0 0 24 24">
+<rect height="12" rx="3" width="18" x="3" y="4"></rect>
+<path d="M8 20h8"></path><path d="M12 16v4"></path>
+<path d="M8.5 9.5 11 12l4.5-5"></path>
+</svg>
+<span id="multimedia-principal-text">Hacer principal</span>
+<i aria-hidden="true"></i>
+</button>
+<span class="multimedia-sync-pill" id="multimedia-sync-pill"><i></i><span id="multimedia-sync-text">SYNC GLOBAL</span></span>
+<button aria-label="Cerrar" class="multimedia-close" id="multimedia-close" type="button">×</button>
+</div>
+</header>
+<section class="windows-system-volume" id="windows-system-volume" aria-label="Volumen maestro de Windows">
+<div class="windows-volume-head">
+<div class="windows-volume-title">
+<span class="windows-volume-icon-shell" aria-hidden="true">
+<svg id="windows-volume-icon" data-level="high" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" viewBox="0 0 24 24"><path d="M11 5 6 9H3v6h3l5 4V5Z"></path><path d="M15.5 8.5a5 5 0 0 1 0 7"></path><path d="M18 6a8 8 0 0 1 0 12"></path></svg>
+</span>
+<span><strong>Volumen del sistema · Windows</strong><small id="windows-volume-status-text">Conectando con tus PCs…</small></span>
+</div>
+<div class="windows-volume-device-wrap">
+<span class="windows-volume-status" id="windows-volume-status" aria-hidden="true"></span>
+<select id="windows-device-select" aria-label="PC Windows a controlar"><option value="">Sin PCs vinculados</option></select>
+<button class="windows-volume-pair" id="windows-volume-pair" type="button" hidden>Vincular este PC</button>
+</div>
+</div>
+<div class="windows-volume-controls">
+<button class="windows-volume-action windows-volume-mute" id="windows-volume-mute" type="button" aria-label="Silenciar volumen de Windows" aria-pressed="false" title="Silenciar Windows">
+<svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" viewBox="0 0 24 24"><path d="M11 5 6 9H3v6h3l5 4V5Z"></path><path class="windows-volume-wave" d="M15.5 8.5a5 5 0 0 1 0 7"></path><path class="windows-volume-wave" d="M18 6a8 8 0 0 1 0 12"></path><path class="windows-volume-muted-mark" d="m16 10 5 5m0-5-5 5"></path></svg>
+</button>
+<button class="windows-volume-step" id="windows-volume-down" type="button" aria-label="Bajar 5 por ciento el volumen de Windows">−</button>
+<div class="windows-volume-slider-wrap">
+<div class="multimedia-range-shell windows-volume-fill" id="windows-volume-fill"><span class="multimedia-range-track"></span><input class="multimedia-range" id="windows-volume-range" type="range" min="0" max="100" step="1" value="0" aria-label="Volumen maestro de Windows"></div>
+<span class="windows-volume-value" id="windows-volume-value">0%</span>
+</div>
+<button class="windows-volume-step" id="windows-volume-up" type="button" aria-label="Subir 5 por ciento el volumen de Windows">+</button>
+</div>
+<div class="windows-volume-hint" id="windows-volume-hint">Inicia sesión para sincronizar el volumen de tus PCs.</div>
+</section>
+<div class="multimedia-empty" id="multimedia-empty">
+<div aria-hidden="true" class="multimedia-empty-orb">
+<svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" viewbox="0 0 24 24">
+<path d="M9 18V5l10-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="16" cy="16" r="3"></circle>
+</svg>
+</div>
+<h4>No se detectó multimedia abierta</h4>
+<p>Aparecerán aquí las sesiones que hayan entrado en reproducción o se integren con Media Session. El contenido precargado que nunca se ha reproducido no se mostrará.</p>
+</div>
+<div class="multimedia-player" hidden="" id="multimedia-player">
+<div class="multimedia-artwork-shell">
+<img alt="Carátula multimedia" class="multimedia-artwork" hidden="" id="multimedia-artwork"/>
+<div aria-hidden="true" class="multimedia-artwork-fallback" id="multimedia-artwork-fallback">
+<svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.45" viewbox="0 0 24 24"><path d="M9 18V5l10-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="16" cy="16" r="3"></circle></svg>
+</div>
+</div>
+<div class="multimedia-track">
+<span class="multimedia-playback-badge" data-state="paused" id="multimedia-playback-badge">EN PAUSA</span>
+<h2 id="multimedia-title">Contenido multimedia</h2>
+<p id="multimedia-artist">Reproducción del navegador</p>
+<span class="multimedia-site-chip"><img alt="" hidden="" id="multimedia-favicon"/><span id="multimedia-site">Pestaña</span></span>
+</div>
+<div class="multimedia-progress-wrap">
+<div class="multimedia-range-shell" id="multimedia-seek-fill">
+<span class="multimedia-range-track"></span>
+<input aria-label="Posición de reproducción" class="multimedia-range" id="multimedia-seek" max="100" min="0" step="0.1" type="range" value="0"/>
+</div>
+<div class="multimedia-time"><span id="multimedia-current">0:00</span><span id="multimedia-duration">–:––</span></div>
+</div>
+<div class="multimedia-controls">
+<button aria-label="Pista anterior" class="multimedia-control" disabled="" id="multimedia-prev" title="Pista anterior" type="button">
+<svg viewbox="0 0 24 24"><path d="M19 20 9 12l10-8v16Z"></path><path d="M5 19V5"></path></svg>
+</button>
+<button aria-label="Retroceder 10 segundos" class="multimedia-control multimedia-control-seekjump" disabled="" id="multimedia-back10" title="Retroceder 10 segundos" type="button">
+<span aria-hidden="true">↶</span><small>10</small>
+</button>
+<button aria-label="Reproducir" class="multimedia-control multimedia-control-main" data-playback-state="paused" id="multimedia-play" type="button">
+<span aria-hidden="true" class="multimedia-main-glyph"></span>
+</button>
+<button aria-label="Avanzar 10 segundos" class="multimedia-control multimedia-control-seekjump" disabled="" id="multimedia-forward10" title="Avanzar 10 segundos" type="button">
+<span aria-hidden="true">↷</span><small>10</small>
+</button>
+<button aria-label="Pista siguiente" class="multimedia-control" disabled="" id="multimedia-next" title="Pista siguiente" type="button">
+<svg viewbox="0 0 24 24"><path d="m5 4 10 8-10 8V4Z"></path><path d="M19 5v14"></path></svg>
+</button>
+</div>
+<div class="multimedia-bottom">
+<div class="multimedia-volume-group">
+<svg aria-hidden="true" data-level="high" fill="none" id="multimedia-volume-icon" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" viewbox="0 0 24 24"><path d="M11 5 6 9H3v6h3l5 4V5Z"></path><path d="M15.5 8.5a5 5 0 0 1 0 7"></path><path d="M18 6a8 8 0 0 1 0 12"></path></svg>
+<div class="multimedia-range-shell multimedia-volume-fill" id="multimedia-volume-fill">
+<span class="multimedia-range-track multimedia-volume-track"></span>
+<input aria-label="Volumen" class="multimedia-range" id="multimedia-volume" max="100" min="0" step="1" type="range" value="100"/>
+</div>
+<span class="multimedia-volume-value" id="multimedia-volume-value">100%</span>
+</div>
+<button class="multimedia-open-tab" id="multimedia-open-tab" type="button">Abrir pestaña ↗</button>
+</div>
+<div class="multimedia-unavailable" hidden="" id="multimedia-unavailable"></div>
+</div>
+</main>
+</section>
+</div>
+<!-- INFORMACIÓN EN VIVO · USD/DOP + CLIMA SANTO DOMINGO -->
+<section aria-label="Información en vivo" class="live-info-strip" id="live-info-strip">
+<div class="live-info-card live-info-usd" id="live-info-usd" title="Tipo de cambio USD a peso dominicano">
+<span aria-hidden="true" class="live-info-icon live-info-dollar">$</span>
+<span class="live-info-copy">
+<span class="live-info-label" id="live-usd-label">USD · Venta BC</span>
+<strong class="live-info-value" id="live-usd-value">RD$ --.--</strong>
+</span>
+<span aria-hidden="true" class="live-info-dot" id="live-usd-dot"></span>
+<a aria-label="Fuente del tipo de cambio: Banco Central de la República Dominicana" class="live-info-source" href="https://www.bancentral.gov.do/" id="live-usd-source" rel="noopener noreferrer" target="_blank" title="Fuente: Banco Central de la República Dominicana">↗</a>
+</div>
+<div class="live-info-card live-info-weather" id="live-info-weather" title="Clima actual en Santo Domingo">
+<span aria-hidden="true" class="live-weather-icon" id="live-weather-icon">☀️</span>
+<span class="live-info-copy">
+<span class="live-info-label" id="live-weather-label">Santo Domingo</span>
+<strong class="live-info-value" id="live-weather-value">--°C</strong>
+</span>
+<span aria-hidden="true" class="live-info-dot" id="live-weather-dot"></span>
+<a aria-label="Fuente del clima: Open-Meteo" class="live-info-source" href="https://open-meteo.com/" rel="noopener noreferrer" target="_blank" title="Fuente: Open-Meteo">↗</a>
+</div>
+</section>
+<!-- NOTAS RÁPIDAS · WORKSPACE CLOUD EN TIEMPO REAL -->
+<div class="nota-modal" id="nota-modal" role="presentation">
+<div class="nota-modal-backdrop" data-close-notes=""></div>
+<section aria-describedby="nota-modal-subtitle" aria-labelledby="nota-modal-title" aria-modal="true" class="nota-modal-contenido" role="dialog">
+<header class="nota-modal-header">
+<div class="nota-modal-heading">
+<div aria-hidden="true" class="nota-modal-symbol"><span></span><span></span><span></span></div>
+<div class="nota-modal-heading-copy">
+<div class="nota-modal-kicker">StarTab · CLOUD NOTES</div>
+<h2 class="nota-modal-titulo" id="nota-modal-title">Notas rápidas</h2>
+<p id="nota-modal-subtitle">Escribe aquí y tus dispositivos se actualizan automáticamente.</p>
+</div>
+</div>
+<div class="nota-modal-actions">
+<div aria-live="polite" class="nota-cloud-status" id="nota-cloud-status">
+<span aria-hidden="true" class="nota-sync-icon sincronizando" id="nota-sync-icon"></span>
+<span class="nota-sync-text" id="nota-sync-text">Conectando…</span>
+</div>
+<button aria-label="Cerrar" class="nota-modal-cerrar" id="nota-modal-cerrar" title="Cerrar (Esc)" type="button">×</button>
+</div>
+</header>
+<div class="nota-workspace">
+<aside aria-label="Lista de notas" class="nota-sidebar">
+<div class="nota-sidebar-head">
+<div>
+<strong>Tus notas</strong>
+<span>5 espacios rápidos</span>
+</div>
+<span class="nota-live-badge"><i></i>LIVE</span>
+</div>
+<div aria-label="Notas rápidas" class="nota-botones-container" role="tablist">
+<button aria-selected="true" class="nota-btn-numero activo" data-nota="1" role="tab" title="Nota 1 (Ctrl+1)" type="button">
+<span class="nota-list-index">01</span><span class="nota-list-copy"><strong>Nota 1</strong><small data-nota-preview="1">Vacía</small></span><i class="nota-list-dot"></i>
+</button>
+<button aria-selected="false" class="nota-btn-numero" data-nota="2" role="tab" title="Nota 2 (Ctrl+2)" type="button">
+<span class="nota-list-index">02</span><span class="nota-list-copy"><strong>Nota 2</strong><small data-nota-preview="2">Vacía</small></span><i class="nota-list-dot"></i>
+</button>
+<button aria-selected="false" class="nota-btn-numero" data-nota="3" role="tab" title="Nota 3 (Ctrl+3)" type="button">
+<span class="nota-list-index">03</span><span class="nota-list-copy"><strong>Nota 3</strong><small data-nota-preview="3">Vacía</small></span><i class="nota-list-dot"></i>
+</button>
+<button aria-selected="false" class="nota-btn-numero" data-nota="4" role="tab" title="Nota 4 (Ctrl+4)" type="button">
+<span class="nota-list-index">04</span><span class="nota-list-copy"><strong>Nota 4</strong><small data-nota-preview="4">Vacía</small></span><i class="nota-list-dot"></i>
+</button>
+<button aria-selected="false" class="nota-btn-numero" data-nota="5" role="tab" title="Nota 5 (Ctrl+5)" type="button">
+<span class="nota-list-index">05</span><span class="nota-list-copy"><strong>Nota 5</strong><small data-nota-preview="5">Vacía</small></span><i class="nota-list-dot"></i>
+</button>
+</div>
+<div class="nota-sidebar-foot">
+<svg aria-hidden="true" viewbox="0 0 24 24"><path d="M20 16.5A4.5 4.5 0 0 0 17.5 8h-.7A7 7 0 1 0 5 14.7"></path><path d="M8 17h8"></path><path d="m13 14 3 3-3 3"></path></svg>
+<span>Firebase sincroniza los cambios entre tus dispositivos.</span>
+</div>
+</aside>
+<main class="nota-editor-panel">
+<div class="nota-editor-toolbar">
+<div class="nota-editor-identidad">
+<span class="nota-editor-orb"></span>
+<div><strong id="nota-current-label">Nota 1</strong><small id="nota-editor-hint">Sincronización bidireccional en tiempo real</small></div>
+</div>
+<span class="nota-editor-shortcut"><kbd>Ctrl</kbd><kbd>1–5</kbd></span>
+</div>
+<div class="notes-box">
+<textarea aria-label="Contenido de la nota" autocomplete="off" class="nota-textarea" id="nota-textarea" placeholder="Escribe algo…" spellcheck="true"></textarea>
+</div>
+<footer class="nota-modal-footer">
+<div class="nota-footer-info">
+<span id="nota-char-count">0 caracteres · 0 palabras</span>
+<span class="nota-footer-separator"></span>
+<span id="nota-last-sync">Lista para escribir</span>
+</div>
+<button class="nota-btn nota-btn-copiar" id="nota-btn-copiar" title="Copiar nota" type="button">
+<svg aria-hidden="true" viewbox="0 0 24 24"><rect height="11" rx="2" width="11" x="9" y="9"></rect><path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"></path></svg>
+<span>Copiar</span>
+</button>
+</footer>
+</main>
+</div>
+</section>
+</div>
+<!-- MODAL DE ICONOS (AGREGAR/EDITAR) -->
+<div class="modal-moderno" id="modal-iconos">
+<div class="modal-moderno-contenido">
+<div class="modal-header">
+<h2 style="display: none;">Agregar acceso directo</h2>
+<button class="modal-cerrar" id="cerrar-modal-iconos" style="display: none;">×</button>
+<div class="modal-preview">
+<h3>Vista previa</h3>
+<div class="preview-container">
+<div class="preview-icono" id="preview-icono">
+<img alt="Preview" id="preview-img" loading="lazy" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 24 24' fill='%23666'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3C/svg%3E"/>
+</div>
+<span id="preview-nombre"></span>
+</div>
+</div>
+</div>
+<div class="modal-contenido-scroll">
+<div class="modal-grid">
+<div class="modal-controles">
+<h3>Acceso directo</h3>
+<!-- <div class="control-separador"></div> -->
+<div class="shortcut-fields-row shortcut-fields-row-main">
+<div class="control-grupo">
+<label><svg aria-hidden="true" class="lucide lucide-type w-3 h-3" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
+<path d="M12 4v16"></path>
+<path d="M4 7V5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2"></path>
+<path d="M9 20h6"></path>
+</svg>Nombre del sitio</label>
+<input class="control-input" id="nombre-sitio" placeholder="Ej: Google" type="text"/>
+</div>
+<div class="control-grupo">
+<label><svg aria-hidden="true" class="lucide lucide-globe w-3 h-3" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
+<circle cx="12" cy="12" r="10"></circle>
+<path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path>
+<path d="M2 12h20"></path>
+</svg>URL (Link)</label>
+<input class="control-input" id="url-sitio" placeholder="https://ejemplo.com" type="url"/>
+</div>
+</div>
+<div class="shortcut-fields-row shortcut-fields-row-icon">
+<div class="control-grupo">
+<label><svg aria-hidden="true" class="lucide lucide-palette w-3 h-3" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
+<path d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z">
+</path>
+<circle cx="13.5" cy="6.5" fill="currentColor" r=".5"></circle>
+<circle cx="17.5" cy="10.5" fill="currentColor" r=".5"></circle>
+<circle cx="6.5" cy="12.5" fill="currentColor" r=".5"></circle>
+<circle cx="8.5" cy="7.5" fill="currentColor" r=".5"></circle>
+</svg>Icono (URL o Subir imagen)</label>
+<input class="control-input" id="icono-sitio" placeholder="https://ejemplo.com/icono.png" type="url"/>
+</div>
+<div class="control-grupo control-grupo-subir-icono">
+<label>Subir</label>
+<div class="file-upload-container">
+<input accept="image/*" class="file-input" id="icono-file" type="file"/>
+<label aria-label="Subir imagen" class="file-label" for="icono-file" title="Subir imagen">
+<span aria-hidden="true" class="file-text">
+<svg fill="none" height="21" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="21" xmlns="http://www.w3.org/2000/svg">
+<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"></path>
+</svg>
+</span>
+</label>
+<div class="file-name" id="file-name"></div>
+</div>
+</div>
+</div>
+<div class="control-grupo">
+<div class="checkbox-container">
+<input id="tiene-fondo-icono" type="checkbox"/>
+<label for="tiene-fondo-icono">Agregar fondo al icono</label>
+</div>
+</div>
+<div class="control-grupo" id="color-fondo-container" style="display:none">
+<label>Color de fondo</label>
+<div class="color-picker-container">
+<input id="color-fondo-icono" type="color" value="#667eea"/>
+<span class="color-valor" id="color-valor">#667eea</span>
+</div>
+</div>
+<div class="shortcut-fields-row shortcut-fields-row-ranges">
+<div class="control-grupo">
+<div class="control-label">
+<label class="barras-label" for="radio-borde-icono" id="barras_1"><svg aria-hidden="true" class="lucide lucide-panels-top-left w-3 h-3" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
+<rect height="18" rx="2" width="18" x="3" y="3"></rect>
+<path d="M3 9h18"></path>
+<path d="M9 21V9"></path>
+</svg>Borde redondeado</label>
+<span class="control-valor" id="radio-valor">0%</span>
+</div>
+<input class="control-range" id="radio-borde-icono" max="100" min="0" type="range" value="0"/>
+<!-- <div class="range-marks"><span>0%</span><span>50%</span><span>100%</span></div> -->
+</div>
+<div class="control-grupo">
+<div class="control-label">
+<label class="barras-label" for="tamano-icono"><svg aria-hidden="true" class="lucide lucide-maximize w-3 h-3" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
+<path d="M8 3H5a2 2 0 0 0-2 2v3"></path>
+<path d="M21 8V5a2 2 0 0 0-2-2h-3"></path>
+<path d="M3 16v3a2 2 0 0 0 2 2h3"></path>
+<path d="M16 21h3a2 2 0 0 0 2-2v-3"></path>
+</svg>Tamaño del icono</label>
+<span class="control-valor" id="tamano-valor">100%</span>
+</div>
+<input class="control-range" id="tamano-icono" max="100" min="30" type="range" value="100"/>
+<!--  <div class="range-marks"><span>30%</span><span>65%</span><span>100%</span></div> -->
+</div>
+</div>
+</div>
+</div>
+<div class="modal-botones">
+<button class="btn-secundario" id="cancelar-icono">Cancelar</button>
+<button class="btn-primario" id="guardar-icono">Guardar</button>
+</div>
+</div>
+</div>
+</div>
+<!-- MODAL DE PERSONALIZACIÓN DE FONDO -->
+<div class="modal-personalizar" id="modal-personalizar">
+<div class="modal-personalizar-contenido">
+<div class="top-modal">
+<h2>Personalizar fondo</h2>
+</div>
+<div class="body-modal">
+<div class="personalizar-input-group">
+<label>Tipo de fondo:</label>
+<!-- Input oculto para mantener compatibilidad con el JS -->
+<input id="fondo-tipo" type="hidden" value="imagen"/>
+<div class="button-select" id="fondo-tipo-buttons">
+<button class="btn-tipo" data-value="gradiente" id="gradient_1" type="button">
                             Gradiente
                         </button>
-                        <button type="button" class="btn-tipo activo" data-value="imagen" id="imagen_1">
+<button class="btn-tipo activo" data-value="imagen" id="imagen_1" type="button">
                             Imagen
                         </button>
-                        <button type="button" class="btn-tipo" data-value="video" id="video_1">
+<button class="btn-tipo" data-value="video" id="video_1" type="button">
                             Video
                         </button>
-                    </div>
-                </div>
-
-                <div id="imagenes-predefinidas" style="display: none;">
-                    <h3>Imágenes predefinidas</h3>
-                    <div class="opciones-fondo" id="opciones-imagenes">
-                        <div class="opcion-fondo" data-tipo="imagen" data-url="img/backgrounds/img_background_1.jpg">
-                            <img src="img/backgrounds/img_background_1.jpg" alt="Fondo 1" loading="lazy">
-                        </div>
-                        <div class="opcion-fondo" data-tipo="imagen" data-url="img/backgrounds/img_background_2.jpg">
-                            <img src="img/backgrounds/img_background_2.jpg" alt="Fondo 2" loading="lazy">
-                        </div>
-                        <div class="opcion-fondo" data-tipo="imagen" data-url="img/backgrounds/img_background_3.jpg">
-                            <img src="img/backgrounds/img_background_3.jpg" alt="Fondo 3" loading="lazy">
-                        </div>
-                        <div class="opcion-fondo" data-tipo="imagen" data-url="img/backgrounds/img_background_4.jpg">
-                            <img src="img/backgrounds/img_background_4.jpg" alt="Fondo 4" loading="lazy">
-                        </div>
-                    </div>
-
-                    <!-- ===== NUEVA SECCIÓN DE RECURSOS DE IMÁGENES ===== -->
-                    <div class="recursos-container">
-                        <h4 class="recursos-titulo">Conseguir más imágenes:</h4>
-                        <div class="recursos-enlaces">
-                            <a href="https://pixabay.com/es/images/search/fondos/?orientation=horizontal"
-                                target="_blank" class="recurso-enlace" rel="noopener noreferrer">Pixabay<svg
-                                    xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
-                                    fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                    class="lucide lucide-external-link-icon lucide-external-link">
-                                    <path d="M15 3h6v6" />
-                                    <path d="M10 14 21 3" />
-                                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                                </svg></a>
-                            <a href="https://unsplash.com/es" target="_blank" class="recurso-enlace"
-                                rel="noopener noreferrer">Unsplash<svg xmlns="http://www.w3.org/2000/svg" width="24"
-                                    height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                                    stroke-linecap="round" stroke-linejoin="round"
-                                    class="lucide lucide-external-link-icon lucide-external-link">
-                                    <path d="M15 3h6v6" />
-                                    <path d="M10 14 21 3" />
-                                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                                </svg></a>
-                            <a href="https://www.freepik.es/" target="_blank" class="recurso-enlace"
-                                rel="noopener noreferrer">Freepik<svg xmlns="http://www.w3.org/2000/svg" width="24"
-                                    height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                                    stroke-linecap="round" stroke-linejoin="round"
-                                    class="lucide lucide-external-link-icon lucide-external-link">
-                                    <path d="M15 3h6v6" />
-                                    <path d="M10 14 21 3" />
-                                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                                </svg></a>
-                            <a href="https://www.pexels.com/es-es/" target="_blank" class="recurso-enlace"
-                                rel="noopener noreferrer">Pexels<svg xmlns="http://www.w3.org/2000/svg" width="24"
-                                    height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                                    stroke-linecap="round" stroke-linejoin="round"
-                                    class="lucide lucide-external-link-icon lucide-external-link">
-                                    <path d="M15 3h6v6" />
-                                    <path d="M10 14 21 3" />
-                                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                                </svg></a>
-                        </div>
-                    </div>
-                    <!-- ===== FIN NUEVA SECCIÓN ===== -->
-                </div>
-
-                <div id="videos-predefinidos" style="display: none;">
-                    <h3>Videos predefinidos</h3>
-                    <div class="opciones-fondo" id="opciones-videos">
-                        <div class="opcion-fondo" data-tipo="video" data-url="img/backgrounds/vid_background_1.mp4">
-                            <video src="img/backgrounds/vid_background_1.mp4" muted loop playsinline></video>
-                        </div>
-                        <div class="opcion-fondo" data-tipo="video" data-url="img/backgrounds/vid_background_2.mp4">
-                            <video src="img/backgrounds/vid_background_2.mp4" muted loop playsinline></video>
-                        </div>
-                        <div class="opcion-fondo" data-tipo="video" data-url="img/backgrounds/vid_background_3.mp4">
-                            <video src="img/backgrounds/vid_background_3.mp4" muted loop playsinline></video>
-                        </div>
-                        <div class="opcion-fondo" data-tipo="video" data-url="img/backgrounds/vid_background_4.mp4">
-                            <video src="img/backgrounds/vid_background_4.mp4" muted loop playsinline></video>
-                        </div>
-                    </div>
-
-                    <!-- ===== NUEVA SECCIÓN DE RECURSOS ===== -->
-                    <div class="recursos-container">
-                        <h4 class="recursos-titulo">Conseguir más videos:</h4>
-                        <div class="recursos-enlaces">
-                            <a href="https://pixabay.com/es/videos/search/fondos/?orientation=horizontal"
-                                target="_blank" class="recurso-enlace" rel="noopener noreferrer">Pixabay<svg
-                                    xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
-                                    fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                    class="lucide lucide-external-link-icon lucide-external-link">
-                                    <path d="M15 3h6v6" />
-                                    <path d="M10 14 21 3" />
-                                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                                </svg></a>
-                            <a href="https://www.videvo.net/" target="_blank" class="recurso-enlace"
-                                rel="noopener noreferrer">Videvo<svg xmlns="http://www.w3.org/2000/svg" width="24"
-                                    height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                                    stroke-linecap="round" stroke-linejoin="round"
-                                    class="lucide lucide-external-link-icon lucide-external-link">
-                                    <path d="M15 3h6v6" />
-                                    <path d="M10 14 21 3" />
-                                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                                </svg></a>
-                            <a href="https://coverr.co/" target="_blank" class="recurso-enlace"
-                                rel="noopener noreferrer">Coverr<svg xmlns="http://www.w3.org/2000/svg" width="24"
-                                    height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                                    stroke-linecap="round" stroke-linejoin="round"
-                                    class="lucide lucide-external-link-icon lucide-external-link">
-                                    <path d="M15 3h6v6" />
-                                    <path d="M10 14 21 3" />
-                                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                                </svg></a>
-                            <a href="https://mixkit.co/" target="_blank" class="recurso-enlace"
-                                rel="noopener noreferrer">Mixkit<svg xmlns="http://www.w3.org/2000/svg" width="24"
-                                    height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                                    stroke-linecap="round" stroke-linejoin="round"
-                                    class="lucide lucide-external-link-icon lucide-external-link">
-                                    <path d="M15 3h6v6" />
-                                    <path d="M10 14 21 3" />
-                                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                                </svg></a>
-                        </div>
-                    </div>
-                    <!-- ===== FIN NUEVA SECCIÓN ===== -->
-                </div>
-
-                <div class="personalizar-input-group" style="display: inline-flex;flex-direction: column;width: 100%;">
-                    <label><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
-                            fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                            stroke-linejoin="round" class="lucide lucide-globe w-3 h-3" aria-hidden="true">
-                            <circle cx="12" cy="12" r="10"></circle>
-                            <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path>
-                            <path d="M2 12h20"></path>
-                        </svg>URL personalizada (opcional):</label>
-                    <div class="fondo-url-row">
-                        <input type="url" id="fondo-url-input" placeholder="https://ejemplo.com/imagen.jpg o video.mp4"
-                            class="control-input">
-                        <button type="button" id="fondo-imagen-file-btn" class="fondo-imagen-file-btn" title="Subir imagen desde el dispositivo" aria-label="Subir imagen desde el dispositivo">
-                            <svg viewBox="0 0 24 24" aria-hidden="true">
-                                <path d="M4 5a2 2 0 0 1 2-2h5l2 2h5a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"></path>
-                                <path d="M8 14l2.5-3 2 2.5 1.5-2 3 4.5"></path>
-                            </svg>
-                        </button>
-                        <input type="file" id="fondo-imagen-file" accept="image/*" hidden>
-                    </div>
-                </div>
-
-                <div class="personalizar-input-group" id="grupo-colores">
-                    <div style="width: 100%;">
-                        <label>Color inicio gradiente:</label>
-                        <input type="color" id="color-inicio" value="#667eea" class="color-input">
-                    </div>
-                    <div style="width: 100%;">
-                        <label>Color fin gradiente:</label>
-                        <input type="color" id="color-fin" value="#764ba2" class="color-input">
-                    </div>
-                </div>
-
-                <div
-                    style="display: inline-flex;flex-direction: row;justify-content: center;gap: 1rem;width: 100%;margin-top: 1rem;">
-                    <div class="range-group" style="width: 100%;">
-                        <div class="range-header">
-                            <label for="fondo-opacidad"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
-                                    viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                                    stroke-linecap="round" stroke-linejoin="round"
-                                    class="lucide lucide-sliders-vertical w-3 h-3" aria-hidden="true">
-                                    <path d="M10 8h4"></path>
-                                    <path d="M12 21v-9"></path>
-                                    <path d="M12 8V3"></path>
-                                    <path d="M17 16h4"></path>
-                                    <path d="M19 12V3"></path>
-                                    <path d="M19 21v-5"></path>
-                                    <path d="M3 14h4"></path>
-                                    <path d="M5 10V3"></path>
-                                    <path d="M5 21v-7"></path>
-                                </svg>Oscurecer</label>
-                            <span class="range-value" id="opacidad-valor">20%</span>
-                        </div>
-                        <input type="range" id="fondo-opacidad" min="0" max="100" value="20" class="control-range">
-                        <div class="range-marks">
-                            <span>0%</span>
-                            <span>100%</span>
-                        </div>
-                    </div>
-
-                    <div class="range-group" style="width: 100%;">
-                        <div class="range-header">
-                            <label for="fondo-desenfoque"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
-                                    viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                                    stroke-linecap="round" stroke-linejoin="round"
-                                    class="lucide lucide-sliders-vertical w-3 h-3" aria-hidden="true">
-                                    <path d="M10 8h4"></path>
-                                    <path d="M12 21v-9"></path>
-                                    <path d="M12 8V3"></path>
-                                    <path d="M17 16h4"></path>
-                                    <path d="M19 12V3"></path>
-                                    <path d="M19 21v-5"></path>
-                                    <path d="M3 14h4"></path>
-                                    <path d="M5 10V3"></path>
-                                    <path d="M5 21v-7"></path>
-                                </svg>Desenfocar</label>
-                            <span class="range-value" id="desenfoque-valor">0px</span>
-                        </div>
-                        <input type="range" id="fondo-desenfoque" min="0" max="20" value="0" step="1"
-                            class="control-range">
-                        <div class="range-marks">
-                            <span>0px</span>
-                            <span>20px</span>
-                        </div>
-                    </div>
-                </div>
-
-
-                <h3>Vista previa</h3>
-
-                <div class="previer-master-box">
-                    <div class="preview-fondo" id="preview-fondo"></div>
-                    <video class="preview-video" id="preview-video" muted loop playsinline style="display:none"></video>
-                </div>
-
-            </div>
-
-            <div class="button-modal">
-                <div class="personalizar-botones">
-                    <button class="btn-secundario" id="cancelar-personalizacion">Cancelar</button>
-                    <button class="btn-primario" id="guardar-personalizacion">Aplicar</button>
-                </div>
-            </div>
-
-        </div>
-    </div>
-
-    <div class="box-master">
-        <div class="contenedor-busqueda">
-            <h1 class="titulo"><img src="./img/icons/startab_3.2.svg">StarTab</h1>
-
-            <div class="selectores-buscador">
-                <div class="circulo-buscador activo" data-buscador="google" title="Google">
-                    <img src="./img/icons/google_1.png" alt="Google" loading="lazy">
-                </div>
-                <div class="circulo-buscador" data-buscador="bing" title="Bing">
-                    <img src="./img/icons/bing_1.png" alt="Bing" loading="lazy">
-                </div>
-                <div class="circulo-buscador" data-buscador="duckduckgo" title="DuckDuckGo">
-                    <img src="./img/icons/duckduckgo_1.png" alt="DuckDuckGo" loading="lazy">
-                </div>
-            </div>
-
-            <div class="caja-busqueda">
-                <input type="text" id="barra-busqueda" placeholder="Buscar en la web...">
-                <div class="iconos-busqueda">
-
-                    <button class="icono-busqueda" id="btn-limpiar" title="Limpiar">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                            class="lucide lucide-x-icon lucide-x">
-                            <path d="M18 6 6 18" />
-                            <path d="m6 6 12 12" />
-                        </svg>
-                    </button>
-
-                    <button class="icono-busqueda" id="btn-buscar" title="Buscar">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                            class="lucide lucide-search-icon lucide-search">
-                            <path d="m21 21-4.34-4.34" />
-                            <circle cx="11" cy="11" r="8" />
-                        </svg>
-                    </button>
-
-                    <button class="icono-busqueda" id="btn-microfono" title="Búsqueda por voz">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                            class="lucide lucide-mic-icon lucide-mic">
-                            <path d="M12 19v3" />
-                            <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                            <rect x="9" y="2" width="6" height="13" rx="3" />
-                        </svg>
-                    </button>
-
-                    <a class="ai-btn" href="https://www.google.com/search?q=&sca_esv=0ff7534cf1487ec7&sxsrf=ANbL-n7QLnqMFuHQoaorki77FmSn1g-iJQ%3A1772853762974&source=hp&ei=ApqraZKyOMna0PEP2f-2qAk&iflsig=AFdpzrgAAAAAaauoEqHo63e-nSUuW7rMeCsdcK_Yzclf&aep=22&udm=50&ved=0ahUKEwiSu5z26oyTAxVJLTQIHdm_DZUQteYPCBc&oq=&gs_lp=Egdnd3Mtd2l6GgIYASIAMgcQIxgnGOoCMgcQIxgnGOoCMg0QIxjwBRgnGMkCGOoCMgoQIxgnGOoCGIsDMgoQIxgnGOoCGIsDMgcQIxgnGOoCMg0QIxjwBRgnGOoCGJ4GMgcQIxgnGOoCMgoQIxgnGOoCGIsDMg0QIxjwBRgnGMkCGOoCSL3UE1AAWABwAXgAkAEAmAEAoAEAqgEAuAEByAEAmAIBoAIIqAIKmAMI8QUTkenxLLzreJIHATGgBwCyBwC4BwDCBwMyLTHIBwaACAA&sclient=gws-wiz"><svg width="800px" height="800px" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" aria-hidden="true" role="img" class="iconify iconify--twemoji" preserveAspectRatio="xMidYMid meet"><path fill="#FFAC33" d="M34.347 16.893l-8.899-3.294l-3.323-10.891a1 1 0 0 0-1.912 0l-3.322 10.891l-8.9 3.294a1 1 0 0 0 0 1.876l8.895 3.293l3.324 11.223a1 1 0 0 0 1.918-.001l3.324-11.223l8.896-3.293a.998.998 0 0 0-.001-1.875z"></path><path fill="#FFCC4D" d="M14.347 27.894l-2.314-.856l-.9-3.3a.998.998 0 0 0-1.929-.001l-.9 3.3l-2.313.856a1 1 0 0 0 0 1.876l2.301.853l.907 3.622a1 1 0 0 0 1.94-.001l.907-3.622l2.301-.853a.997.997 0 0 0 0-1.874zM10.009 6.231l-2.364-.875l-.876-2.365a.999.999 0 0 0-1.876 0l-.875 2.365l-2.365.875a1 1 0 0 0 0 1.876l2.365.875l.875 2.365a1 1 0 0 0 1.876 0l.875-2.365l2.365-.875a1 1 0 0 0 0-1.876z"></path></svg> Modo AI</a>
-                </div>
-            </div>
-
-            <div class="filtros-busqueda">
-                <div class="filtro-item activo" data-filtro="web"><svg xmlns="http://www.w3.org/2000/svg" width="24"
-                        height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                        stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-globe w-4 h-4"
-                        aria-hidden="true">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path>
-                        <path d="M2 12h20"></path>
-                    </svg>Web</div>
-                <div class="filtro-item" data-filtro="imagenes"><svg xmlns="http://www.w3.org/2000/svg" width="24"
-                        height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                        stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image w-4 h-4"
-                        aria-hidden="true">
-                        <rect width="18" height="18" x="3" y="3" rx="2" ry="2"></rect>
-                        <circle cx="9" cy="9" r="2"></circle>
-                        <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"></path>
-                    </svg>Imágenes</div>
-                <div class="filtro-item" data-filtro="video"><svg xmlns="http://www.w3.org/2000/svg" width="24"
-                        height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                        stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-video w-4 h-4"
-                        aria-hidden="true">
-                        <path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5"></path>
-                        <rect x="2" y="6" width="14" height="12" rx="2"></rect>
-                    </svg>Videos</div>
-                <div class="filtro-item" data-filtro="noticias"><svg xmlns="http://www.w3.org/2000/svg" width="24"
-                        height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                        stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-newspaper w-4 h-4"
-                        aria-hidden="true">
-                        <path d="M15 18h-5"></path>
-                        <path d="M18 14h-8"></path>
-                        <path
-                            d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-4 0v-9a2 2 0 0 1 2-2h2">
-                        </path>
-                        <rect width="8" height="4" x="10" y="6" rx="1"></rect>
-                    </svg>Noticias</div>
-            </div>
-        </div>
-
-        <div class="contenedor-iconos-master">
-            <div class="contenedor-iconos" id="contenedor-iconos"></div>
-        </div>
-
-        <div class="categorias-container">
-            <!-- Las categorías se generan dinámicamente -->
-        </div>
-    </div>
-
-    <div class="agregar-icono">
-        <button id="btn-agregar" title="Agregar acceso directo"><svg xmlns="http://www.w3.org/2000/svg" width="24"
-                height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                stroke-linecap="round" stroke-linejoin="round"
-                class="lucide lucide-plus w-8 h-8 text-white/20 group-hover:text-white/60" aria-hidden="true">
-                <path d="M5 12h14"></path>
-                <path d="M12 5v14"></path>
-            </svg></button>
-    </div>
-
-    <div class="acciones-personalizacion-flotantes" id="acciones-personalizacion-flotantes">
-    <button id="btn-personalizar" class="btn-personalizar" title="Personalizar fondo">
-        <span class="btn-personalizar-icono"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
-                viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                stroke-linejoin="round" class="lucide lucide-palette w-6 h-6" aria-hidden="true">
-                <path
-                    d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z">
-                </path>
-                <circle cx="13.5" cy="6.5" r=".5" fill="currentColor"></circle>
-                <circle cx="17.5" cy="10.5" r=".5" fill="currentColor"></circle>
-                <circle cx="6.5" cy="12.5" r=".5" fill="currentColor"></circle>
-                <circle cx="8.5" cy="7.5" r=".5" fill="currentColor"></circle>
-            </svg></span>
-    </button>
-
-    <button id="btn-redimensionar" class="btn-redimensionar" title="Redimensionar y ajustar accesos" aria-label="Redimensionar y ajustar accesos">
-        <span class="btn-redimensionar-icono">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M8 3H5a2 2 0 0 0-2 2v3"></path>
-                <path d="M21 8V5a2 2 0 0 0-2-2h-3"></path>
-                <path d="M16 21h3a2 2 0 0 0 2-2v-3"></path>
-                <path d="M3 16v3a2 2 0 0 0 2 2h3"></path>
-                <path d="m9 9 6 6"></path>
-                <path d="m15 9-6 6"></path>
-            </svg>
-        </span>
-    </button>
-    </div>
-
-    <div id="panel-redimensionar-backdrop" class="panel-redimensionar-backdrop" aria-hidden="true"></div>
-    <aside id="panel-redimensionar" class="panel-redimensionar" aria-hidden="true">
-        <div class="panel-redimensionar-header">
-            <div>
-                <span class="panel-redimensionar-kicker">StarTab</span>
-                <h2>Personalización</h2>
-                <p>Ajusta tu espacio de trabajo en tiempo real.</p>
-            </div>
-            <button id="cerrar-panel-redimensionar" class="startab-tab-close panel-redimensionar-cerrar" type="button" title="Cerrar (Esc)" aria-label="Cerrar">×</button>
-        </div>
-
-        <div class="redim-tabs" role="tablist" aria-label="Secciones de personalización">
-            <button class="redim-tab activo" id="redim-tab-iconos" type="button" role="tab" aria-selected="true" aria-controls="redim-panel-iconos">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="6" height="6" rx="1"></rect><rect x="14" y="4" width="6" height="6" rx="1"></rect><rect x="4" y="14" width="6" height="6" rx="1"></rect><rect x="14" y="14" width="6" height="6" rx="1"></rect></svg>
-                <span>Accesos directos</span>
-            </button>
-            <button class="redim-tab" id="redim-tab-busqueda" type="button" role="tab" aria-selected="false" aria-controls="redim-panel-busqueda">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg>
-                <span>Barra de búsqueda</span>
-            </button>
-        </div>
-
-        <div class="panel-redimensionar-scroll">
-            <section class="redim-seccion redim-tab-panel" id="redim-panel-busqueda" role="tabpanel" aria-labelledby="redim-tab-busqueda" hidden>
-                <div class="redim-seccion-titulo"><span>Barra de búsqueda</span><small>contenedor-busqueda</small></div>
-                <label class="redim-control">
-                    <span><span class="redim-label"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18"></path><path d="m8 7 4-4 4 4"></path><path d="m8 17 4 4 4-4"></path></svg><b>Posición vertical</b></span><output id="valor-busqueda-y">0 px</output></span>
-                    <input id="redim-busqueda-y" type="range" min="-180" max="180" value="0" step="1">
-                </label>
-                <label class="redim-control">
-                    <span><span class="redim-label"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3"></path><path d="M16 3h3a2 2 0 0 1 2 2v3"></path><path d="M8 21H5a2 2 0 0 1-2-2v-3"></path><path d="M16 21h3a2 2 0 0 0 2-2v-3"></path></svg><b>Tamaño</b></span><output id="valor-busqueda-size">100%</output></span>
-                    <input id="redim-busqueda-size" type="range" min="70" max="130" value="100" step="1">
-                </label>
-            </section>
-
-            <section class="redim-seccion redim-tab-panel activo" id="redim-panel-iconos" role="tabpanel" aria-labelledby="redim-tab-iconos">
-                <div class="redim-seccion-titulo"><span>Accesos directos</span><small>contenedor-iconos</small></div>
-                <label class="redim-control">
-                    <span><span class="redim-label"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18"></path><path d="m8 7 4-4 4 4"></path><path d="m8 17 4 4 4-4"></path></svg><b>Posición vertical</b></span><output id="valor-iconos-y">0 px</output></span>
-                    <input id="redim-iconos-y" type="range" min="-180" max="180" value="0" step="1">
-                </label>
-                <label class="redim-control">
-                    <span><span class="redim-label"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4z"></path><path d="m8 8 8 8"></path><path d="m16 8-8 8"></path></svg><b>Tamaño del contenedor</b></span><output id="valor-iconos-size">100%</output></span>
-                    <input id="redim-iconos-size" type="range" min="70" max="130" value="100" step="1">
-                </label>
-                <label class="redim-control">
-                    <span><span class="redim-label"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3"></path><path d="M16 3h3a2 2 0 0 1 2-2v3"></path><path d="M8 21H5a2 2 0 0 1-2-2v-3"></path><path d="M16 21h3a2 2 0 0 0 2-2v3"></path></svg><b>Tamaño del icono</b></span><output id="valor-icono-size">100%</output></span>
-                    <input id="redim-icono-size" type="range" min="25" max="100" value="100" step="1">
-                </label>
-                <div class="redim-switch-row">
-                    <div class="redim-label-text"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"></rect><path d="M7 7h10v10H7z"></path></svg><span><b>Fondo de los accesos</b><small>Mostrar fondo y borde del acceso directo</small></span></div>
-                    <label class="redim-switch"><input id="redim-icono-bg" type="checkbox" checked><span></span></label>
-                </div>
-                <label class="redim-control">
-                    <span><span class="redim-label"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="6"></rect><path d="M4 10h3"></path></svg><b>Bordes redondeados</b></span><output id="valor-icono-radius">12 px</output></span>
-                    <input id="redim-icono-radius" type="range" min="0" max="40" value="12" step="1">
-                </label>
-                <label class="redim-control">
-                    <span><span class="redim-label"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14"></path><path d="M5 12h14"></path><path d="M5 18h14"></path><path d="m8 3-3 3 3 3"></path></svg><b>Alineación</b></span><output id="valor-icono-align">Izquierda</output></span>
-                    <select id="redim-icono-align" class="redim-select">
-                        <option value="left" selected>Izquierda</option>
-                        <option value="center">Centro</option>
-                        <option value="right">Derecha</option>
-                    </select>
-                </label>
-                <label class="redim-control">
-                    <span><span class="redim-label"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16"></path><path d="M4 12h16"></path><path d="M4 19h16"></path><path d="M7 3v4"></path><path d="M12 10v4"></path><path d="M17 17v4"></path></svg><b>Filas</b></span><output id="valor-icono-rows">2</output></span>
-                    <input id="redim-icono-rows" type="range" min="1" max="4" value="2" step="1">
-                </label>
-                <label class="redim-control">
-                    <span><span class="redim-label"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4v16"></path><path d="M12 4v16"></path><path d="M19 4v16"></path><path d="M3 7h4"></path><path d="M10 12h4"></path><path d="M17 17h4"></path></svg><b>Columnas</b></span><output id="valor-icono-columns">8</output></span>
-                    <input id="redim-icono-columns" type="range" min="5" max="14" value="8" step="1">
-                </label>
-            </section>
-        </div>
-
-        <div class="panel-redimensionar-footer">
-            <button id="restablecer-redimensionar" type="button">Restablecer</button>
-            <span>Se guarda automáticamente en tu perfil de StarTab.</span>
-        </div>
-    </aside>
+</div>
+</div>
+<div id="imagenes-predefinidas" style="display: none;">
+<h3>Imágenes predefinidas</h3>
+<div class="opciones-fondo" id="opciones-imagenes">
+<div class="opcion-fondo" data-tipo="imagen" data-url="img/backgrounds/img_background_1.jpg">
+<img alt="Fondo 1" loading="lazy" src="img/backgrounds/img_background_1.jpg"/>
+</div>
+<div class="opcion-fondo" data-tipo="imagen" data-url="img/backgrounds/img_background_2.jpg">
+<img alt="Fondo 2" loading="lazy" src="img/backgrounds/img_background_2.jpg"/>
+</div>
+<div class="opcion-fondo" data-tipo="imagen" data-url="img/backgrounds/img_background_3.jpg">
+<img alt="Fondo 3" loading="lazy" src="img/backgrounds/img_background_3.jpg"/>
+</div>
+<div class="opcion-fondo" data-tipo="imagen" data-url="img/backgrounds/img_background_4.jpg">
+<img alt="Fondo 4" loading="lazy" src="img/backgrounds/img_background_4.jpg"/>
+</div>
+</div>
+<!-- ===== NUEVA SECCIÓN DE RECURSOS DE IMÁGENES ===== -->
+<div class="recursos-container">
+<h4 class="recursos-titulo">Conseguir más imágenes:</h4>
+<div class="recursos-enlaces">
+<a class="recurso-enlace" href="https://pixabay.com/es/images/search/fondos/?orientation=horizontal" rel="noopener noreferrer" target="_blank">Pixabay<svg class="lucide lucide-external-link-icon lucide-external-link" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
+<path d="M15 3h6v6"></path>
+<path d="M10 14 21 3"></path>
+<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+</svg></a>
+<a class="recurso-enlace" href="https://unsplash.com/es" rel="noopener noreferrer" target="_blank">Unsplash<svg class="lucide lucide-external-link-icon lucide-external-link" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
+<path d="M15 3h6v6"></path>
+<path d="M10 14 21 3"></path>
+<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+</svg></a>
+<a class="recurso-enlace" href="https://www.freepik.es/" rel="noopener noreferrer" target="_blank">Freepik<svg class="lucide lucide-external-link-icon lucide-external-link" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
+<path d="M15 3h6v6"></path>
+<path d="M10 14 21 3"></path>
+<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+</svg></a>
+<a class="recurso-enlace" href="https://www.pexels.com/es-es/" rel="noopener noreferrer" target="_blank">Pexels<svg class="lucide lucide-external-link-icon lucide-external-link" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
+<path d="M15 3h6v6"></path>
+<path d="M10 14 21 3"></path>
+<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+</svg></a>
+</div>
+</div>
+<!-- ===== FIN NUEVA SECCIÓN ===== -->
+</div>
+<div id="videos-predefinidos" style="display: none;">
+<h3>Videos predefinidos</h3>
+<div class="opciones-fondo" id="opciones-videos">
+<div class="opcion-fondo" data-tipo="video" data-url="img/backgrounds/vid_background_1.mp4">
+<video loop="" muted="" playsinline="" src="img/backgrounds/vid_background_1.mp4"></video>
+</div>
+<div class="opcion-fondo" data-tipo="video" data-url="img/backgrounds/vid_background_2.mp4">
+<video loop="" muted="" playsinline="" src="img/backgrounds/vid_background_2.mp4"></video>
+</div>
+<div class="opcion-fondo" data-tipo="video" data-url="img/backgrounds/vid_background_3.mp4">
+<video loop="" muted="" playsinline="" src="img/backgrounds/vid_background_3.mp4"></video>
+</div>
+<div class="opcion-fondo" data-tipo="video" data-url="img/backgrounds/vid_background_4.mp4">
+<video loop="" muted="" playsinline="" src="img/backgrounds/vid_background_4.mp4"></video>
+</div>
+</div>
+<!-- ===== NUEVA SECCIÓN DE RECURSOS ===== -->
+<div class="recursos-container">
+<h4 class="recursos-titulo">Conseguir más videos:</h4>
+<div class="recursos-enlaces">
+<a class="recurso-enlace" href="https://pixabay.com/es/videos/search/fondos/?orientation=horizontal" rel="noopener noreferrer" target="_blank">Pixabay<svg class="lucide lucide-external-link-icon lucide-external-link" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
+<path d="M15 3h6v6"></path>
+<path d="M10 14 21 3"></path>
+<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+</svg></a>
+<a class="recurso-enlace" href="https://www.videvo.net/" rel="noopener noreferrer" target="_blank">Videvo<svg class="lucide lucide-external-link-icon lucide-external-link" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
+<path d="M15 3h6v6"></path>
+<path d="M10 14 21 3"></path>
+<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+</svg></a>
+<a class="recurso-enlace" href="https://coverr.co/" rel="noopener noreferrer" target="_blank">Coverr<svg class="lucide lucide-external-link-icon lucide-external-link" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
+<path d="M15 3h6v6"></path>
+<path d="M10 14 21 3"></path>
+<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+</svg></a>
+<a class="recurso-enlace" href="https://mixkit.co/" rel="noopener noreferrer" target="_blank">Mixkit<svg class="lucide lucide-external-link-icon lucide-external-link" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
+<path d="M15 3h6v6"></path>
+<path d="M10 14 21 3"></path>
+<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+</svg></a>
+</div>
+</div>
+<!-- ===== FIN NUEVA SECCIÓN ===== -->
+</div>
+<div class="personalizar-input-group personalizar-input-group--stacked">
+<label><svg aria-hidden="true" class="lucide lucide-globe w-3 h-3" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
+<circle cx="12" cy="12" r="10"></circle>
+<path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path>
+<path d="M2 12h20"></path>
+</svg>URL personalizada (opcional):</label>
+<div class="fondo-url-row">
+<input class="control-input" id="fondo-url-input" placeholder="https://ejemplo.com/imagen.jpg o video.mp4" type="url"/>
+<button aria-label="Subir imagen desde el dispositivo" class="fondo-imagen-file-btn" id="fondo-imagen-file-btn" title="Subir imagen desde el dispositivo" type="button">
+<svg aria-hidden="true" viewbox="0 0 24 24">
+<path d="M4 5a2 2 0 0 1 2-2h5l2 2h5a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"></path>
+<path d="M8 14l2.5-3 2 2.5 1.5-2 3 4.5"></path>
+</svg>
+</button>
+<input accept="image/*" hidden="" id="fondo-imagen-file" type="file"/>
+</div>
+</div>
+<div class="personalizar-input-group" id="grupo-colores">
+<div class="u-full-width">
+<label>Color inicio gradiente:</label>
+<input class="color-input" id="color-inicio" type="color" value="#667eea"/>
+</div>
+<div class="u-full-width">
+<label>Color fin gradiente:</label>
+<input class="color-input" id="color-fin" type="color" value="#764ba2"/>
+</div>
+</div>
+<div class="personalizar-colores-row">
+<div class="range-group">
+<div class="range-header">
+<label for="fondo-opacidad"><svg aria-hidden="true" class="lucide lucide-sliders-vertical w-3 h-3" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
+<path d="M10 8h4"></path>
+<path d="M12 21v-9"></path>
+<path d="M12 8V3"></path>
+<path d="M17 16h4"></path>
+<path d="M19 12V3"></path>
+<path d="M19 21v-5"></path>
+<path d="M3 14h4"></path>
+<path d="M5 10V3"></path>
+<path d="M5 21v-7"></path>
+</svg>Oscurecer</label>
+<span class="range-value" id="opacidad-valor">20%</span>
+</div>
+<input class="control-range" id="fondo-opacidad" max="100" min="0" type="range" value="20"/>
+<div class="range-marks">
+<span>0%</span>
+<span>100%</span>
+</div>
+</div>
+<div class="range-group">
+<div class="range-header">
+<label for="fondo-desenfoque"><svg aria-hidden="true" class="lucide lucide-sliders-vertical w-3 h-3" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
+<path d="M10 8h4"></path>
+<path d="M12 21v-9"></path>
+<path d="M12 8V3"></path>
+<path d="M17 16h4"></path>
+<path d="M19 12V3"></path>
+<path d="M19 21v-5"></path>
+<path d="M3 14h4"></path>
+<path d="M5 10V3"></path>
+<path d="M5 21v-7"></path>
+</svg>Desenfocar</label>
+<span class="range-value" id="desenfoque-valor">0px</span>
+</div>
+<input class="control-range" id="fondo-desenfoque" max="20" min="0" step="1" type="range" value="0"/>
+<div class="range-marks">
+<span>0px</span>
+<span>20px</span>
+</div>
+</div>
+</div>
+<h3>Vista previa</h3>
+<div class="previer-master-box">
+<div class="preview-fondo" id="preview-fondo"></div>
+<video class="preview-video" id="preview-video" loop="" muted="" playsinline="" style="display:none"></video>
+</div>
+</div>
+<div class="button-modal">
+<div class="personalizar-botones">
+<button class="btn-secundario" id="cancelar-personalizacion">Cancelar</button>
+<button class="btn-primario" id="guardar-personalizacion">Aplicar</button>
+</div>
+</div>
+</div>
+</div>
+<div class="box-master">
+<div class="contenedor-busqueda">
+<h1 class="titulo"><img src="./img/icons/startab_3.2.svg"/>StarTab</h1>
+<div class="selectores-buscador">
+<div class="circulo-buscador activo" data-buscador="google" title="Google">
+<img alt="Google" loading="lazy" src="./img/icons/google_1.png"/>
+</div>
+<div class="circulo-buscador" data-buscador="bing" title="Bing">
+<img alt="Bing" loading="lazy" src="./img/icons/bing_1.png"/>
+</div>
+<div class="circulo-buscador" data-buscador="duckduckgo" title="DuckDuckGo">
+<img alt="DuckDuckGo" loading="lazy" src="./img/icons/duckduckgo_1.png"/>
+</div>
+</div>
+<div class="caja-busqueda">
+<input id="barra-busqueda" placeholder="Buscar en la web..." type="text"/>
+<div class="iconos-busqueda">
+<button class="icono-busqueda" id="btn-limpiar" title="Limpiar">
+<svg class="lucide lucide-x-icon lucide-x" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
+<path d="M18 6 6 18"></path>
+<path d="m6 6 12 12"></path>
+</svg>
+</button>
+<button class="icono-busqueda" id="btn-buscar" title="Buscar">
+<svg class="lucide lucide-search-icon lucide-search" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
+<path d="m21 21-4.34-4.34"></path>
+<circle cx="11" cy="11" r="8"></circle>
+</svg>
+</button>
+<button class="icono-busqueda" id="btn-microfono" title="Búsqueda por voz">
+<svg class="lucide lucide-mic-icon lucide-mic" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
+<path d="M12 19v3"></path>
+<path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+<rect height="13" rx="3" width="6" x="9" y="2"></rect>
+</svg>
+</button>
+<a class="ai-btn" href="https://www.google.com/search?q=&amp;sca_esv=0ff7534cf1487ec7&amp;sxsrf=ANbL-n7QLnqMFuHQoaorki77FmSn1g-iJQ%3A1772853762974&amp;source=hp&amp;ei=ApqraZKyOMna0PEP2f-2qAk&amp;iflsig=AFdpzrgAAAAAaauoEqHo63e-nSUuW7rMeCsdcK_Yzclf&amp;aep=22&amp;udm=50&amp;ved=0ahUKEwiSu5z26oyTAxVJLTQIHdm_DZUQteYPCBc&amp;oq=&amp;gs_lp=Egdnd3Mtd2l6GgIYASIAMgcQIxgnGOoCMgcQIxgnGOoCMg0QIxjwBRgnGMkCGOoCMgoQIxgnGOoCGIsDMgoQIxgnGOoCGIsDMgcQIxgnGOoCMg0QIxjwBRgnGOoCGJ4GMgcQIxgnGOoCMgoQIxgnGOoCGIsDMg0QIxjwBRgnGMkCGOoCSL3UE1AAWABwAXgAkAEAmAEAoAEAqgEAuAEByAEAmAIBoAIIqAIKmAMI8QUTkenxLLzreJIHATGgBwCyBwC4BwDCBwMyLTHIBwaACAA&amp;sclient=gws-wiz"><svg aria-hidden="true" class="iconify iconify--twemoji" height="800px" preserveaspectratio="xMidYMid meet" role="img" viewbox="0 0 36 36" width="800px" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><path d="M34.347 16.893l-8.899-3.294l-3.323-10.891a1 1 0 0 0-1.912 0l-3.322 10.891l-8.9 3.294a1 1 0 0 0 0 1.876l8.895 3.293l3.324 11.223a1 1 0 0 0 1.918-.001l3.324-11.223l8.896-3.293a.998.998 0 0 0-.001-1.875z" fill="#FFAC33"></path><path d="M14.347 27.894l-2.314-.856l-.9-3.3a.998.998 0 0 0-1.929-.001l-.9 3.3l-2.313.856a1 1 0 0 0 0 1.876l2.301.853l.907 3.622a1 1 0 0 0 1.94-.001l.907-3.622l2.301-.853a.997.997 0 0 0 0-1.874zM10.009 6.231l-2.364-.875l-.876-2.365a.999.999 0 0 0-1.876 0l-.875 2.365l-2.365.875a1 1 0 0 0 0 1.876l2.365.875l.875 2.365a1 1 0 0 0 1.876 0l.875-2.365l2.365-.875a1 1 0 0 0 0-1.876z" fill="#FFCC4D"></path></svg> Modo AI</a>
+</div>
+</div>
+<div class="filtros-busqueda">
+<div class="filtro-item activo" data-filtro="web"><svg aria-hidden="true" class="lucide lucide-globe w-4 h-4" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
+<circle cx="12" cy="12" r="10"></circle>
+<path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path>
+<path d="M2 12h20"></path>
+</svg>Web</div>
+<div class="filtro-item" data-filtro="imagenes"><svg aria-hidden="true" class="lucide lucide-image w-4 h-4" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
+<rect height="18" rx="2" ry="2" width="18" x="3" y="3"></rect>
+<circle cx="9" cy="9" r="2"></circle>
+<path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"></path>
+</svg>Imágenes</div>
+<div class="filtro-item" data-filtro="video"><svg aria-hidden="true" class="lucide lucide-video w-4 h-4" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
+<path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5"></path>
+<rect height="12" rx="2" width="14" x="2" y="6"></rect>
+</svg>Videos</div>
+<div class="filtro-item" data-filtro="noticias"><svg aria-hidden="true" class="lucide lucide-newspaper w-4 h-4" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
+<path d="M15 18h-5"></path>
+<path d="M18 14h-8"></path>
+<path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-4 0v-9a2 2 0 0 1 2-2h2">
+</path>
+<rect height="4" rx="1" width="8" x="10" y="6"></rect>
+</svg>Noticias</div>
+</div>
+</div>
+<div class="contenedor-iconos-master">
+<div class="contenedor-iconos" id="contenedor-iconos"></div>
+</div>
+<div class="categorias-container">
+<!-- Las categorías se generan dinámicamente -->
+</div>
+</div>
+<div class="agregar-icono">
+<button id="btn-agregar" title="Agregar acceso directo"><svg aria-hidden="true" class="lucide lucide-plus w-8 h-8 text-white/20 group-hover:text-white/60" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
+<path d="M5 12h14"></path>
+<path d="M12 5v14"></path>
+</svg></button>
+</div>
+<div class="acciones-personalizacion-flotantes" id="acciones-personalizacion-flotantes">
+<button class="btn-personalizar" id="btn-personalizar" title="Personalizar fondo">
+<span class="btn-personalizar-icono"><svg aria-hidden="true" class="lucide lucide-palette w-6 h-6" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
+<path d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z">
+</path>
+<circle cx="13.5" cy="6.5" fill="currentColor" r=".5"></circle>
+<circle cx="17.5" cy="10.5" fill="currentColor" r=".5"></circle>
+<circle cx="6.5" cy="12.5" fill="currentColor" r=".5"></circle>
+<circle cx="8.5" cy="7.5" fill="currentColor" r=".5"></circle>
+</svg></span>
+</button>
+<button aria-label="Redimensionar y ajustar accesos" class="btn-redimensionar" id="btn-redimensionar" title="Redimensionar y ajustar accesos">
+<span class="btn-redimensionar-icono">
+<svg aria-hidden="true" fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
+<path d="M8 3H5a2 2 0 0 0-2 2v3"></path>
+<path d="M21 8V5a2 2 0 0 0-2-2h-3"></path>
+<path d="M16 21h3a2 2 0 0 0 2-2v-3"></path>
+<path d="M3 16v3a2 2 0 0 0 2 2h3"></path>
+<path d="m9 9 6 6"></path>
+<path d="m15 9-6 6"></path>
+</svg>
+</span>
+</button>
+</div>
+<div aria-hidden="true" class="panel-redimensionar-backdrop" id="panel-redimensionar-backdrop"></div>
+<aside aria-hidden="true" class="panel-redimensionar" id="panel-redimensionar">
+<div class="panel-redimensionar-header">
+<div>
+<span class="panel-redimensionar-kicker">StarTab</span>
+<h2>Personalización</h2>
+<p>Ajusta tu espacio de trabajo en tiempo real.</p>
+</div>
+<button aria-label="Cerrar" class="startab-tab-close panel-redimensionar-cerrar" id="cerrar-panel-redimensionar" title="Cerrar (Esc)" type="button">×</button>
+</div>
+<div aria-label="Secciones de personalización" class="redim-tabs" role="tablist">
+<button aria-controls="redim-panel-iconos" aria-selected="true" class="redim-tab activo" id="redim-tab-iconos" role="tab" type="button">
+<svg aria-hidden="true" viewbox="0 0 24 24"><rect height="6" rx="1" width="6" x="4" y="4"></rect><rect height="6" rx="1" width="6" x="14" y="4"></rect><rect height="6" rx="1" width="6" x="4" y="14"></rect><rect height="6" rx="1" width="6" x="14" y="14"></rect></svg>
+<span>Accesos directos</span>
+</button>
+<button aria-controls="redim-panel-busqueda" aria-selected="false" class="redim-tab" id="redim-tab-busqueda" role="tab" type="button">
+<svg aria-hidden="true" viewbox="0 0 24 24"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg>
+<span>Barra de búsqueda</span>
+</button>
+</div>
+<div class="panel-redimensionar-scroll">
+<section aria-labelledby="redim-tab-busqueda" class="redim-seccion redim-tab-panel" hidden="" id="redim-panel-busqueda" role="tabpanel">
+<div class="redim-seccion-titulo"><span>Barra de búsqueda</span><small>contenedor-busqueda</small></div>
+<label class="redim-control">
+<span><span class="redim-label"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M12 3v18"></path><path d="m8 7 4-4 4 4"></path><path d="m8 17 4 4 4-4"></path></svg><b>Posición vertical</b></span><output id="valor-busqueda-y">0 px</output></span>
+<input id="redim-busqueda-y" max="180" min="-180" step="1" type="range" value="0"/>
+</label>
+<label class="redim-control">
+<span><span class="redim-label"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3"></path><path d="M16 3h3a2 2 0 0 1 2 2v3"></path><path d="M8 21H5a2 2 0 0 1-2-2v-3"></path><path d="M16 21h3a2 2 0 0 0 2-2v-3"></path></svg><b>Tamaño</b></span><output id="valor-busqueda-size">100%</output></span>
+<input id="redim-busqueda-size" max="130" min="70" step="1" type="range" value="100"/>
+</label>
+</section>
+<section aria-labelledby="redim-tab-iconos" class="redim-seccion redim-tab-panel activo" id="redim-panel-iconos" role="tabpanel">
+<div class="redim-seccion-titulo"><span>Accesos directos</span><small>contenedor-iconos</small></div>
+<label class="redim-control">
+<span><span class="redim-label"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M12 3v18"></path><path d="m8 7 4-4 4 4"></path><path d="m8 17 4 4 4-4"></path></svg><b>Posición vertical</b></span><output id="valor-iconos-y">0 px</output></span>
+<input id="redim-iconos-y" max="180" min="-180" step="1" type="range" value="0"/>
+</label>
+<label class="redim-control">
+<span><span class="redim-label"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M4 4h16v16H4z"></path><path d="m8 8 8 8"></path><path d="m16 8-8 8"></path></svg><b>Tamaño del contenedor</b></span><output id="valor-iconos-size">100%</output></span>
+<input id="redim-iconos-size" max="130" min="70" step="1" type="range" value="100"/>
+</label>
+<label class="redim-control">
+<span><span class="redim-label"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3"></path><path d="M16 3h3a2 2 0 0 1 2-2v3"></path><path d="M8 21H5a2 2 0 0 1-2-2v-3"></path><path d="M16 21h3a2 2 0 0 0 2-2v3"></path></svg><b>Tamaño del icono</b></span><output id="valor-icono-size">100%</output></span>
+<input id="redim-icono-size" max="100" min="25" step="1" type="range" value="100"/>
+</label>
+<div class="redim-switch-row">
+<div class="redim-label-text"><svg aria-hidden="true" viewbox="0 0 24 24"><rect height="18" rx="3" width="18" x="3" y="3"></rect><path d="M7 7h10v10H7z"></path></svg><span><b>Fondo de los accesos</b><small>Mostrar fondo y borde del acceso directo</small></span></div>
+<label class="redim-switch"><input checked="" id="redim-icono-bg" type="checkbox"/><span></span></label>
+</div>
+<label class="redim-control">
+<span><span class="redim-label"><svg aria-hidden="true" viewbox="0 0 24 24"><rect height="16" rx="6" width="16" x="4" y="4"></rect><path d="M4 10h3"></path></svg><b>Bordes redondeados</b></span><output id="valor-icono-radius">12 px</output></span>
+<input id="redim-icono-radius" max="40" min="0" step="1" type="range" value="12"/>
+</label>
+<label class="redim-control">
+<span><span class="redim-label"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M5 6h14"></path><path d="M5 12h14"></path><path d="M5 18h14"></path><path d="m8 3-3 3 3 3"></path></svg><b>Alineación</b></span><output id="valor-icono-align">Izquierda</output></span>
+<select class="redim-select" id="redim-icono-align">
+<option selected="" value="left">Izquierda</option>
+<option value="center">Centro</option>
+<option value="right">Derecha</option>
+</select>
+</label>
+<label class="redim-control">
+<span><span class="redim-label"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M4 5h16"></path><path d="M4 12h16"></path><path d="M4 19h16"></path><path d="M7 3v4"></path><path d="M12 10v4"></path><path d="M17 17v4"></path></svg><b>Filas</b></span><output id="valor-icono-rows">2</output></span>
+<input id="redim-icono-rows" max="4" min="1" step="1" type="range" value="2"/>
+</label>
+<label class="redim-control">
+<span><span class="redim-label"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M5 4v16"></path><path d="M12 4v16"></path><path d="M19 4v16"></path><path d="M3 7h4"></path><path d="M10 12h4"></path><path d="M17 17h4"></path></svg><b>Columnas</b></span><output id="valor-icono-columns">8</output></span>
+<input id="redim-icono-columns" max="14" min="5" step="1" type="range" value="8"/>
+</label>
+</section>
+</div>
+<div class="panel-redimensionar-footer">
+<button id="restablecer-redimensionar" type="button">Restablecer</button>
+<span>Se guarda automáticamente en tu perfil de StarTab.</span>
+</div>
+</aside>
 </body>
-
 </html>
