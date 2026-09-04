@@ -2464,8 +2464,26 @@ function actualizarLayoutIconos() {
     const items = [...container.querySelectorAll('.icono-item')];
     const csInicial = getComputedStyle(container);
     const gapXInicial = parseFloat(csInicial.columnGap) || parseFloat(csInicial.gap) || 0;
-    const paddingXInicial = (parseFloat(csInicial.paddingLeft) || 0) + (parseFloat(csInicial.paddingRight) || 0);
-    const innerWidthInicial = Math.max(0, container.clientWidth - paddingXInicial);
+
+    /*
+     * ANCHO DISPONIBLE REVERSIBLE
+     * ---------------------------
+     * El grid usa width:fit-content. Si calculamos las columnas desde su propio
+     * clientWidth, al estrechar la ventana el grid se hace pequeño y ese ancho
+     * reducido puede convertirse en su nueva referencia permanente. Al volver a
+     * ensanchar el viewport ya no tendría cómo "descubrir" el espacio recuperado.
+     *
+     * La referencia correcta es el viewport físico que le ofrece el master. Así
+     * el layout puede contraerse Y volver a expandirse sin reconstruir accesos.
+     */
+    const master = container.closest('.contenedor-iconos-master') || container.parentElement;
+    const masterStyles = master ? getComputedStyle(master) : null;
+    const masterPaddingX = masterStyles
+        ? (parseFloat(masterStyles.paddingLeft) || 0) + (parseFloat(masterStyles.paddingRight) || 0)
+        : 0;
+    const anchoMaster = master ? Math.max(0, master.clientWidth - masterPaddingX) : 0;
+    const fallbackWidth = Math.max(0, document.documentElement.clientWidth || window.innerWidth || 0);
+    const innerWidthInicial = Math.min(1200, anchoMaster || fallbackWidth);
 
     /*
      * COLUMNAS RESPONSIVE REALES
@@ -2701,7 +2719,13 @@ function inicializarDragAndDrop() {
             });
         };
         if (typeof ResizeObserver === 'function') {
-            new ResizeObserver(onResize).observe(container);
+            const layoutResizeObserver = new ResizeObserver(onResize);
+            layoutResizeObserver.observe(container);
+            const master = container.closest('.contenedor-iconos-master');
+            if (master && master !== container) layoutResizeObserver.observe(master);
+            // Conservamos una referencia para que el observer permanezca activo
+            // durante toda la vida de StarTab.
+            inicializarDragAndDrop._layoutResizeObserver = layoutResizeObserver;
         }
         // El breakpoint vertical (<570px) depende del viewport, no sólo del
         // tamaño intrínseco del grid. Escuchamos resize siempre para detectar
@@ -4978,6 +5002,10 @@ function marcarUltimaSincronizacion(notaDOM = obtenerNotaDOM()) {
     notaDOM.lastSync.textContent = 'Actualizado ahora';
 }
 
+function esDispositivoTactilParaNotas() {
+    return window.matchMedia?.('(hover: none) and (pointer: coarse)').matches || navigator.maxTouchPoints > 0;
+}
+
 function abrirModalNota(notaDOM = obtenerNotaDOM()) {
     if (!notaDOM.modal) return;
     notaDOM.modal.style.display = 'flex';
@@ -4986,6 +5014,14 @@ function abrirModalNota(notaDOM = obtenerNotaDOM()) {
     notaDOM.modal.classList.add('nota-modal-abierto');
     document.body.style.overflow = 'hidden';
     actualizarTodosLosPreviews(notaDOM);
+
+    // En móvil/táctil nunca abrimos el teclado al mostrar el modal. El usuario
+    // decide cuándo escribir tocando explícitamente el textarea.
+    if (esDispositivoTactilParaNotas()) {
+        notaDOM.textarea?.blur();
+        if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+        return;
+    }
     setTimeout(() => notaDOM.textarea?.focus({ preventScroll: true }), 180);
 }
 
@@ -5033,7 +5069,9 @@ function cambiarNota(notaNum, notaDOM = obtenerNotaDOM()) {
     });
 
     cargarNota(notaNum, notaDOM);
-    notaDOM.textarea?.focus({ preventScroll: true });
+    // Cambiar de Nota 1–5 desde un teléfono no debe invocar el teclado. Sólo
+    // un toque directo dentro del área de escritura debe enfocarla.
+    if (!esDispositivoTactilParaNotas()) notaDOM.textarea?.focus({ preventScroll: true });
 }
 
 function habilitarEdicion(habilitar) {

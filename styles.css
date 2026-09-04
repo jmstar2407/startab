@@ -7183,3 +7183,82 @@ body:has(.nota-modal.nota-modal-abierto) { overflow: hidden; }
 @media (prefers-reduced-motion: reduce) {
     .nota-modal-contenido, .nota-modal-backdrop, .nota-btn-numero, .nota-textarea, .nota-sync-icon { transition: none !important; animation: none !important; }
 }
+
+/* ======================================================================
+   StarTab v1.4 — NOTAS RÁPIDAS / RESPONSIVE REVERSIBLE · FIX 2026-09-04
+   ====================================================================== */
+
+/* Overlay más ligero: conserva separación visual sin apagar StarTab. */
+.nota-modal-backdrop {
+    background: rgba(4, 6, 12, .38) !important;
+    -webkit-backdrop-filter: blur(10px) saturate(.92) !important;
+    backdrop-filter: blur(10px) saturate(.92) !important;
+}
+
+/* El hover sólo resalta. Nunca desplaza una tarjeta ni crea overflow lateral. */
+.nota-botones-container {
+    overflow-x: hidden !important;
+    overscroll-behavior-inline: contain;
+}
+.nota-btn-numero,
+.nota-btn-numero:hover,
+.nota-btn-numero:focus-visible,
+.nota-btn-numero.activo {
+    transform: none !important;
+}
+.nota-btn-numero:hover {
+    background: rgba(255,255,255,.055) !important;
+    border-color: rgba(151,137,255,.16) !important;
+}
+
+/* Teléfono: modal realmente fullscreen, sin márgenes, radios ni espacio muerto.
+   Se incluye pointer:coarse para cubrir también teléfonos en horizontal. */
+@media (max-width: 720px), (max-width: 1024px) and (pointer: coarse) {
+    .nota-modal {
+        padding: 0 !important;
+        align-items: stretch !important;
+        justify-content: stretch !important;
+    }
+    .nota-modal-contenido {
+        width: 100vw !important;
+        width: 100dvw !important;
+        height: 100vh !important;
+        height: 100dvh !important;
+        min-width: 100vw !important;
+        min-height: 100vh !important;
+        min-height: 100dvh !important;
+        max-width: none !important;
+        max-height: none !important;
+        margin: 0 !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+    }
+    .nota-modal-header {
+        padding-top: max(14px, env(safe-area-inset-top)) !important;
+        padding-left: max(14px, env(safe-area-inset-left)) !important;
+        padding-right: max(14px, env(safe-area-inset-right)) !important;
+    }
+    .nota-editor-panel {
+        padding-left: max(12px, env(safe-area-inset-left)) !important;
+        padding-right: max(12px, env(safe-area-inset-right)) !important;
+        padding-bottom: max(10px, env(safe-area-inset-bottom)) !important;
+    }
+    .nota-sidebar {
+        padding-left: max(12px, env(safe-area-inset-left)) !important;
+        padding-right: max(12px, env(safe-area-inset-right)) !important;
+    }
+
+    /* Las cinco notas caben en la franja sin scrollbar horizontal. */
+    .nota-botones-container {
+        width: 100% !important;
+        overflow: hidden !important;
+        gap: 6px !important;
+    }
+    .nota-btn-numero {
+        min-width: 0 !important;
+        width: auto !important;
+        max-width: none !important;
+        flex: 1 1 0 !important;
+    }
+}
