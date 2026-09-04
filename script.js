@@ -1867,8 +1867,19 @@ function seleccionarCategoriaPorScroll(indice) {
 
 function manejarScrollCategorias(e) {
     // No interferir con modales, campos de texto, selects, editores ni drag & drop.
+    // Bloquear la navegación solo cuando un modal esté REALMENTE abierto.
+    // No basta con encontrar [aria-modal="true"], porque esos nodos existen
+    // permanentemente en el DOM aunque Notas rápidas/Centro de pestañas estén cerrados.
     if (document.body.classList.contains('modal-abierto') ||
-        document.querySelector('.modal.active, .modal.show, [aria-modal="true"]')) return;
+        document.body.classList.contains('startab-tabs-modal-open') ||
+        document.querySelector(
+            '.modal.active, .modal.show, ' +
+            '.modal-moderno.modal-abierto, ' +
+            '.modal-personalizar.modal-personalizar-abierto, ' +
+            '.nota-modal.nota-modal-abierto, ' +
+            '.multimedia-modal.is-open, ' +
+            '.startab-tab-center.open'
+        )) return;
 
     const target = e.target instanceof Element ? e.target : null;
     if (target?.closest('input, textarea, select, [contenteditable="true"], .modal, .context-menu')) return;
@@ -5223,6 +5234,346 @@ async function revisarAccesoPendienteDelMenuContextual() {
     }
 }
 
+
+/* ================================================================
+   INFORMACIÓN EN VIVO · USD/DOP + CLIMA ACTUAL EN SANTO DOMINGO
+   - Muestra caché de inmediato para que la nueva pestaña no "parpadee".
+   - Clima: refresco cada 10 min (Open-Meteo).
+   - USD/DOP: consulta la tasa oficial del Banco Central cada hora; usa una
+     fuente de respaldo si la página oficial no responde.
+   ================================================================ */
+const STARTAB_LIVE_INFO_CACHE_KEY = 'startab_live_info_v1';
+const STARTAB_LIVE_INFO = {
+    weatherRefreshMs: 10 * 60 * 1000,
+    currencyRefreshMs: 60 * 60 * 1000,
+    requestTimeoutMs: 8500,
+    weatherUrl: 'https://api.open-meteo.com/v1/forecast?latitude=18.4861&longitude=-69.9312&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,is_day&temperature_unit=celsius&timezone=America%2FSanto_Domingo',
+    currencyOfficialUrl: 'https://www.bancentral.gov.do/',
+    currencyFallbackUrl: 'https://open.er-api.com/v6/latest/USD'
+};
+
+let startabLiveInfoTimers = { weather: 0, currency: 0 };
+let startabLiveInfoRunning = { weather: false, currency: false };
+
+function leerCacheInformacionEnVivo() {
+    try {
+        const raw = localStorage.getItem(STARTAB_LIVE_INFO_CACHE_KEY);
+        if (!raw) return {};
+        const data = JSON.parse(raw);
+        return data && typeof data === 'object' ? data : {};
+    } catch (_) {
+        return {};
+    }
+}
+
+function guardarCacheInformacionEnVivo(parcial) {
+    try {
+        const actual = leerCacheInformacionEnVivo();
+        localStorage.setItem(STARTAB_LIVE_INFO_CACHE_KEY, JSON.stringify({ ...actual, ...parcial }));
+    } catch (_) { /* La información en vivo nunca debe romper StarTab. */ }
+}
+
+function fechaCortaInformacionEnVivo(timestamp) {
+    if (!Number.isFinite(timestamp)) return '';
+    try {
+        return new Intl.DateTimeFormat('es-DO', {
+            hour: 'numeric', minute: '2-digit', hour12: true
+        }).format(new Date(timestamp));
+    } catch (_) {
+        return new Date(timestamp).toLocaleTimeString();
+    }
+}
+
+function iconoClimaWMO(codigo, esDia = true) {
+    const c = Number(codigo);
+    if (c === 0) return esDia ? '☀️' : '🌙';
+    if (c === 1) return esDia ? '🌤️' : '🌙';
+    if (c === 2) return '⛅';
+    if (c === 3) return '☁️';
+    if (c === 45 || c === 48) return '🌫️';
+    if ([51, 53, 55, 56, 57].includes(c)) return '🌦️';
+    if ([61, 63, 65, 66, 67, 80, 81, 82].includes(c)) return '🌧️';
+    if ([71, 73, 75, 77, 85, 86].includes(c)) return '❄️';
+    if ([95, 96, 99].includes(c)) return '⛈️';
+    return '🌤️';
+}
+
+function descripcionClimaWMO(codigo) {
+    const c = Number(codigo);
+    if (c === 0) return 'Despejado';
+    if (c === 1) return 'Mayormente despejado';
+    if (c === 2) return 'Parcialmente nublado';
+    if (c === 3) return 'Nublado';
+    if (c === 45 || c === 48) return 'Neblina';
+    if ([51, 53, 55, 56, 57].includes(c)) return 'Llovizna';
+    if ([61, 63, 65, 66, 67].includes(c)) return 'Lluvia';
+    if ([71, 73, 75, 77].includes(c)) return 'Nieve';
+    if ([80, 81, 82].includes(c)) return 'Chubascos';
+    if ([85, 86].includes(c)) return 'Nieve con chubascos';
+    if ([95, 96, 99].includes(c)) return 'Tormentas';
+    return 'Clima actual';
+}
+
+function marcarEstadoLiveInfo(card, estado) {
+    if (!card) return;
+    card.classList.remove('is-loading', 'is-fresh', 'is-stale');
+    if (estado) card.classList.add(`is-${estado}`);
+}
+
+function pintarDolarEnVivo(data, estado = 'fresh') {
+    if (!data || !Number.isFinite(Number(data.rate))) return;
+    const value = document.getElementById('live-usd-value');
+    const label = document.getElementById('live-usd-label');
+    const source = document.getElementById('live-usd-source');
+    const card = document.getElementById('live-info-usd');
+    if (!value || !card) return;
+
+    const rate = Number(data.rate);
+    value.textContent = `RD$ ${rate.toFixed(2)}`;
+    const hora = fechaCortaInformacionEnVivo(Number(data.fetchedAt));
+
+    if (data.source === 'bcrd') {
+        if (label) label.textContent = 'USD · Venta BC';
+        if (source) {
+            source.href = 'https://www.bancentral.gov.do/';
+            source.title = 'Fuente: Banco Central de la República Dominicana';
+            source.setAttribute('aria-label', 'Fuente del tipo de cambio: Banco Central de la República Dominicana');
+        }
+        const compra = Number(data.buyRate);
+        const compraText = Number.isFinite(compra) ? ` · Compra RD$ ${compra.toFixed(2)}` : '';
+        const fechaText = data.rateDate ? ` · ${data.rateDate}` : '';
+        card.title = `Banco Central RD · Venta RD$ ${rate.toFixed(2)}${compraText}${fechaText}${hora ? ` · Consultado ${hora}` : ''}`;
+    } else {
+        if (label) label.textContent = 'USD → DOP';
+        if (source) {
+            source.href = 'https://www.exchangerate-api.com';
+            source.title = 'Fuente de respaldo: ExchangeRate-API';
+            source.setAttribute('aria-label', 'Fuente de respaldo del tipo de cambio: ExchangeRate-API');
+        }
+        card.title = `1 USD = RD$ ${rate.toFixed(2)} · Tasa referencial de respaldo${hora ? ` · Consultado ${hora}` : ''}`;
+    }
+}
+
+function pintarClimaEnVivo(data, estado = 'fresh') {
+    if (!data || !Number.isFinite(Number(data.temperature))) return;
+    const value = document.getElementById('live-weather-value');
+    const icon = document.getElementById('live-weather-icon');
+    const label = document.getElementById('live-weather-label');
+    const card = document.getElementById('live-info-weather');
+    if (!value || !icon || !label || !card) return;
+
+    const temp = Math.round(Number(data.temperature));
+    const feels = Number(data.apparentTemperature);
+    const humidity = Number(data.humidity);
+    const description = descripcionClimaWMO(data.weatherCode);
+    value.textContent = `${temp}°C`;
+    icon.textContent = iconoClimaWMO(data.weatherCode, Boolean(data.isDay));
+    label.textContent = description;
+
+    const extras = [];
+    if (Number.isFinite(feels)) extras.push(`sensación ${Math.round(feels)}°C`);
+    if (Number.isFinite(humidity)) extras.push(`humedad ${Math.round(humidity)}%`);
+    const hora = fechaCortaInformacionEnVivo(Number(data.fetchedAt));
+    card.title = `${description} en Santo Domingo · ${temp}°C${extras.length ? ` · ${extras.join(' · ')}` : ''}${hora ? ` · Actualizado ${hora}` : ''}`;
+    marcarEstadoLiveInfo(card, estado);
+}
+
+async function fetchJsonConTimeout(url) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), STARTAB_LIVE_INFO.requestTimeoutMs);
+    try {
+        const response = await fetch(url, {
+            method: 'GET',
+            cache: 'no-store',
+            signal: controller.signal,
+            headers: { 'Accept': 'application/json' }
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return await response.json();
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+async function fetchTextConTimeout(url) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), STARTAB_LIVE_INFO.requestTimeoutMs);
+    try {
+        const response = await fetch(url, {
+            method: 'GET',
+            cache: 'no-store',
+            signal: controller.signal,
+            headers: { 'Accept': 'text/html,application/xhtml+xml' }
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return await response.text();
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+function extraerTasaBCRD(html) {
+    if (typeof html !== 'string' || html.length < 100) return null;
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const text = (doc.body?.textContent || '')
+        .replace(/\u00a0/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    // Limitamos el análisis al bloque que sigue a "Tipo de cambio" para no
+    // confundirlo con otras cifras macroeconómicas presentes en la portada.
+    const idx = text.search(/Tipo de cambio/i);
+    if (idx < 0) return null;
+    const bloque = text.slice(idx, idx + 650);
+
+    const compraMatch = bloque.match(/Compra\s*(?:RD\$\s*)?([0-9]{1,3}(?:\.[0-9]{2,4})?)/i);
+    const ventaMatch = bloque.match(/Venta\s*(?:RD\$\s*)?([0-9]{1,3}(?:\.[0-9]{2,4})?)/i);
+    if (!compraMatch || !ventaMatch) return null;
+
+    const buyRate = Number(compraMatch[1]);
+    const sellRate = Number(ventaMatch[1]);
+    if (!Number.isFinite(buyRate) || !Number.isFinite(sellRate) || buyRate <= 0 || sellRate <= 0) return null;
+
+    // La fecha normalmente aparece pegada al título: "Tipo de cambio3 de Septiembre 2026".
+    const fechaMatch = bloque.match(/Tipo de cambio\s*([^|]{0,65}?\b20\d{2})/i);
+    return {
+        rate: sellRate,
+        buyRate,
+        rateDate: fechaMatch ? fechaMatch[1].trim() : '',
+        source: 'bcrd',
+        fetchedAt: Date.now()
+    };
+}
+
+async function consultarDolarBCRD() {
+    const html = await fetchTextConTimeout(STARTAB_LIVE_INFO.currencyOfficialUrl);
+    const parsed = extraerTasaBCRD(html);
+    if (!parsed) throw new Error('No se encontró la tasa oficial en la portada del BCRD');
+    return parsed;
+}
+
+async function consultarDolarRespaldo() {
+    const data = await fetchJsonConTimeout(STARTAB_LIVE_INFO.currencyFallbackUrl);
+    const rate = Number(data?.rates?.DOP);
+    if (!Number.isFinite(rate) || rate <= 0) throw new Error('Tasa DOP de respaldo inválida');
+    return {
+        rate,
+        source: 'fallback',
+        fetchedAt: Date.now(),
+        sourceUpdatedAt: Number(data?.time_last_update_unix) * 1000 || null
+    };
+}
+
+async function actualizarDolarEnVivo(forzar = false) {
+    if (startabLiveInfoRunning.currency) return;
+    const cache = leerCacheInformacionEnVivo().currency;
+    const edad = cache?.fetchedAt ? Date.now() - Number(cache.fetchedAt) : Infinity;
+    if (!forzar && cache && edad < STARTAB_LIVE_INFO.currencyRefreshMs) {
+        pintarDolarEnVivo(cache, 'fresh');
+        return;
+    }
+
+    const card = document.getElementById('live-info-usd');
+    marcarEstadoLiveInfo(card, 'loading');
+    startabLiveInfoRunning.currency = true;
+    try {
+        let nuevo;
+        try {
+            nuevo = await consultarDolarBCRD();
+        } catch (officialError) {
+            console.warn('StarTab: BCRD no respondió; usando tasa de respaldo', officialError);
+            nuevo = await consultarDolarRespaldo();
+        }
+        guardarCacheInformacionEnVivo({ currency: nuevo });
+        pintarDolarEnVivo(nuevo, 'fresh');
+    } catch (error) {
+        console.warn('StarTab: no se pudo actualizar USD/DOP', error);
+        if (cache) pintarDolarEnVivo(cache, 'stale');
+        else {
+            const value = document.getElementById('live-usd-value');
+            if (value) value.textContent = 'RD$ --.--';
+            marcarEstadoLiveInfo(card, 'stale');
+            if (card) card.title = 'No se pudo consultar el tipo de cambio. Se reintentará automáticamente.';
+        }
+    } finally {
+        startabLiveInfoRunning.currency = false;
+    }
+}
+
+async function actualizarClimaEnVivo(forzar = false) {
+    if (startabLiveInfoRunning.weather) return;
+    const cache = leerCacheInformacionEnVivo().weather;
+    const edad = cache?.fetchedAt ? Date.now() - Number(cache.fetchedAt) : Infinity;
+    if (!forzar && cache && edad < STARTAB_LIVE_INFO.weatherRefreshMs) {
+        pintarClimaEnVivo(cache, 'fresh');
+        return;
+    }
+
+    const card = document.getElementById('live-info-weather');
+    marcarEstadoLiveInfo(card, 'loading');
+    startabLiveInfoRunning.weather = true;
+    try {
+        const data = await fetchJsonConTimeout(STARTAB_LIVE_INFO.weatherUrl);
+        const current = data?.current;
+        const temperature = Number(current?.temperature_2m);
+        if (!Number.isFinite(temperature)) throw new Error('Temperatura inválida');
+        const nuevo = {
+            temperature,
+            apparentTemperature: Number(current?.apparent_temperature),
+            humidity: Number(current?.relative_humidity_2m),
+            weatherCode: Number(current?.weather_code),
+            isDay: Number(current?.is_day) === 1,
+            fetchedAt: Date.now()
+        };
+        guardarCacheInformacionEnVivo({ weather: nuevo });
+        pintarClimaEnVivo(nuevo, 'fresh');
+    } catch (error) {
+        console.warn('StarTab: no se pudo actualizar el clima de Santo Domingo', error);
+        if (cache) pintarClimaEnVivo(cache, 'stale');
+        else {
+            const value = document.getElementById('live-weather-value');
+            if (value) value.textContent = '--°C';
+            marcarEstadoLiveInfo(card, 'stale');
+            if (card) card.title = 'No se pudo consultar el clima. Se reintentará automáticamente.';
+        }
+    } finally {
+        startabLiveInfoRunning.weather = false;
+    }
+}
+
+function inicializarInformacionEnVivo() {
+    const strip = document.getElementById('live-info-strip');
+    if (!strip || strip.dataset.ready === '1') return;
+    strip.dataset.ready = '1';
+
+    // Pintar primero el último dato conocido para una apertura instantánea.
+    const cache = leerCacheInformacionEnVivo();
+    if (cache.currency) pintarDolarEnVivo(cache.currency, 'stale');
+    if (cache.weather) pintarClimaEnVivo(cache.weather, 'stale');
+
+    void actualizarDolarEnVivo(false);
+    void actualizarClimaEnVivo(false);
+
+    startabLiveInfoTimers.weather = window.setInterval(() => {
+        if (!document.hidden && navigator.onLine) void actualizarClimaEnVivo(true);
+    }, STARTAB_LIVE_INFO.weatherRefreshMs);
+
+    startabLiveInfoTimers.currency = window.setInterval(() => {
+        if (!document.hidden && navigator.onLine) void actualizarDolarEnVivo(true);
+    }, STARTAB_LIVE_INFO.currencyRefreshMs);
+
+    window.addEventListener('online', () => {
+        void actualizarClimaEnVivo(true);
+        void actualizarDolarEnVivo(true);
+    });
+
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden || !navigator.onLine) return;
+        void actualizarClimaEnVivo(false);
+        void actualizarDolarEnVivo(false);
+    });
+}
+
 // ===== INICIALIZACIÓN PRINCIPAL =====
 document.addEventListener('DOMContentLoaded', () => {
     inicializarNavegacionScrollCategorias();
@@ -5236,6 +5587,7 @@ document.addEventListener('DOMContentLoaded', () => {
     inicializarDobleClickBuscadores();
     inicializarAutenticacion();
     inicializarNota();
+    inicializarInformacionEnVivo();
     
     cargarIconosRapidos(true);
     cargarCategoriasLocales();

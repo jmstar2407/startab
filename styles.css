@@ -7262,3 +7262,267 @@ body:has(.nota-modal.nota-modal-abierto) { overflow: hidden; }
         flex: 1 1 0 !important;
     }
 }
+
+
+/* ================================================================
+   INFORMACIÓN EN VIVO · USD/DOP + CLIMA DE SANTO DOMINGO
+   Mantiene el lenguaje visual de los controles flotantes de StarTab.
+   ================================================================ */
+.live-info-strip {
+    position: fixed;
+    top: 1rem;
+    left: 82px;
+    z-index: 999;
+    display: flex;
+    align-items: center;
+    gap: .55rem;
+    max-width: calc(100vw - 190px);
+    pointer-events: auto;
+}
+
+.live-info-card {
+    position: relative;
+    min-height: 50px;
+    padding: .48rem .7rem .48rem .58rem;
+    display: flex;
+    align-items: center;
+    gap: .52rem;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, .14);
+    background: rgba(70, 78, 104, .20);
+    -webkit-backdrop-filter: blur(14px) saturate(125%);
+    backdrop-filter: blur(14px) saturate(125%);
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, .04), 4px 4px 10px rgba(0, 0, 0, .10);
+    color: rgba(255, 255, 255, .95);
+    box-sizing: border-box;
+    user-select: none;
+    transition: background .22s ease, border-color .22s ease, transform .22s ease, opacity .22s ease;
+}
+
+.live-info-card:hover {
+    background: rgba(255, 255, 255, .14);
+    border-color: rgba(255, 255, 255, .24);
+    transform: translateY(-1px);
+}
+
+.live-info-copy {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    line-height: 1.05;
+    gap: .22rem;
+}
+
+.live-info-label {
+    max-width: 112px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    color: rgba(255, 255, 255, .62);
+    font-size: .64rem;
+    font-weight: 650;
+    letter-spacing: .035em;
+}
+
+.live-info-value {
+    white-space: nowrap;
+    color: #f8fafc;
+    font-size: .86rem;
+    font-weight: 750;
+    letter-spacing: -.015em;
+    font-variant-numeric: tabular-nums;
+}
+
+.live-info-icon,
+.live-weather-icon {
+    width: 31px;
+    height: 31px;
+    flex: 0 0 31px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+}
+
+.live-info-dollar {
+    color: #b9fbcf;
+    background: linear-gradient(145deg, rgba(16, 185, 129, .28), rgba(5, 150, 105, .10));
+    border: 1px solid rgba(52, 211, 153, .24);
+    font-size: 1rem;
+    font-weight: 850;
+    text-shadow: 0 1px 10px rgba(16, 185, 129, .25);
+}
+
+.live-weather-icon {
+    background: linear-gradient(145deg, rgba(56, 189, 248, .20), rgba(250, 204, 21, .12));
+    border: 1px solid rgba(125, 211, 252, .20);
+    font-size: 1.16rem;
+    filter: saturate(.92);
+}
+
+.live-info-dot {
+    width: 5px;
+    height: 5px;
+    flex: 0 0 5px;
+    margin-left: .08rem;
+    border-radius: 999px;
+    background: rgba(148, 163, 184, .55);
+    box-shadow: 0 0 0 3px rgba(148, 163, 184, .08);
+    transition: background .2s ease, box-shadow .2s ease;
+}
+
+.live-info-card.is-fresh .live-info-dot {
+    background: #4ade80;
+    box-shadow: 0 0 0 3px rgba(74, 222, 128, .10), 0 0 8px rgba(74, 222, 128, .22);
+}
+
+.live-info-card.is-loading .live-info-dot {
+    background: #facc15;
+    box-shadow: 0 0 0 3px rgba(250, 204, 21, .10);
+    animation: liveInfoPulse 1.1s ease-in-out infinite;
+}
+
+.live-info-card.is-stale .live-info-dot {
+    background: #fb923c;
+    box-shadow: 0 0 0 3px rgba(251, 146, 60, .10);
+}
+
+.live-info-source {
+    position: absolute;
+    right: 4px;
+    top: 3px;
+    color: rgba(255, 255, 255, .32);
+    font-size: .55rem;
+    line-height: 1;
+    text-decoration: none;
+    opacity: 0;
+    transition: opacity .18s ease, color .18s ease;
+}
+
+.live-info-card:hover .live-info-source,
+.live-info-source:focus-visible {
+    opacity: 1;
+}
+
+.live-info-source:hover {
+    color: rgba(255, 255, 255, .82);
+}
+
+@keyframes liveInfoPulse {
+    0%, 100% { opacity: .45; transform: scale(.82); }
+    50% { opacity: 1; transform: scale(1); }
+}
+
+@media (max-width: 760px) {
+    .live-info-strip {
+        gap: .35rem;
+        max-width: calc(100vw - 105px);
+    }
+
+    .live-info-card {
+        min-height: 46px;
+        padding: .38rem .5rem;
+        gap: .38rem;
+    }
+
+    .live-info-icon,
+    .live-weather-icon {
+        width: 28px;
+        height: 28px;
+        flex-basis: 28px;
+    }
+
+    .live-info-label {
+        display: none;
+    }
+
+    .live-info-value {
+        font-size: .78rem;
+    }
+}
+
+@media (max-width: 520px) {
+    .live-info-strip {
+        left: 72px;
+    }
+
+    .live-info-card {
+        padding: .35rem .42rem;
+    }
+
+    .live-info-dot,
+    .live-info-source {
+        display: none;
+    }
+
+    .live-info-usd .live-info-icon {
+        display: none;
+    }
+}
+
+@media (max-height: 819.98px) {
+    .nota-icono {
+        width: 44px;
+        height: 44px;
+        border-radius: 14px;
+    }
+
+    .live-info-strip {
+        left: 72px;
+    }
+
+    .live-info-card {
+        min-height: 44px;
+        border-radius: 14px;
+        padding-top: .35rem;
+        padding-bottom: .35rem;
+    }
+
+    .live-info-icon,
+    .live-weather-icon {
+        width: 28px;
+        height: 28px;
+        flex-basis: 28px;
+        border-radius: 9px;
+    }
+}
+
+/* Alineación exacta con los controles compactos por altura ya existentes. */
+@media (max-height: 819.98px) {
+    .live-info-strip {
+        top: .7rem;
+        left: 64px;
+    }
+
+    .live-info-card {
+        min-height: var(--startab-ui-control, 42px);
+    }
+}
+
+@media (max-height: 680px) and (min-width: 769px) {
+    .live-info-strip {
+        top: .5rem;
+        left: 58px;
+        gap: .42rem;
+    }
+
+    .live-info-card {
+        min-height: 38px;
+        padding: .3rem .55rem .3rem .45rem;
+        border-radius: 12px;
+        gap: .38rem;
+    }
+
+    .live-info-icon,
+    .live-weather-icon {
+        width: 25px;
+        height: 25px;
+        flex-basis: 25px;
+        border-radius: 8px;
+        font-size: .98rem;
+    }
+
+    .live-info-label { font-size: .58rem; }
+    .live-info-value { font-size: .76rem; }
+}
