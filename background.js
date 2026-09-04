@@ -15,7 +15,7 @@ const MENU_ROOT='startab-add-root';const MENU_PREFIX='startab-add-category-';con
   let creatingOffscreen = null;
 
   async function ensureOffscreen() {
-    if (!IS_WINDOWS || !chrome.offscreen) return;
+    if (!chrome.offscreen) return;
     const offscreenUrl = chrome.runtime.getURL(OFFSCREEN_PATH);
     try {
       const contexts = await chrome.runtime.getContexts({
@@ -29,7 +29,7 @@ const MENU_ROOT='startab-add-root';const MENU_PREFIX='startab-add-category-';con
     creatingOffscreen = chrome.offscreen.createDocument({
       url: OFFSCREEN_PATH,
       reasons: ['LOCAL_STORAGE'],
-      justification: 'Mantener la sesión de StarTab que sincroniza el volumen del PC con Firestore mientras Chrome está abierto.',
+      justification: 'Mantener el puente en tiempo real de StarTab con Firestore y Native Messaging aunque no haya una pestaña de StarTab abierta.',
     }).catch((error) => {
       console.warn('StarTab Windows: no se pudo crear el bridge offscreen:', error);
     }).finally(() => {

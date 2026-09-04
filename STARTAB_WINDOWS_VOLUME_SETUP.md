@@ -50,3 +50,12 @@ StarTab utiliza `users/{uid}/windowsDevices/{deviceId}`. Si tus reglas ya proteg
 Mientras Chrome/Edge y la extensión estén ejecutándose en el PC, el service worker mantiene el enlace Native Messaging y un documento offscreen de StarTab mantiene la sincronización Firestore. No hace falta dejar abierta una pestaña de Startab.
 
 Los cambios hechos desde el mezclador/teclas de Windows llegan por callbacks de Core Audio; no se hace polling del volumen. Solo se actualiza periódicamente la presencia del dispositivo para determinar si está online.
+
+## Control multimedia remoto sin una pestaña de StarTab abierta
+
+Esta versión mantiene el puente `mediaRemote` dentro del documento offscreen de Manifest V3. Mientras Chrome/Edge y la extensión estén ejecutándose, no es necesario conservar una pestaña de StarTab abierta para que el dispositivo principal publique las sesiones multimedia o reciba comandos desde el móvil.
+
+- Heartbeat del dispositivo principal: cada 12 s mientras esté activo.
+- El panel remoto considera perdido al principal si deja de actualizarse durante ~30 s.
+- Al volver la red o reanudarse el PC, el bridge publica presencia/estado nuevamente y Firestore actualiza el móvil automáticamente.
+- Si se cierra completamente Chrome/Edge, la extensión deja de ejecutarse; el móvil marcará el dispositivo como desconectado por expiración del heartbeat.
