@@ -632,6 +632,13 @@
             target: { tabId },
           });
         }
+      } else if (action === 'closeTab') {
+        if (Number.isInteger(tabId)) {
+          await chrome.runtime.sendMessage({
+            type: 'STARTAB_MEDIA_CLOSE_TAB',
+            target: { tabId },
+          });
+        }
       } else {
         await chrome.runtime.sendMessage({
           type: 'STARTAB_MEDIA_CONTROL',
