@@ -9112,29 +9112,30 @@ body.multimedia-modal-open {
   font-variant-numeric: tabular-nums;
 }
 
-.multimedia-control-seekjump > span {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  font-size: 25px;
-  line-height: 1;
-  opacity: .78;
-  transform: translateY(-1px);
+.multimedia-control-seekjump .multimedia-seekjump-icon {
+  width: 25px;
+  height: 25px;
+  overflow: visible;
+  stroke: currentColor;
+  stroke-width: 1.65;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform .16s cubic-bezier(.2,.8,.2,1), opacity .16s ease;
 }
 
-.multimedia-control-seekjump > small {
-  position: relative;
-  z-index: 1;
-  margin-top: 1px;
-  font-size: 8px;
-  font-weight: 900;
-  line-height: 1;
-  letter-spacing: -.03em;
+.multimedia-control-seekjump .multimedia-seekjump-icon text {
+  fill: currentColor;
+  stroke: none;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 6px;
+  font-weight: 800;
+  text-anchor: middle;
+  dominant-baseline: middle;
+  letter-spacing: -.25px;
 }
 
-.multimedia-control-seekjump:hover:not(:disabled) > span {
-  opacity: 1;
+.multimedia-control-seekjump:hover:not(:disabled) .multimedia-seekjump-icon {
+  transform: scale(1.05);
 }
 
 .multimedia-volume-group.is-disabled {
@@ -11302,4 +11303,36 @@ html[data-startab-media-mode="web"] .multimedia-topbar-copy span {
     animation: none;
     transform: scaleY(calc(.35 + var(--spectrum-height, .7)));
   }
+}
+
+
+/* StarTab multimedia stability layer · v3 */
+.multimedia-controls,
+.multimedia-bottom {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.multimedia-control,
+.multimedia-open-tab {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.multimedia-control-seekjump:active:not(:disabled) .multimedia-seekjump-icon {
+  transform: scale(.96);
+}
+
+.multimedia-open-tab.is-opening {
+  color: #fff;
+  border-color: rgba(183,145,255,.34);
+  background: rgba(117,78,210,.22);
+}
+
+.multimedia-volume-group:not(.is-disabled) {
+  opacity: 1;
+  filter: none;
+}
+
+.multimedia-volume-group .multimedia-range {
+  -webkit-tap-highlight-color: transparent;
 }
