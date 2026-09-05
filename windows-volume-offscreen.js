@@ -340,6 +340,7 @@
     lastCommandId: (() => {
       try { return localStorage.getItem(LAST_COMMAND_KEY) || ''; } catch (_) { return ''; }
     })(),
+    openTabInFlight: new Set(),
   };
 
   function readSavedUser() {
@@ -510,6 +511,7 @@
       principal: root.doc('principal'),
       state: root.doc('state'),
       command: root.doc('command'),
+      openTabCommand: root.doc('openTabCommand'),
     };
 
     media.unsubs.push(
@@ -524,8 +526,13 @@
         }
       }, (error) => console.warn('StarTab Media background: principal listener:', error)),
       media.refs.command.onSnapshot((snapshot) => {
-        void handleCommandSnapshot(snapshot);
+        const data = snapshot?.exists ? (snapshot.data() || {}) : {};
+        if (data?.command?.action === 'openTab') void handleOpenTabSnapshot(snapshot, media.refs.command);
+        else void handleCommandSnapshot(snapshot);
       }, (error) => console.warn('StarTab Media background: command listener:', error)),
+      media.refs.openTabCommand.onSnapshot((snapshot) => {
+        void handleOpenTabSnapshot(snapshot);
+      }, (error) => console.warn('StarTab Media background: openTab listener:', error)),
     );
   }
 
@@ -594,6 +601,63 @@
       // Remote clients use clientAt staleness to switch to offline quickly.
       console.warn('StarTab Media background: heartbeat pendiente:', error);
     }
+  }
+
+  async function acknowledgeOpenTabCommand(id, result, commandRef = media.refs?.openTabCommand) {
+    if (!commandRef || !id) return;
+    try {
+      await commandRef.set({
+        processedId: id,
+        processedByDeviceId: mediaDeviceId(),
+        processedAtClient: Date.now(),
+        processedAt: serverTimestamp(),
+        commandResult: {
+          id,
+          ok: !!result?.ok,
+          reason: result?.ok ? null : String(result?.reason || 'open-tab-failed'),
+          tabId: Number.isInteger(Number(result?.tabId)) ? Number(result.tabId) : null,
+          windowId: Number.isInteger(Number(result?.windowId)) ? Number(result.windowId) : null,
+        },
+      }, { merge: true });
+    } catch (_) {}
+  }
+
+  async function handleOpenTabSnapshot(snapshot, commandRef = media.refs?.openTabCommand) {
+    // Open-tab has its own mailbox and deliberately does NOT depend on the Web
+    // Lock used for state publishing. This makes navigation commands reliable
+    // even while a visible StarTab page owns the publisher leadership.
+    if (!media.isPrincipal || !snapshot?.exists) return;
+    const data = snapshot.data() || {};
+    const id = String(data.id || '');
+    if (!id || id === String(data.processedId || '') || media.openTabInFlight.has(id)) return;
+    if (data.targetDeviceId !== mediaDeviceId()) return;
+    const issuedAt = Number(data.clientAt) || 0;
+    if (!issuedAt || Date.now() - issuedAt > 60_000) {
+      await acknowledgeOpenTabCommand(id, { ok: false, reason: 'expired' }, commandRef);
+      return;
+    }
+    media.openTabInFlight.add(id);
+    let result = { ok: false, reason: 'open-tab-no-response' };
+    try {
+      const target = data.target || {};
+      result = await chrome.runtime.sendMessage({
+        type: 'STARTAB_MEDIA_OPEN_TAB',
+        requestId: id,
+        target: {
+          tabId: Number(target.tabId),
+          frameId: Number(target.frameId) || 0,
+          windowId: Number(target.windowId),
+          pageUrl: String(target.pageUrl || ''),
+          sessionKey: String(target.sessionKey || target.key || ''),
+          tabTitle: String(target.tabTitle || ''),
+          host: String(target.host || ''),
+        },
+      }) || result;
+    } catch (error) {
+      result = { ok: false, reason: String(error?.message || error) };
+    }
+    await acknowledgeOpenTabCommand(id, result, commandRef);
+    media.openTabInFlight.delete(id);
   }
 
   async function acknowledgeMediaCommand(id, ok, reason = null) {

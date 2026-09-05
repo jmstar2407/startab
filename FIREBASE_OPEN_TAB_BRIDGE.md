@@ -1,13 +1,21 @@
-# StarTab · Open Tab remoto por Firebase
+# StarTab · Firebase Open Tab Bridge v5
 
-Flujo implementado:
+La apertura remota ya no comparte el mismo documento que play/pause/seek/volumen.
 
-1. El móvil escribe `openTab` en `users/{uid}/mediaRemote/command`.
-2. El documento incluye `targetDeviceId`, `tabId`, `windowId`, `pageUrl`, `clientAt` e `id` único.
-3. El dispositivo principal recibe el snapshot desde el puente offscreen persistente, incluso si no hay una pestaña de StarTab abierta.
-4. Para `openTab`, el puente envía `STARTAB_MEDIA_OPEN_TAB` al service worker.
-5. El service worker localiza la pestaña por `tabId`; si ya no existe, intenta recuperarla por `pageUrl`/ventana.
-6. Si la ventana está minimizada se restaura, la pestaña se activa y la ventana recibe foco.
-7. El dispositivo principal escribe `processedId` y `commandResult` en el mismo documento Firebase como confirmación.
+## Mailbox dedicado
 
-La orden caduca para evitar ejecutar clics antiguos después de una desconexión prolongada.
+El móvil escribe en:
+
+`users/{uid}/mediaRemote/openTabCommand`
+
+El documento offscreen de la extensión escucha este buzón en tiempo real incluso sin una pestaña StarTab abierta. La orden incluye `tabId`, `windowId`, `pageUrl` y `sessionKey`.
+
+El bridge envía `STARTAB_MEDIA_OPEN_TAB` al service worker. El service worker resuelve la pestaña por ID y, si ese ID quedó obsoleto, busca por la URL publicada de la sesión. Después activa la pestaña, restaura la ventana si estaba minimizada y enfoca la ventana.
+
+Cada comando usa un ID único. La PC escribe `processedId` y `commandResult` en el mismo documento. El móvil espera esa confirmación y reintenta una vez con un ID nuevo si no recibe ACK.
+
+La recepción de `openTab` no depende del Web Lock usado para elegir quién publica el estado multimedia; así no puede quedar bloqueada porque una página StarTab visible tenga el liderazgo. El service worker deduplica solicitudes simultáneas por `requestId`.
+
+## Compatibilidad
+
+Si Firestore rechaza `openTabCommand` por reglas antiguas, el móvil reintenta automáticamente usando `users/{uid}/mediaRemote/command`. El documento offscreen detecta `command.action == "openTab"` en ese canal y lo procesa sin depender del Web Lock.
