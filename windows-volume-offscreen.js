@@ -596,42 +596,87 @@
     }
   }
 
+  async function acknowledgeMediaCommand(id, ok, reason = null) {
+    if (!media.refs?.command || !id) return;
+    try {
+      await media.refs.command.set({
+        processedId: id,
+        processedByDeviceId: mediaDeviceId(),
+        processedAtClient: Date.now(),
+        processedAt: serverTimestamp(),
+        commandResult: { id, ok: !!ok, reason: reason || null },
+      }, { merge: true });
+    } catch (_) {}
+  }
+
   async function handleCommandSnapshot(snapshot) {
     if (!media.isLeader || !media.isPrincipal || !snapshot?.exists) return;
     const data = snapshot.data() || {};
     const id = String(data.id || '');
-    if (!id || id === media.lastCommandId) return;
+    if (!id) return;
+
+    // Re-read the shared marker because a visible StarTab page may have owned the
+    // Web Lock immediately before this offscreen bridge. This prevents executing
+    // the same Firebase command twice during leadership hand-off.
+    let sharedLastCommandId = media.lastCommandId;
+    try { sharedLastCommandId = localStorage.getItem(LAST_COMMAND_KEY) || sharedLastCommandId; } catch (_) {}
+    if (id === sharedLastCommandId || id === String(data.processedId || '')) {
+      media.lastCommandId = id;
+      return;
+    }
     if (data.targetDeviceId !== mediaDeviceId()) return;
 
     const issuedAt = Number(data.clientAt) || 0;
     if (!issuedAt || Date.now() - issuedAt > COMMAND_MAX_AGE_MS + 5_000) {
       media.lastCommandId = id;
       try { localStorage.setItem(LAST_COMMAND_KEY, id); } catch (_) {}
+      await acknowledgeMediaCommand(id, false, 'expired');
       return;
     }
 
     const activatedAt = Number(media.principal?.activatedAtClient) || 0;
     if (activatedAt && issuedAt < activatedAt - 1_500) return;
 
+    // Persist before execution. Firebase onSnapshot can fire again when the
+    // acknowledgement is merged into this document.
     media.lastCommandId = id;
     try { localStorage.setItem(LAST_COMMAND_KEY, id); } catch (_) {}
 
     const target = data.target || {};
     const command = data.command || {};
-    try {
-      await chrome.runtime.sendMessage({
-        type: 'STARTAB_MEDIA_CONTROL',
-        target: {
-          tabId: Number(target.tabId),
-          frameId: Number(target.frameId) || 0,
-        },
-        command: {
-          action: command.action,
-          value: command.value,
-        },
-      });
-    } catch (_) {}
+    let result = { ok: false, reason: 'unknown-command' };
 
+    try {
+      if (command.action === 'openTab') {
+        // Opening/focusing browser tabs is privileged extension work. The phone
+        // writes this command to Firestore; this persistent extension bridge then
+        // delegates the actual action to the service worker.
+        result = await chrome.runtime.sendMessage({
+          type: 'STARTAB_MEDIA_OPEN_TAB',
+          target: {
+            tabId: Number(target.tabId),
+            windowId: Number(target.windowId),
+            pageUrl: String(target.pageUrl || ''),
+          },
+        }) || result;
+      } else {
+        result = await chrome.runtime.sendMessage({
+          type: 'STARTAB_MEDIA_CONTROL',
+          target: {
+            tabId: Number(target.tabId),
+            frameId: Number(target.frameId) || 0,
+          },
+          command: {
+            action: command.action,
+            value: command.value,
+          },
+        }) || result;
+      }
+    } catch (error) {
+      result = { ok: false, reason: String(error?.message || error) };
+    }
+
+    await acknowledgeMediaCommand(id, !!result?.ok, result?.ok ? null : (result?.reason || 'command-failed'));
     await refreshRegistry(false);
     schedulePublish(true);
   }
@@ -649,6 +694,13 @@
       media.isLeader = true;
       await refreshRegistry(true);
       await publishHeartbeat(true);
+      // A Firebase snapshot may have arrived while a visible StarTab page owned
+      // the lock. Read the current command once on takeover so an open-tab click
+      // cannot disappear in that short hand-off window.
+      try {
+        const pendingCommand = await media.refs?.command?.get?.();
+        if (pendingCommand) await handleCommandSnapshot(pendingCommand);
+      } catch (_) {}
       await new Promise(() => {});
     }).catch((error) => {
       console.warn('StarTab Media background: no se pudo adquirir liderazgo:', error);
