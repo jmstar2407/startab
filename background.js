@@ -85,7 +85,7 @@ const MENU_ROOT='startab-add-root';const MENU_PREFIX='startab-add-category-';con
 
     nativePort.onMessage.addListener((message) => {
       if (!message || typeof message !== 'object') return;
-      if (message.type === 'hello' || message.type === 'state') {
+      if (message.type === 'hello' || message.type === 'state' || message.type === 'meter') {
         nativeConnected = true;
         nativeState = { ...(nativeState || {}), ...message };
       }
@@ -151,4 +151,178 @@ const MENU_ROOT='startab-add-root';const MENU_PREFIX='startab-add-category-';con
 
   void ensureOffscreen();
   connectNative();
+})();
+
+/* StarTab · Navigation History -> Firestore offscreen bridge v1 */
+(() => {
+  'use strict';
+
+  const OFFSCREEN_PATH = 'windows-volume-offscreen.html';
+  const DEDUPE_WINDOW_MS = 1800;
+  const recent = new Map();
+  let offscreenCreation = null;
+
+  function isRecordableUrl(url) {
+    return /^https?:\/\//i.test(String(url || ''));
+  }
+
+  function cleanText(value, max = 2048) {
+    return String(value || '').replace(/\s+/g, ' ').trim().slice(0, max);
+  }
+
+  function domainOf(url) {
+    try { return new URL(url).hostname.replace(/^www\./i, ''); } catch (_) { return ''; }
+  }
+
+  function parseSearch(url) {
+    try {
+      const parsed = new URL(url);
+      const host = parsed.hostname.toLowerCase().replace(/^www\./, '');
+      const path = parsed.pathname.toLowerCase();
+      let engine = '';
+      let query = '';
+      let category = 'web';
+
+      if ((host === 'google.com' || host.startsWith('google.')) && path === '/search') {
+        engine = 'Google';
+        query = parsed.searchParams.get('q') || '';
+        const tbm = parsed.searchParams.get('tbm');
+        if (tbm === 'isch') category = 'imagenes';
+        else if (tbm === 'vid') category = 'video';
+        else if (tbm === 'nws') category = 'noticias';
+      } else if ((host === 'bing.com' || host.endsWith('.bing.com'))) {
+        query = parsed.searchParams.get('q') || '';
+        if (path.startsWith('/images/search')) category = 'imagenes';
+        else if (path.startsWith('/videos/search')) category = 'video';
+        else if (path.startsWith('/news/search')) category = 'noticias';
+        else if (path.startsWith('/search')) category = 'web';
+        if (query) engine = 'Bing';
+      } else if (host === 'duckduckgo.com' || host.endsWith('.duckduckgo.com')) {
+        query = parsed.searchParams.get('q') || '';
+        const ia = (parsed.searchParams.get('ia') || parsed.searchParams.get('iax') || '').toLowerCase();
+        if (ia.includes('image')) category = 'imagenes';
+        else if (ia.includes('video')) category = 'video';
+        else if (ia.includes('news')) category = 'noticias';
+        if (query) engine = 'DuckDuckGo';
+      }
+
+      query = cleanText(query, 500);
+      return query ? { query, engine, category } : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function makeEventId(tabId, url, at) {
+    let hash = 2166136261;
+    const source = `${tabId}|${url}`;
+    for (let i = 0; i < source.length; i += 1) {
+      hash ^= source.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+    return `${at}_${tabId}_${(hash >>> 0).toString(36)}`;
+  }
+
+  function isDuplicate(tabId, url, at) {
+    const key = `${tabId}|${url}`;
+    const last = Number(recent.get(key) || 0);
+    recent.set(key, at);
+    if (recent.size > 500) {
+      const threshold = at - 60_000;
+      for (const [entryKey, timestamp] of recent) {
+        if (timestamp < threshold) recent.delete(entryKey);
+      }
+    }
+    return at - last < DEDUPE_WINDOW_MS;
+  }
+
+  async function ensureHistoryOffscreen() {
+    if (!chrome.offscreen) return false;
+    const offscreenUrl = chrome.runtime.getURL(OFFSCREEN_PATH);
+    try {
+      const contexts = await chrome.runtime.getContexts({
+        contextTypes: ['OFFSCREEN_DOCUMENT'],
+        documentUrls: [offscreenUrl],
+      });
+      if (contexts.length) return true;
+    } catch (_) {}
+
+    if (offscreenCreation) return offscreenCreation;
+    offscreenCreation = chrome.offscreen.createDocument({
+      url: OFFSCREEN_PATH,
+      reasons: ['LOCAL_STORAGE'],
+      justification: 'Guardar el historial de navegación de StarTab en Firestore aunque no haya una pestaña de StarTab abierta.',
+    }).then(() => true).catch((error) => {
+      const message = String(error?.message || error || '');
+      if (!/single offscreen|already exists/i.test(message)) {
+        console.warn('StarTab History: no se pudo preparar el documento offscreen:', error);
+      }
+      return false;
+    }).finally(() => { offscreenCreation = null; });
+    return offscreenCreation;
+  }
+
+  async function emitHistory(entry) {
+    await ensureHistoryOffscreen();
+    const message = { type: 'STARTAB_HISTORY_EVENT', target: 'startab-history-offscreen', payload: entry };
+    try {
+      await chrome.runtime.sendMessage(message);
+    } catch (_) {
+      // The offscreen document can still be finishing its initialization; retry once.
+      setTimeout(() => {
+        try {
+          const retry = chrome.runtime.sendMessage(message);
+          retry?.catch?.(() => {});
+        } catch (_) {}
+      }, 250);
+    }
+  }
+
+  async function recordNavigation(details, source = 'committed') {
+    if (!details || details.frameId !== 0 || !Number.isInteger(details.tabId)) return;
+    const url = cleanText(details.url, 8192);
+    if (!isRecordableUrl(url)) return;
+    const at = Date.now();
+    if (isDuplicate(details.tabId, url, at)) return;
+
+    let tab = null;
+    try {
+      // A short delay lets Chrome update title/favicon after the main-frame commit.
+      await new Promise((resolve) => setTimeout(resolve, source === 'committed' ? 260 : 60));
+      tab = await chrome.tabs.get(details.tabId);
+    } catch (_) {}
+    const isIncognito = !!tab?.incognito;
+
+    const search = parseSearch(url);
+    const domain = domainOf(url);
+    const entry = {
+      id: makeEventId(details.tabId, url, at),
+      type: search ? 'search' : 'visit',
+      url,
+      domain,
+      title: cleanText(tab?.title || (search?.query ? `${search.query} - ${search.engine}` : domain), 1000),
+      favicon: cleanText(tab?.favIconUrl, 8192),
+      searchQuery: search?.query || '',
+      searchEngine: search?.engine || '',
+      searchCategory: search?.category || '',
+      clientAt: at,
+      localIso: new Date(at).toISOString(),
+      tabId: details.tabId,
+      windowId: Number.isInteger(tab?.windowId) ? tab.windowId : null,
+      incognito: isIncognito,
+      transitionType: cleanText(details.transitionType, 80),
+      transitionQualifiers: Array.isArray(details.transitionQualifiers)
+        ? details.transitionQualifiers.map((item) => cleanText(item, 80)).slice(0, 10)
+        : [],
+      source,
+    };
+    void emitHistory(entry);
+  }
+
+  if (chrome.webNavigation?.onCommitted) {
+    chrome.webNavigation.onCommitted.addListener((details) => { void recordNavigation(details, 'committed'); });
+  }
+  if (chrome.webNavigation?.onHistoryStateUpdated) {
+    chrome.webNavigation.onHistoryStateUpdated.addListener((details) => { void recordNavigation(details, 'history-state'); });
+  }
 })();

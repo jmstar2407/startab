@@ -19,6 +19,13 @@
     pendingVolume: null,
     userTimer: 0,
     statusTimer: 0,
+    dialDragging: false,
+    dialValue: 0,
+    mobileLayoutMql: null,
+    optimisticVolume: null,
+    optimisticMuted: null,
+    optimisticUntil: 0,
+    optimisticTimer: 0,
     native: {
       supported: false,
       connected: false,
@@ -26,6 +33,7 @@
       deviceName: null,
       volume: null,
       muted: null,
+      audioActive: null,
       lastError: null,
     },
   };
@@ -35,6 +43,11 @@
   const clamp = (value, min, max) => Math.min(max, Math.max(min, Number(value) || 0));
   const isWindows = /Windows/i.test(navigator.userAgent || '');
   const isExtension = !!globalThis.chrome?.runtime?.id;
+  const MOBILE_MEDIA_QUERY = '(max-width: 760px)';
+  const DIAL_START_DEG = 135;
+  const DIAL_SWEEP_DEG = 270;
+  const DIAL_END_DEG = DIAL_START_DEG + DIAL_SWEEP_DEG;
+  const DIAL_SEGMENTS = 37;
 
   const clientId = (() => {
     try {
@@ -62,6 +75,17 @@
     dom.pair = $('windows-volume-pair');
     dom.hint = $('windows-volume-hint');
     dom.icon = $('windows-volume-icon');
+    dom.footer = $('multimedia-system-footer');
+    dom.footerToggle = $('multimedia-system-volume-toggle');
+    dom.dialPanel = $('windows-volume-dial-panel');
+    dom.dial = $('windows-volume-dial');
+    dom.dialSegments = $('windows-volume-dial-segments');
+    dom.dialValue = $('windows-volume-dial-value');
+    dom.dialMute = $('windows-volume-dial-mute');
+    dom.spectrum = $('windows-volume-spectrum');
+    dom.sourceList = $('multimedia-source-list');
+    dom.mobileSourceSlot = $('multimedia-mobile-source-slot');
+    dom.desktopSourceAnchor = $('multimedia-source-desktop-anchor');
   }
 
   function readSavedUser() {
@@ -114,9 +138,195 @@
     dom.fill?.style.setProperty('--windows-volume', `${normalized}%`);
   }
 
+  function buildSpectrumBars() {
+    if (!dom.spectrum || dom.spectrum.childElementCount) return;
+    const fragment = document.createDocumentFragment();
+    const heights = [.42,.58,.74,.91,.63,.82,.51,.96,.69,.86,1,.77,.59,.9,.66,.84,.48,.76,.57,.88,.44];
+    heights.forEach((height, index) => {
+      const bar = document.createElement('span');
+      bar.setAttribute('aria-hidden', 'true');
+      bar.style.setProperty('--spectrum-index', String(index));
+      bar.style.setProperty('--spectrum-delay', `${index * -31}ms`);
+      bar.style.setProperty('--spectrum-height', String(height));
+      bar.style.setProperty('--spectrum-mid', String(Math.max(.28, height * .62)));
+      bar.style.setProperty('--spectrum-speed', `${0.43 + ((index * 17) % 19) / 100}s`);
+      fragment.append(bar);
+    });
+    dom.spectrum.append(fragment);
+  }
+
+  function renderSpectrum(active) {
+    if (!dom.spectrum) return;
+    dom.spectrum.classList.toggle('is-active', !!active);
+    dom.spectrum.setAttribute('aria-label', active ? 'Windows está reproduciendo audio' : 'Sin actividad de audio en Windows');
+  }
+
+  function clearOptimisticState() {
+    state.optimisticVolume = null;
+    state.optimisticMuted = null;
+    state.optimisticUntil = 0;
+    clearTimeout(state.optimisticTimer);
+    state.optimisticTimer = 0;
+  }
+
+  function holdOptimisticState({ volume = state.optimisticVolume, muted = state.optimisticMuted } = {}) {
+    if (volume !== null && volume !== undefined) state.optimisticVolume = clamp(volume, 0, 100);
+    if (typeof muted === 'boolean') state.optimisticMuted = muted;
+    state.optimisticUntil = Date.now() + 2400;
+    clearTimeout(state.optimisticTimer);
+    state.optimisticTimer = window.setTimeout(() => {
+      if (Date.now() >= state.optimisticUntil) {
+        clearOptimisticState();
+        render();
+      }
+    }, 2450);
+  }
+
+  function reconcileOptimisticState(device) {
+    if (!device || Date.now() >= state.optimisticUntil) {
+      if (state.optimisticUntil) clearOptimisticState();
+      return;
+    }
+
+    const volumeMatches = state.optimisticVolume == null
+      || Math.abs(clamp(device.volume, 0, 100) - state.optimisticVolume) <= 1;
+    const muteMatches = state.optimisticMuted == null
+      || !!device.muted === state.optimisticMuted;
+    if (volumeMatches && muteMatches) clearOptimisticState();
+  }
+
+  function effectiveMuted(device = selectedDevice()) {
+    if (Date.now() < state.optimisticUntil && typeof state.optimisticMuted === 'boolean') return state.optimisticMuted;
+    return !!device?.muted;
+  }
+
+  function buildDialSegments() {
+    if (!dom.dialSegments || dom.dialSegments.childElementCount) return;
+    const fragment = document.createDocumentFragment();
+    for (let index = 0; index < DIAL_SEGMENTS; index += 1) {
+      const segment = document.createElement('i');
+      const progress = index / (DIAL_SEGMENTS - 1);
+      const angle = DIAL_START_DEG + (progress * DIAL_SWEEP_DEG);
+      segment.style.setProperty('--segment-angle', `${angle}deg`);
+      segment.dataset.index = String(index);
+      fragment.append(segment);
+    }
+    dom.dialSegments.append(fragment);
+  }
+
+  function renderDial(value, muted = false) {
+    const normalized = clamp(value, 0, 100);
+    state.dialValue = normalized;
+    const angle = DIAL_START_DEG + ((normalized / 100) * DIAL_SWEEP_DEG);
+    dom.dial?.style.setProperty('--dial-angle', `${angle}deg`);
+    dom.dial?.style.setProperty('--dial-progress', String(normalized / 100));
+    dom.dial?.setAttribute('aria-valuenow', String(Math.round(normalized)));
+    dom.dial?.setAttribute('aria-valuetext', `${Math.round(normalized)} por ciento`);
+    if (dom.dialValue) dom.dialValue.textContent = `${Math.round(normalized)}%`;
+
+    if (dom.dialSegments) {
+      const activeMax = Math.round((normalized / 100) * (DIAL_SEGMENTS - 1));
+      [...dom.dialSegments.children].forEach((segment, index) => {
+        segment.classList.toggle('is-active', normalized > 0 && index <= activeMax);
+      });
+    }
+
+    if (dom.dialMute) {
+      dom.dialMute.classList.toggle('is-muted', muted);
+      dom.dialMute.setAttribute('aria-pressed', muted ? 'true' : 'false');
+      dom.dialMute.setAttribute('aria-label', muted ? 'Activar sonido de Windows' : 'Silenciar volumen de Windows');
+      dom.dialMute.title = muted ? 'Activar sonido de Windows' : 'Silenciar Windows';
+    }
+  }
+
+  function pointerAngleToDialValue(event) {
+    if (!dom.dial) return state.dialValue;
+    const rect = dom.dial.getBoundingClientRect();
+    const centerX = rect.left + (rect.width / 2);
+    const centerY = rect.top + (rect.height / 2);
+    let angle = Math.atan2(event.clientY - centerY, event.clientX - centerX) * (180 / Math.PI);
+    if (angle < 0) angle += 360;
+
+    // The active arc runs clockwise from the lower-left to lower-right through the top.
+    // The 90° gap at the bottom snaps to the closest end stop so the dial cannot loop.
+    let unwrapped;
+    if (angle >= DIAL_START_DEG) {
+      unwrapped = angle;
+    } else if (angle <= (DIAL_END_DEG - 360)) {
+      unwrapped = angle + 360;
+    } else {
+      unwrapped = angle < 90 ? DIAL_END_DEG : DIAL_START_DEG;
+    }
+
+    const clampedAngle = clamp(unwrapped, DIAL_START_DEG, DIAL_END_DEG);
+    return clamp(((clampedAngle - DIAL_START_DEG) / DIAL_SWEEP_DEG) * 100, 0, 100);
+  }
+
+  function commitDialVolume(value, final = false) {
+    if (!dom.dial || dom.dial.getAttribute('aria-disabled') === 'true') return;
+    const normalized = clamp(value, 0, 100);
+    holdOptimisticState({ volume: normalized, muted: false });
+    renderDial(normalized, false);
+    if (dom.range) dom.range.value = String(Math.round(normalized));
+    if (dom.value) dom.value.textContent = `${Math.round(normalized)}%`;
+    if (dom.mute) {
+      dom.mute.classList.remove('is-muted');
+      dom.mute.setAttribute('aria-pressed', 'false');
+    }
+    setFill(normalized);
+
+    if (final) {
+      clearTimeout(state.commandTimer);
+      state.pendingVolume = null;
+      void sendCommand('setVolume', normalized).then((ok) => {
+        if (!ok) { clearOptimisticState(); render(); }
+      });
+    } else {
+      queueVolume(normalized);
+    }
+  }
+
+  function updateDialFromPointer(event) {
+    if (!state.dialDragging) return;
+    commitDialVolume(pointerAngleToDialValue(event), false);
+  }
+
+  function finishDialPointer(event) {
+    if (!state.dialDragging) return;
+    state.dialDragging = false;
+    dom.dial?.classList.remove('is-dragging');
+    try {
+      if (dom.dial?.hasPointerCapture?.(event.pointerId)) dom.dial.releasePointerCapture(event.pointerId);
+    } catch (_) {}
+    commitDialVolume(pointerAngleToDialValue(event), true);
+  }
+
+  function syncMobileSourcePlacement() {
+    if (!dom.sourceList || !dom.mobileSourceSlot || !dom.desktopSourceAnchor) return;
+    const mobile = state.mobileLayoutMql?.matches ?? window.matchMedia(MOBILE_MEDIA_QUERY).matches;
+    if (mobile) {
+      if (dom.sourceList.parentElement !== dom.mobileSourceSlot) dom.mobileSourceSlot.append(dom.sourceList);
+    } else if (dom.sourceList.previousElementSibling !== dom.desktopSourceAnchor) {
+      dom.desktopSourceAnchor.after(dom.sourceList);
+    }
+  }
+
+  function setFooterExpanded(expanded) {
+    if (!dom.footer || !dom.footerToggle) return;
+    dom.footer.classList.toggle('is-expanded', !!expanded);
+    dom.footerToggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    window.requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+    window.setTimeout(() => window.dispatchEvent(new Event('resize')), 280);
+  }
+
   function setControlDisabled(disabled) {
-    for (const element of [dom.range, dom.mute, dom.down, dom.up]) {
+    for (const element of [dom.range, dom.mute, dom.down, dom.up, dom.dialMute]) {
       if (element) element.disabled = !!disabled;
+    }
+    if (dom.dial) {
+      dom.dial.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+      dom.dial.tabIndex = disabled ? -1 : 0;
+      dom.dial.classList.toggle('is-disabled', !!disabled);
     }
   }
 
@@ -179,8 +389,12 @@
     const device = selectedDevice();
     const loggedIn = !!state.user?.uid;
     const online = isDeviceOnline(device);
-    const volume = device ? clamp(device.volume, 0, 100) : 0;
-    const muted = !!device?.muted;
+    reconcileOptimisticState(device);
+    const rawVolume = device ? clamp(device.volume, 0, 100) : 0;
+    const rawMuted = !!device?.muted;
+    const optimisticActive = Date.now() < state.optimisticUntil;
+    const volume = optimisticActive && state.optimisticVolume != null ? state.optimisticVolume : rawVolume;
+    const muted = optimisticActive && typeof state.optimisticMuted === 'boolean' ? state.optimisticMuted : rawMuted;
 
     dom.card.dataset.state = !loggedIn ? 'signed-out' : !device ? 'empty' : online ? 'online' : 'offline';
     dom.status?.classList.toggle('is-online', online);
@@ -200,9 +414,14 @@
             : 'PC sin conexión · esperando reconexión';
     }
 
-    if (dom.range && !dom.range.matches(':active')) dom.range.value = String(muted ? 0 : volume);
-    if (dom.value) dom.value.textContent = `${Math.round(muted ? 0 : volume)}%`;
-    setFill(muted ? 0 : volume);
+    if (dom.range && !dom.range.matches(':active')) dom.range.value = String(volume);
+    if (dom.value) dom.value.textContent = `${Math.round(volume)}%`;
+    setFill(volume);
+    if (!state.dialDragging) renderDial(volume, muted);
+    const nativeAudioActive = device?.deviceId && device.deviceId === state.native.deviceId && typeof state.native.audioActive === 'boolean'
+      ? state.native.audioActive
+      : null;
+    renderSpectrum(online && !muted && (nativeAudioActive ?? !!device?.audioActive));
 
     if (dom.icon) dom.icon.dataset.level = muted || volume === 0 ? 'mute' : volume < 50 ? 'low' : 'high';
     if (dom.mute) {
@@ -325,8 +544,11 @@
     state.commandTimer = window.setTimeout(() => {
       const next = state.pendingVolume;
       state.pendingVolume = null;
-      void sendCommand('setVolume', next);
-    }, 80);
+      if (next == null) return;
+      void sendCommand('setVolume', next).then((ok) => {
+        if (!ok) { clearOptimisticState(); render(); }
+      });
+    }, 220);
   }
 
   function applyNativeStatus(payload) {
@@ -337,6 +559,7 @@
     if (nativeState?.deviceName) state.native.deviceName = nativeState.deviceName;
     if (Number.isFinite(Number(nativeState?.volume))) state.native.volume = Number(nativeState.volume);
     if (typeof nativeState?.muted === 'boolean') state.native.muted = nativeState.muted;
+    if (typeof nativeState?.audioActive === 'boolean') state.native.audioActive = nativeState.audioActive;
     if (payload.error) state.native.lastError = String(payload.error);
     render();
   }
@@ -381,7 +604,50 @@
   }
 
   function bindEvents() {
+    dom.footerToggle?.addEventListener('click', () => {
+      setFooterExpanded(!dom.footer?.classList.contains('is-expanded'));
+    });
+
+    dom.dial?.addEventListener('pointerdown', (event) => {
+      if (event.button !== undefined && event.button !== 0) return;
+      if (event.target.closest?.('button')) return;
+      if (dom.dial.getAttribute('aria-disabled') === 'true') return;
+      state.dialDragging = true;
+      dom.dial.classList.add('is-dragging');
+      try { dom.dial.setPointerCapture(event.pointerId); } catch (_) {}
+      event.preventDefault();
+      commitDialVolume(pointerAngleToDialValue(event), false);
+    });
+    dom.dial?.addEventListener('pointermove', (event) => {
+      if (!state.dialDragging) return;
+      event.preventDefault();
+      updateDialFromPointer(event);
+    });
+    dom.dial?.addEventListener('pointerup', finishDialPointer);
+    dom.dial?.addEventListener('pointercancel', finishDialPointer);
+    dom.dial?.addEventListener('keydown', (event) => {
+      if (dom.dial.getAttribute('aria-disabled') === 'true') return;
+      let next = state.dialValue;
+      if (event.key === 'ArrowRight' || event.key === 'ArrowUp') next += 2;
+      else if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') next -= 2;
+      else if (event.key === 'PageUp') next += 10;
+      else if (event.key === 'PageDown') next -= 10;
+      else if (event.key === 'Home') next = 0;
+      else if (event.key === 'End') next = 100;
+      else return;
+      event.preventDefault();
+      commitDialVolume(next, true);
+    });
+    dom.dialMute?.addEventListener('click', async () => {
+      const nextMuted = !effectiveMuted();
+      holdOptimisticState({ muted: nextMuted });
+      render();
+      const ok = await sendCommand('toggleMute');
+      if (!ok) { clearOptimisticState(); render(); }
+    });
+
     dom.device?.addEventListener('change', () => {
+      clearOptimisticState();
       state.selectedDeviceId = dom.device.value || null;
       persistSelectedDevice();
       render();
@@ -389,24 +655,40 @@
 
     dom.range?.addEventListener('input', () => {
       const value = clamp(dom.range.value, 0, 100);
+      holdOptimisticState({ volume: value, muted: false });
       if (dom.value) dom.value.textContent = `${Math.round(value)}%`;
       setFill(value);
+      renderDial(value, false);
       queueVolume(value);
     });
     dom.range?.addEventListener('change', () => {
       clearTimeout(state.commandTimer);
       state.pendingVolume = null;
-      void sendCommand('setVolume', clamp(dom.range.value, 0, 100));
+      const value = clamp(dom.range.value, 0, 100);
+      holdOptimisticState({ volume: value, muted: false });
+      void sendCommand('setVolume', value).then((ok) => {
+        if (!ok) { clearOptimisticState(); render(); }
+      });
     });
 
-    dom.mute?.addEventListener('click', () => void sendCommand('toggleMute'));
+    dom.mute?.addEventListener('click', async () => {
+      const nextMuted = !effectiveMuted();
+      holdOptimisticState({ muted: nextMuted });
+      render();
+      const ok = await sendCommand('toggleMute');
+      if (!ok) { clearOptimisticState(); render(); }
+    });
     const stepVolume = (delta) => {
       if (!dom.range || dom.range.disabled) return;
       const next = clamp(Number(dom.range.value) + delta, 0, 100);
+      holdOptimisticState({ volume: next, muted: false });
       dom.range.value = String(next);
       if (dom.value) dom.value.textContent = `${Math.round(next)}%`;
       setFill(next);
-      void sendCommand('setVolume', next);
+      renderDial(next, false);
+      void sendCommand('setVolume', next).then((ok) => {
+        if (!ok) { clearOptimisticState(); render(); }
+      });
     };
     dom.down?.addEventListener('click', () => stepVolume(-5));
     dom.up?.addEventListener('click', () => stepVolume(5));
@@ -416,6 +698,12 @@
   function init() {
     cacheDom();
     if (!dom.card) return;
+    buildDialSegments();
+    buildSpectrumBars();
+    state.mobileLayoutMql = window.matchMedia(MOBILE_MEDIA_QUERY);
+    state.mobileLayoutMql.addEventListener?.('change', syncMobileSourcePlacement);
+    syncMobileSourcePlacement();
+    setFooterExpanded(false);
     bindEvents();
     renderDevices();
     render();

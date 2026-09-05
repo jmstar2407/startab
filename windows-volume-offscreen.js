@@ -141,6 +141,18 @@
     }
 
     try {
+      // Backward-compatible UX: changing volume always restores sound first, even
+      // when the installed native host predates the v2.1 auto-unmute behavior.
+      if (nativeCommand.type === 'setVolume') {
+        const unmuteResponse = await chrome.runtime.sendMessage({
+          type: 'STARTAB_WINDOWS_NATIVE_COMMAND',
+          command: { type: 'setMute', muted: false },
+        });
+        if (!unmuteResponse?.ok) {
+          await acknowledgeCommand(command.id, false, unmuteResponse?.reason || 'native-disconnected');
+          return;
+        }
+      }
       const response = await chrome.runtime.sendMessage({
         type: 'STARTAB_WINDOWS_NATIVE_COMMAND',
         command: nativeCommand,
@@ -190,6 +202,7 @@
     };
     if (Number.isFinite(Number(native.volume))) payload.volume = Math.max(0, Math.min(100, Number(native.volume)));
     if (typeof native.muted === 'boolean') payload.muted = native.muted;
+    if (typeof native.audioActive === 'boolean') payload.audioActive = native.audioActive;
     if (force) payload.connectedAt = firebase.firestore.FieldValue.serverTimestamp();
 
     try {
@@ -229,6 +242,14 @@
       state.nativeConnected = true;
       state.nativeState = { ...(state.nativeState || {}), ...message };
       await publishNativeState(false);
+      return;
+    }
+
+    if (message?.type === 'meter') {
+      state.nativeConnected = true;
+      const previousActive = state.nativeState?.audioActive;
+      state.nativeState = { ...(state.nativeState || {}), ...message };
+      if (previousActive !== message.audioActive) await publishNativeState(false);
     }
   }
 
@@ -672,4 +693,137 @@
   initFirebase();
   startLeaderLock();
   void refreshRegistry(false);
+})();
+
+/* StarTab · Cloud navigation history writer v1 */
+(() => {
+  'use strict';
+
+  const pending = [];
+  const MAX_PENDING = 80;
+  let db = null;
+  let auth = null;
+  let currentUser = null;
+  let authResolved = false;
+  let writeChain = Promise.resolve();
+
+  function readSavedUser() {
+    try {
+      const raw = localStorage.getItem('starTab_lastUser');
+      if (!raw) return null;
+      const user = JSON.parse(raw);
+      return user?.uid ? user : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function refreshIdentity(authUser = null) {
+    currentUser = authUser || readSavedUser() || null;
+    return currentUser;
+  }
+
+  function sanitizeEntry(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    const url = String(raw.url || '').slice(0, 8192);
+    if (!/^https?:\/\//i.test(url)) return null;
+    const clientAt = Number(raw.clientAt) || Date.now();
+    return {
+      id: String(raw.id || `${clientAt}_${Math.random().toString(36).slice(2)}`).slice(0, 180),
+      type: raw.type === 'search' ? 'search' : 'visit',
+      url,
+      domain: String(raw.domain || '').slice(0, 500),
+      title: String(raw.title || '').slice(0, 1000),
+      favicon: String(raw.favicon || '').slice(0, 8192),
+      searchQuery: String(raw.searchQuery || '').slice(0, 500),
+      searchEngine: String(raw.searchEngine || '').slice(0, 80),
+      searchCategory: String(raw.searchCategory || '').slice(0, 80),
+      clientAt,
+      localIso: String(raw.localIso || new Date(clientAt).toISOString()).slice(0, 80),
+      tabId: Number.isInteger(raw.tabId) ? raw.tabId : null,
+      windowId: Number.isInteger(raw.windowId) ? raw.windowId : null,
+      incognito: raw.incognito === true,
+      transitionType: String(raw.transitionType || '').slice(0, 80),
+      transitionQualifiers: Array.isArray(raw.transitionQualifiers)
+        ? raw.transitionQualifiers.map((value) => String(value).slice(0, 80)).slice(0, 10)
+        : [],
+      source: String(raw.source || 'navigation').slice(0, 80),
+    };
+  }
+
+  async function writeEntry(entry) {
+    if (!db || !currentUser || !entry) return false;
+    const ref = db.collection('users').doc(currentUser.uid).collection('history').doc(entry.id);
+    await ref.set({
+      ...entry,
+      visitedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    return true;
+  }
+
+  function enqueueWrite(entry) {
+    writeChain = writeChain.catch(() => {}).then(async () => {
+      try {
+        await writeEntry(entry);
+      } catch (error) {
+        console.warn('StarTab History: no se pudo guardar una entrada en Firestore:', error);
+      }
+    });
+  }
+
+  function flushPending() {
+    if (!currentUser) {
+      pending.length = 0;
+      return;
+    }
+    const batch = pending.splice(0, pending.length);
+    batch.forEach(enqueueWrite);
+  }
+
+  function receiveEntry(raw) {
+    const entry = sanitizeEntry(raw);
+    if (!entry) return;
+    if (!currentUser) refreshIdentity(auth?.currentUser || null);
+    if (!authResolved && !currentUser) {
+      pending.push(entry);
+      if (pending.length > MAX_PENDING) pending.shift();
+      return;
+    }
+    if (!currentUser) return;
+    enqueueWrite(entry);
+  }
+
+  function init() {
+    try {
+      if (typeof firebase === 'undefined' || !firebase.apps?.length) return;
+      db = firebase.firestore();
+      auth = firebase.auth();
+      refreshIdentity(auth.currentUser || null);
+      auth.onAuthStateChanged((user) => {
+        refreshIdentity(user || null);
+        authResolved = true;
+        flushPending();
+      });
+    } catch (error) {
+      console.warn('StarTab History: Firebase no está disponible en offscreen:', error);
+    }
+  }
+
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message?.target !== 'startab-history-offscreen') return;
+    if (message.type === 'STARTAB_HISTORY_EVENT') receiveEntry(message.payload);
+  });
+
+  window.addEventListener('storage', (event) => {
+    if (event.key !== 'starTab_lastUser') return;
+    refreshIdentity(auth?.currentUser || null);
+    if (currentUser) flushPending();
+  });
+
+  window.setInterval(() => {
+    refreshIdentity(auth?.currentUser || null);
+  }, 3000);
+
+  init();
 })();
