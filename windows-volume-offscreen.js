@@ -24,6 +24,8 @@
     unsubscribeDevice: null,
     unsubscribePointerSessions: null,
     pointerPeers: new Map(),
+    pointerNativePort: null,
+    pointerPortRetry: 0,
     heartbeat: 0,
     lastCommandId: null,
     bridgeKey: null,
@@ -128,7 +130,7 @@
     startPointerSessionBridge();
   }
 
-  function waitForIceGathering(pc, timeoutMs = 3200) {
+  function waitForIceGathering(pc, timeoutMs = 2400) {
     if (!pc || pc.iceGatheringState === 'complete') return Promise.resolve();
     return new Promise((resolve) => {
       let done = false;
@@ -145,14 +147,42 @@
     });
   }
 
-  async function sendPointerNative(command) {
-    if (!state.nativeConnected || !command) return false;
+  function ensurePointerFastPort() {
+    if (state.pointerNativePort) return state.pointerNativePort;
     try {
-      const response = await chrome.runtime.sendMessage({
+      const port = chrome.runtime.connect({ name: 'STARTAB_POINTER_FAST_PATH_V2' });
+      state.pointerNativePort = port;
+      port.onDisconnect.addListener(() => {
+        if (state.pointerNativePort === port) state.pointerNativePort = null;
+        clearTimeout(state.pointerPortRetry);
+        state.pointerPortRetry = setTimeout(ensurePointerFastPort, 250);
+      });
+      return port;
+    } catch (_) {
+      clearTimeout(state.pointerPortRetry);
+      state.pointerPortRetry = setTimeout(ensurePointerFastPort, 500);
+      return null;
+    }
+  }
+
+  function sendPointerNative(command) {
+    if (!state.nativeConnected || !command) return false;
+    const port = ensurePointerFastPort();
+    if (port) {
+      try {
+        port.postMessage(command);
+        return true;
+      } catch (_) {
+        state.pointerNativePort = null;
+      }
+    }
+    try {
+      const fallback = chrome.runtime.sendMessage({
         type: 'STARTAB_WINDOWS_NATIVE_COMMAND',
         command,
       });
-      return !!response?.ok;
+      fallback?.catch?.(() => {});
+      return true;
     } catch (_) {
       return false;
     }
@@ -175,20 +205,49 @@
   function handlePointerPayload(payload) {
     if (!payload || typeof payload !== 'object') return;
     if (payload.t === 'move') {
-      const dx = Math.max(-500, Math.min(500, Number(payload.dx) || 0));
-      const dy = Math.max(-500, Math.min(500, Number(payload.dy) || 0));
-      if (dx || dy) void sendPointerNative({ type: 'pointerMove', dx, dy });
+      const dx = Math.max(-700, Math.min(700, Number(payload.dx) || 0));
+      const dy = Math.max(-700, Math.min(700, Number(payload.dy) || 0));
+      if (dx || dy) sendPointerNative({ type: 'pointerMove', dx, dy });
+      return;
+    }
+    if (payload.t === 'scroll') {
+      const delta = Math.max(-1440, Math.min(1440, Number(payload.delta) || 0));
+      if (delta) sendPointerNative({ type: 'pointerWheel', delta });
       return;
     }
     if (payload.t === 'click' && (payload.button === 'left' || payload.button === 'right')) {
-      void sendPointerNative({ type: 'pointerClick', button: payload.button });
+      sendPointerNative({ type: 'pointerClick', button: payload.button });
     }
+  }
+
+  function handlePointerBinary(data) {
+    if (!(data instanceof ArrayBuffer) || data.byteLength < 1) return false;
+    const view = new DataView(data);
+    const kind = view.getUint8(0);
+    if (kind === 1 && data.byteLength >= 9) {
+      handlePointerPayload({ t: 'move', dx: view.getFloat32(1, true), dy: view.getFloat32(5, true) });
+      return true;
+    }
+    if (kind === 2 && data.byteLength >= 2) {
+      handlePointerPayload({ t: 'click', button: view.getUint8(1) === 2 ? 'right' : 'left' });
+      return true;
+    }
+    if (kind === 3 && data.byteLength >= 5) {
+      handlePointerPayload({ t: 'scroll', delta: view.getFloat32(1, true) });
+      return true;
+    }
+    return false;
   }
 
   function attachPointerDataChannel(channel) {
     if (!channel) return;
+    channel.binaryType = 'arraybuffer';
     channel.addEventListener('message', (event) => {
-      try { handlePointerPayload(JSON.parse(String(event.data || ''))); } catch (_) {}
+      try {
+        if (handlePointerBinary(event.data)) return;
+        if (ArrayBuffer.isView(event.data) && handlePointerBinary(event.data.buffer)) return;
+        handlePointerPayload(JSON.parse(String(event.data || '')));
+      } catch (_) {}
     });
   }
 
@@ -199,6 +258,8 @@
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
       ],
+      iceCandidatePoolSize: 4,
+      bundlePolicy: 'max-bundle',
     });
     entry.pc = pc;
     pc.addEventListener('datachannel', (event) => attachPointerDataChannel(event.channel));
@@ -246,11 +307,19 @@
       if (dx || dy) void sendPointerNative({ type: 'pointerMove', dx, dy });
     }
 
+    const scroll = data?.scrollRelay;
+    const scrollSeq = Number(scroll?.seq) || 0;
+    if (scrollSeq && scrollSeq !== entry.lastScrollSeq) {
+      entry.lastScrollSeq = scrollSeq;
+      const delta = Math.max(-2400, Math.min(2400, Number(scroll.delta) || 0));
+      if (delta) sendPointerNative({ type: 'pointerWheel', delta });
+    }
+
     const click = data?.clickRelay;
     const clickSeq = Number(click?.seq) || 0;
     if (clickSeq && clickSeq !== entry.lastClickSeq && (click.button === 'left' || click.button === 'right')) {
       entry.lastClickSeq = clickSeq;
-      void sendPointerNative({ type: 'pointerClick', button: click.button });
+      sendPointerNative({ type: 'pointerClick', button: click.button });
     }
   }
 
@@ -266,7 +335,7 @@
 
     let entry = state.pointerPeers.get(sessionId);
     if (!entry) {
-      entry = { pc: null, offerId: null, lastMotionSeq: 0, lastClickSeq: 0, closed: false };
+      entry = { pc: null, offerId: null, lastMotionSeq: 0, lastScrollSeq: 0, lastClickSeq: 0, closed: false };
       state.pointerPeers.set(sessionId, entry);
     }
     handlePointerRelay(data, entry);
@@ -465,6 +534,7 @@
       }
     }).catch(() => {});
   } catch (_) {}
+  try { ensurePointerFastPort(); } catch (_) {}
 })();
 
 /* StarTab NATIVE MEDIA · persistent Firestore bridge v2

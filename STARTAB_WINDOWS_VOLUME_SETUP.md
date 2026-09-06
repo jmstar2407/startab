@@ -1,4 +1,4 @@
-# StarTab · Control remoto de Windows v2.2
+# StarTab · Control remoto de Windows v2.3
 
 ## Arquitectura simplificada
 
@@ -65,7 +65,7 @@ Esta versión mantiene el puente `mediaRemote` dentro del documento offscreen de
 
 El botón con icono de cursor dentro de **Controles multimedia** abre un touchpad remoto. El móvil usa Firestore para señalizar la sesión y, cuando es posible, crea un **WebRTC DataChannel** directo con el documento offscreen del PC para enviar movimientos con baja latencia. Si WebRTC no logra establecerse por la red/NAT, StarTab usa automáticamente un modo de respaldo por Firestore.
 
-El agente nativo v2.2 ejecuta el movimiento y los clics mediante `SendInput` de Windows. El EXE sigue sin conectarse directamente a Firebase.
+El agente nativo v2.3 ejecuta el movimiento, el scroll y los clics mediante `SendInput` de Windows. El EXE sigue sin conectarse directamente a Firebase.
 
 Rutas adicionales usadas:
 
