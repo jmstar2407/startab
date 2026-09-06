@@ -1,4 +1,4 @@
-# StarTab · Volumen real de Windows v2
+# StarTab · Control remoto de Windows v2.2
 
 ## Arquitectura simplificada
 
@@ -6,7 +6,7 @@ El agente Windows **ya no usa Firebase** y no necesita Email/Password, Node.js, 
 
 Flujo:
 
-`Windows Core Audio ↔ StartabWindowsVolume.exe ↔ Native Messaging ↔ StarTab ↔ Firestore ↔ StarTab móvil`
+`Windows Core Audio + Win32 SendInput ↔ StartabWindowsVolume.exe ↔ Native Messaging ↔ StarTab ↔ Firestore/WebRTC ↔ StarTab móvil`
 
 - `StartabWindowsVolume.exe` solo controla y observa el volumen real de Windows.
 - La extensión StarTab mantiene la conexión con el EXE.
@@ -59,3 +59,16 @@ Esta versión mantiene el puente `mediaRemote` dentro del documento offscreen de
 - El panel remoto considera perdido al principal si deja de actualizarse durante ~30 s.
 - Al volver la red o reanudarse el PC, el bridge publica presencia/estado nuevamente y Firestore actualiza el móvil automáticamente.
 - Si se cierra completamente Chrome/Edge, la extensión deja de ejecutarse; el móvil marcará el dispositivo como desconectado por expiración del heartbeat.
+
+
+## Touchpad remoto
+
+El botón con icono de cursor dentro de **Controles multimedia** abre un touchpad remoto. El móvil usa Firestore para señalizar la sesión y, cuando es posible, crea un **WebRTC DataChannel** directo con el documento offscreen del PC para enviar movimientos con baja latencia. Si WebRTC no logra establecerse por la red/NAT, StarTab usa automáticamente un modo de respaldo por Firestore.
+
+El agente nativo v2.2 ejecuta el movimiento y los clics mediante `SendInput` de Windows. El EXE sigue sin conectarse directamente a Firebase.
+
+Rutas adicionales usadas:
+
+`users/{uid}/windowsDevices/{deviceId}/pointerSessions/{sessionId}`
+
+Asegúrate de añadir también el bloque `pointerSessions` incluido en `windows-native-host/firestore.rules.snippet`.

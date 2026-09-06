@@ -4529,6 +4529,37 @@ body.startab-tabs-modal-open {
   }
 }
 
+
+.startab-drag-webgl-canvas {
+  position: fixed;
+  inset: 0;
+  z-index: 2147482998;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 140ms ease, visibility 0s linear 140ms;
+  contain: strict;
+  will-change: opacity;
+}
+
+.startab-drag-webgl-canvas.is-active {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 80ms ease;
+}
+
+body.icon-dragging #contenedor-iconos .icono-item:not(.drag-source-hidden) {
+  transform-origin: center center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .startab-drag-webgl-canvas {
+    display: none !important;
+  }
+}
+
 .icono-item.drag-preparing {
   transition: transform 70ms cubic-bezier(.2,.8,.2,1) !important;
   cursor: grabbing;
@@ -4548,31 +4579,37 @@ body.icon-dragging, body.icon-dragging * {
 .icono-item.arrastrando-moderno.drag-floating-clone {
   position: fixed !important;
   z-index: 2147483000 !important;
-  opacity: .97 !important;
+  opacity: .985 !important;
   cursor: grabbing !important;
   margin: 0 !important;
   pointer-events: none !important;
-  transform: scale(1.055) rotate(.65deg) !important;
-  transition: none !important;
-  box-shadow: 0 24px 60px rgba(0,0,0,.38),0 8px 24px rgba(0,0,0,.22),0 0 0 1px rgba(255,255,255,.22);
+  transform: translate3d(var(--drag-x,0px),var(--drag-y,0px),0) scale(var(--drag-scale,1.055)) rotate(var(--drag-tilt,0deg)) !important;
+  transition: box-shadow 120ms ease, opacity 120ms ease, filter 120ms ease !important;
+  box-shadow: 0 28px 68px rgba(0,0,0,.42),0 10px 26px rgba(0,0,0,.24),0 0 0 1px rgba(255,255,255,.24);
   transform-origin: center center;
+  will-change: transform;
+  backface-visibility: hidden;
+  contain: layout style paint;
 }
 
 .icono-drag-preview {
   z-index: 2147482999 !important;
-  opacity: .27 !important;
-  filter: saturate(.7) brightness(1.12);
-  transform: scale(.94) !important;
+  opacity: .24 !important;
+  filter: saturate(.72) brightness(1.12);
+  transform: translate3d(var(--preview-x,0px),var(--preview-y,0px),0) scale(.945) !important;
   border: 1px solid rgba(255,255,255,.42) !important;
   background: rgba(255,255,255,.10) !important;
-  box-shadow: inset 0 0 0 1px rgba(255,255,255,.12),0 8px 28px rgba(0,0,0,.16) !important;
-  transition: left 55ms cubic-bezier(.2,.85,.25,1),top 55ms cubic-bezier(.2,.85,.25,1),transform 100ms cubic-bezier(.2,.8,.2,1),opacity 100ms ease !important;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.12),0 10px 30px rgba(0,0,0,.17) !important;
+  transition: transform 86ms cubic-bezier(.16,.84,.25,1),opacity 100ms ease !important;
   pointer-events: none !important;
+  will-change: transform;
+  backface-visibility: hidden;
 }
 
 body.icon-dragging .icono-item:not(.drag-source-hidden) {
-  transition: translate 75ms cubic-bezier(.2,.82,.22,1),transform 75ms cubic-bezier(.2,.82,.22,1),box-shadow 120ms ease,opacity 90ms ease !important;
-  will-change: translate,transform;
+  transition: box-shadow 120ms ease,opacity 90ms ease !important;
+  will-change: transform,translate;
+  backface-visibility: hidden;
 }
 
 @media (prefers-reduced-motion:reduce) {
@@ -4589,10 +4626,9 @@ body.icon-dragging .icono-item:not(.drag-source-hidden) {
 }
 
 .icono-item.arrastrando-moderno.drag-floating-clone.icon-drag-over-category {
-  transform: scale(.68) rotate(.35deg) !important;
-  opacity: .88 !important;
-  box-shadow: 0 16px 42px rgba(0,0,0,.30),0 5px 18px rgba(0,0,0,.18),0 0 0 1px rgba(255,255,255,.25) !important;
-  transition: transform 120ms cubic-bezier(.2,.85,.25,1),opacity 120ms ease,box-shadow 120ms ease !important;
+  opacity: .90 !important;
+  filter: saturate(.92) brightness(1.05);
+  box-shadow: 0 18px 46px rgba(0,0,0,.32),0 6px 20px rgba(0,0,0,.18),0 0 0 1px rgba(255,255,255,.25) !important;
 }
 
 .icono-item span {
@@ -4782,10 +4818,11 @@ body.icon-dragging .icono-item:not(.drag-source-hidden) {
 }
 
 .panel-redimensionar-scroll {
-  flex: 1;
-  overflow-y: auto;
-  padding: 1rem 1.25rem 1.5rem;
-  scrollbar-width: thin;
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem 1.25rem 1.5rem;
+    scrollbar-width: thin;
+    scrollbar-color: rgb(133 133 133) transparent;
 }
 
 .redim-seccion {
@@ -7918,9 +7955,10 @@ body:has(.nota-modal.nota-modal-abierto) {
 }
 
 .multimedia-button:hover {
-  transform: translateY(-1px);
-  background: rgba(255,255,255,.14);
-  border-color: rgba(255,255,255,.26);
+    transform: translateY(-1px);
+    background: rgba(255, 255, 255, .14);
+    border-color: rgba(255, 255, 255, .26);
+    cursor: pointer;
 }
 
 .multimedia-button.is-pressed {
@@ -8151,12 +8189,12 @@ body.multimedia-modal-open {
 }
 
 .multimedia-source-activity {
-  height: 15px;
-  display: flex;
-  gap: 2px;
-  align-items: flex-end;
-  justify-content: center;
-  opacity: .2;
+    height: 15px;
+    display: flex;
+    gap: 2px;
+    align-items: center;
+    justify-content: center;
+    opacity: .2;
 }
 
 .multimedia-source-activity i {
@@ -9072,7 +9110,7 @@ body.multimedia-modal-open {
 }
 
 .multimedia-control-main[data-playback-state="paused"] .multimedia-main-glyph::before, .multimedia-control-main[data-playback-state="ended"] .multimedia-main-glyph::before {
-  left: 8px;
+  left: 6px;
   top: 4px;
   width: 0;
   height: 0;
@@ -9127,7 +9165,7 @@ body.multimedia-modal-open {
     fill: currentColor;
     stroke: none;
     font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 800;
     text-anchor: middle;
     /* dominant-baseline: middle; */
@@ -9327,7 +9365,7 @@ body.multimedia-modal-open {
   align-self: stretch;
   justify-self: stretch;
   width: 100%;
-  height: var(--multimedia-player-height,100%);
+  height: 100%;
   max-height: 100%;
   min-height: 0;
   padding: 8px 0 6px;
@@ -9433,7 +9471,7 @@ body.multimedia-modal-open {
   width: 100%;
   min-width: 0;
   margin-top: 10px;
-  justify-content: flex-start;
+  justify-content: center;
   gap: clamp(9px,1.6cqw,15px);
 }
 
@@ -9761,7 +9799,7 @@ html[data-startab-media-mode="web"] .multimedia-topbar-copy span {
   }
 
   html[data-startab-media-mode="web"] .multimedia-modal-panel {
-    border-radius: 22px;
+    border-radius: 0px;
   }
 }
 
@@ -10082,11 +10120,11 @@ html[data-startab-media-mode="web"] .multimedia-topbar-copy span {
 
 /* === StarTab · Windows System Volume ====================================== */
 .multimedia-main {
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
 }
 
 .windows-system-volume {
-  grid-row: 2;
+  grid-row: 3;
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
@@ -10271,7 +10309,7 @@ html[data-startab-media-mode="web"] .multimedia-topbar-copy span {
 
 .multimedia-empty,
 .multimedia-player {
-  grid-row: 3;
+  grid-row: 2;
 }
 
 @media (max-width: 760px) {
@@ -10327,7 +10365,7 @@ html[data-startab-media-mode="web"] .multimedia-topbar-copy span {
 }
 
 /* StarTab · Historial de navegación Firestore */
-.startab-history-btn{height:40px;display:inline-flex;align-items:center;gap:8px;padding:0 13px;border:1px solid rgba(255,255,255,.11);border-radius:12px;background:rgba(255,255,255,.055);color:rgba(255,255,255,.78);font:600 12px/1 inherit;cursor:pointer;transition:background .18s ease,border-color .18s ease,color .18s ease,transform .18s ease}.startab-history-btn svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.startab-history-btn:hover,.startab-history-btn.active{background:rgba(70,231,166,.12);border-color:rgba(70,231,166,.34);color:#dfffee}.startab-history-btn:active{transform:translateY(1px)}
+.startab-history-btn{height:40px;display:none;align-items:center;gap:8px;padding:0 13px;border:1px solid rgba(255,255,255,.11);border-radius:12px;background:rgba(255,255,255,.055);color:rgba(255,255,255,.78);font:600 12px/1 inherit;cursor:pointer;transition:background .18s ease,border-color .18s ease,color .18s ease,transform .18s ease}.startab-history-btn svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.startab-history-btn:hover,.startab-history-btn.active{background:rgba(70,231,166,.12);border-color:rgba(70,231,166,.34);color:#dfffee}.startab-history-btn:active{transform:translateY(1px)}
 .startab-history-panel{display:none;min-height:0;flex:1;overflow:hidden;padding:0 22px 18px}.startab-history-mode .startab-tab-toolbar,.startab-history-mode #startab-window-tabs,.startab-history-mode #startab-tab-content{display:none!important}.startab-history-mode .startab-history-panel{display:flex;flex-direction:column}.startab-history-mode .startab-tab-footer{display:none}.startab-history-mode #startab-preview-toggle,.startab-history-mode .startab-view-switch,.startab-history-mode #startab-duplicates-btn{opacity:.35;pointer-events:none}.startab-history-mode .startab-tab-search{opacity:.4;pointer-events:none}
 .startab-history-toolbar{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;padding:18px 2px 15px;border-bottom:1px solid rgba(255,255,255,.08)}.startab-history-toolbar h3{margin:3px 0 4px;color:#fff;font-size:19px;line-height:1.15}.startab-history-toolbar p{margin:0;color:rgba(255,255,255,.47);font-size:12px}.startab-history-kicker{color:#4ce7a7;font-size:9px;font-weight:800;letter-spacing:.16em}.startab-history-controls{display:flex;align-items:center;gap:8px}.startab-history-search{width:min(310px,30vw);height:40px;display:flex;align-items:center;gap:8px;padding:0 12px;border:1px solid rgba(255,255,255,.1);border-radius:12px;background:rgba(0,0,0,.18)}.startab-history-search:focus-within{border-color:rgba(76,231,167,.42);box-shadow:0 0 0 3px rgba(76,231,167,.07)}.startab-history-search svg{width:16px;height:16px;fill:none;stroke:rgba(255,255,255,.5);stroke-width:1.8}.startab-history-search input{min-width:0;width:100%;border:0;outline:0;background:transparent;color:#fff;font:500 12px/1.2 inherit}.startab-history-search input::placeholder{color:rgba(255,255,255,.34)}#startab-history-refresh,#startab-history-back{height:40px;border:1px solid rgba(255,255,255,.1);border-radius:11px;background:rgba(255,255,255,.055);color:rgba(255,255,255,.75);cursor:pointer}#startab-history-refresh{width:40px;display:grid;place-items:center;padding:0}#startab-history-refresh svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}#startab-history-back{padding:0 14px;font:700 11px/1 inherit}#startab-history-refresh:hover,#startab-history-back:hover{color:#fff;border-color:rgba(76,231,167,.32);background:rgba(76,231,167,.09)}
 .startab-history-status{min-height:30px;display:flex;align-items:center;padding:7px 2px;color:rgba(255,255,255,.38);font-size:10px;letter-spacing:.02em}.startab-history-list{min-height:0;flex:1;overflow:auto;padding:0 4px 24px 0;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.16) transparent}.startab-history-day{margin-top:12px}.startab-history-day-title{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:8px;padding:8px 4px;background:linear-gradient(180deg,rgba(17,20,24,.98),rgba(17,20,24,.91));backdrop-filter:blur(10px);color:rgba(255,255,255,.7);font-size:11px;font-weight:750;text-transform:capitalize}.startab-history-day-title em{min-width:22px;height:20px;padding:0 6px;display:inline-flex;align-items:center;justify-content:center;border-radius:99px;background:rgba(255,255,255,.07);color:rgba(255,255,255,.43);font-style:normal;font-size:9px}.startab-history-items{display:flex;flex-direction:column;gap:5px}.startab-history-item{width:100%;display:grid;grid-template-columns:38px minmax(0,1fr) auto;align-items:center;gap:11px;padding:10px 11px;border:1px solid transparent;border-radius:12px;background:transparent;color:inherit;text-align:left;cursor:pointer;transition:background .15s ease,border-color .15s ease,transform .15s ease}.startab-history-item:hover{background:rgba(255,255,255,.055);border-color:rgba(255,255,255,.075);transform:translateX(2px)}.startab-history-favicon{width:34px;height:34px;display:grid;place-items:center;border:1px solid rgba(255,255,255,.08);border-radius:10px;background:rgba(255,255,255,.05);overflow:hidden}.startab-history-favicon img{width:20px;height:20px;object-fit:contain}.startab-history-copy{min-width:0;display:flex;flex-direction:column;gap:2px}.startab-history-title-row{min-width:0;display:flex;align-items:center;gap:7px}.startab-history-title-row strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:rgba(255,255,255,.9);font-size:12px;font-weight:650}.startab-history-type{flex:0 0 auto;padding:3px 5px;border-radius:5px;background:rgba(76,231,167,.1);color:#62eab1;font-size:7px;font-weight:850;letter-spacing:.09em}.startab-history-incognito{flex:0 0 auto;padding:3px 5px;border-radius:5px;background:rgba(181,122,255,.12);color:#c7a0ff;font-size:7px;font-weight:850;letter-spacing:.09em}.startab-history-copy small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:rgba(255,255,255,.45);font-size:10px}.startab-history-url{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:rgba(255,255,255,.25);font-size:9px}.startab-history-item time{padding-left:10px;color:rgba(255,255,255,.36);font-size:10px;white-space:nowrap}.startab-history-empty{min-height:280px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;color:rgba(255,255,255,.48)}.startab-history-empty-icon{width:54px;height:54px;display:grid;place-items:center;margin-bottom:12px;border:1px solid rgba(76,231,167,.16);border-radius:16px;background:rgba(76,231,167,.06);color:#5ce9af;font-size:22px}.startab-history-empty h4{margin:0 0 5px;color:rgba(255,255,255,.78);font-size:14px}.startab-history-empty p{max-width:390px;margin:0;font-size:11px;line-height:1.5}.startab-history-panel.is-loading #startab-history-refresh svg{animation:startab-history-spin .8s linear infinite}@keyframes startab-history-spin{to{transform:rotate(360deg)}}
@@ -10506,7 +10544,7 @@ html[data-startab-media-mode="web"] .multimedia-topbar-copy span {
   .multimedia-mobile-source-slot .multimedia-source.is-active {
     background: linear-gradient(135deg,rgba(110,78,221,.18),rgba(74,169,235,.10));
     border-color: rgba(176,139,255,.20);
-    box-shadow: inset 0 -2px 0 rgba(177,123,255,.72), 0 7px 20px rgba(0,0,0,.12);
+    box-shadow: inset 0 8px 26px rgba(0, 0, 0, .09);
   }
 
   .multimedia-mobile-source-slot .multimedia-source-icon {
@@ -11352,12 +11390,12 @@ html[data-startab-media-mode="web"] .multimedia-topbar-copy span {
 }
 
 .multimedia-source-close {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  z-index: 5;
-  width: 25px;
-  height: 25px;
+position: absolute;
+    top: 4px;
+    right: 4px;
+    z-index: 5;
+    width: 22px;
+    height: 22px;
   display: grid;
   place-items: center;
   padding: 0;
@@ -11422,9 +11460,9 @@ html[data-startab-media-mode="web"] .multimedia-topbar-copy span {
 .multimedia-tab-close-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(3,5,10,.68);
-  backdrop-filter: blur(14px) saturate(1.08);
-  -webkit-backdrop-filter: blur(14px) saturate(1.08);
+  background: rgb(3 5 10 / 53%);
+  backdrop-filter: blur(0px) saturate(1.08);
+  -webkit-backdrop-filter: blur(0px) saturate(1.08);
 }
 
 .multimedia-tab-close-card {
@@ -11437,8 +11475,10 @@ html[data-startab-media-mode="web"] .multimedia-topbar-copy span {
   border-radius: 24px;
   color: #f7f8fb;
   background:
-    radial-gradient(circle at 100% 0%, rgba(205,73,98,.14), transparent 38%),
-    linear-gradient(160deg, rgba(27,30,41,.985), rgba(13,15,23,.992));
+    radial-gradient(circle at 100% 0%, rgb(205 73 98 / 16%), transparent 38%),
+    linear-gradient(160deg, rgb(27 30 41 / 37%), rgb(13 15 23 / 44%));
+  backdrop-filter: blur(11px) saturate(1.08);
+  -webkit-backdrop-filter: blur(11px) saturate(1.08);
   box-shadow: 0 30px 90px rgba(0,0,0,.48), inset 0 1px 0 rgba(255,255,255,.055);
   transform: translateY(10px) scale(.975);
   opacity: .4;
@@ -11450,12 +11490,20 @@ html[data-startab-media-mode="web"] .multimedia-topbar-copy span {
   opacity: 1;
 }
 
+.multimedia-tab-close-head-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
 .multimedia-tab-close-icon {
+  flex: 0 0 48px;
   width: 48px;
   height: 48px;
   display: grid;
   place-items: center;
-  margin-bottom: 16px;
+  margin: 0;
   border-radius: 15px;
   color: rgba(255,169,178,.96);
   border: 1px solid rgba(255,133,148,.14);
@@ -11466,6 +11514,11 @@ html[data-startab-media-mode="web"] .multimedia-topbar-copy span {
 .multimedia-tab-close-icon svg {
   width: 22px;
   height: 22px;
+}
+
+.multimedia-tab-close-heading {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .multimedia-tab-close-heading > span {
@@ -11484,8 +11537,8 @@ html[data-startab-media-mode="web"] .multimedia-topbar-copy span {
   letter-spacing: -.025em;
 }
 
-.multimedia-tab-close-heading p {
-  margin: 9px 0 0;
+.multimedia-tab-close-copy {
+  margin: 14px 0 0;
   color: rgba(232,235,244,.58);
   font-size: 11.5px;
   line-height: 1.55;
@@ -11723,6 +11776,488 @@ html[data-startab-media-mode="web"] .multimedia-topbar-copy span {
   .multimedia-tab-close-dialog,
   .multimedia-tab-close-card,
   .multimedia-source-close {
+    transition: none;
+  }
+}
+
+/* StarTab · Windows Remote Touchpad v1 */
+.multimedia-cursor-toggle {
+  width: 31px;
+  height: 31px;
+  flex: 0 0 31px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(255,255,255,.085);
+  border-radius: 11px;
+  color: rgba(239,243,252,.7);
+  background: rgba(255,255,255,.035);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.025);
+  cursor: pointer;
+  transition: color .18s ease,background .18s ease,border-color .18s ease,transform .18s ease;
+}
+
+.multimedia-cursor-toggle svg {
+  width: 16px;
+  height: 16px;
+}
+
+.multimedia-cursor-toggle:hover,
+.multimedia-cursor-toggle:focus-visible {
+  color: #fff;
+  border-color: rgba(153,205,255,.24);
+  background: rgba(104,166,235,.09);
+  transform: translateY(-1px);
+}
+
+body.windows-touchpad-open {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+.windows-touchpad-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10040;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  box-sizing: border-box;
+}
+
+.windows-touchpad-modal.is-open {
+  display: flex;
+}
+
+.windows-touchpad-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(3,5,10,.72);
+  -webkit-backdrop-filter: blur(10px) saturate(1.08);
+  backdrop-filter: blur(10px) saturate(1.08);
+}
+
+.windows-touchpad-card {
+  position: relative;
+  z-index: 1;
+  width: min(560px, calc(100vw - 36px));
+  max-height: calc(100dvh - 36px);
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.095);
+  border-radius: 24px;
+  color: #f7f8fb;
+  background:
+    radial-gradient(circle at 50% -12%, rgba(95,121,224,.16), transparent 38%),
+    linear-gradient(180deg, rgba(20,24,34,.985), rgba(9,12,18,.995));
+  box-shadow: rgba(0,0,0,.5) 0 30px 90px, inset 0 1px 0 rgba(255,255,255,.055);
+}
+
+.windows-touchpad-header {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 18px 14px;
+  border-bottom: 1px solid rgba(255,255,255,.06);
+}
+
+.windows-touchpad-heading {
+  min-width: 0;
+}
+
+.windows-touchpad-kicker {
+  display: block;
+  color: rgba(174,199,255,.54);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+
+.windows-touchpad-heading h3 {
+  margin: 4px 0 2px;
+  font-size: 18px;
+  line-height: 1.15;
+  letter-spacing: -.025em;
+}
+
+.windows-touchpad-heading p {
+  max-width: 330px;
+  margin: 0;
+  overflow: hidden;
+  color: rgba(236,240,249,.45);
+  font-size: 10px;
+  line-height: 1.4;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.windows-touchpad-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.windows-touchpad-connection {
+  min-height: 29px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 10px;
+  border: 1px solid rgba(255,255,255,.075);
+  border-radius: 999px;
+  color: rgba(240,244,252,.65);
+  background: rgba(255,255,255,.032);
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: .045em;
+  text-transform: uppercase;
+}
+
+.windows-touchpad-connection i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #8e98aa;
+  box-shadow: 0 0 0 4px rgba(142,152,170,.06);
+}
+
+.windows-touchpad-connection[data-state="connecting"] i {
+  background: #9fc9ff;
+  box-shadow: 0 0 0 4px rgba(159,201,255,.08), 0 0 14px rgba(117,181,255,.26);
+  animation: windowsTouchpadPulse 1.05s ease-in-out infinite alternate;
+}
+
+.windows-touchpad-connection[data-state="connected"] i {
+  background: #79e1b0;
+  box-shadow: 0 0 0 4px rgba(121,225,176,.08), 0 0 14px rgba(121,225,176,.2);
+}
+
+.windows-touchpad-connection[data-state="relay"] i {
+  background: #f0c76f;
+  box-shadow: 0 0 0 4px rgba(240,199,111,.07);
+}
+
+.windows-touchpad-connection[data-state="error"] i {
+  background: #ff8292;
+  box-shadow: 0 0 0 4px rgba(255,130,146,.07);
+}
+
+@keyframes windowsTouchpadPulse {
+  from { opacity: .48; transform: scale(.86); }
+  to { opacity: 1; transform: scale(1.08); }
+}
+
+.windows-touchpad-close {
+  width: 31px;
+  height: 31px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 11px;
+  color: rgba(255,255,255,.67);
+  background: rgba(255,255,255,.035);
+  font: inherit;
+  font-size: 19px;
+  cursor: pointer;
+}
+
+.windows-touchpad-close:hover,
+.windows-touchpad-close:focus-visible {
+  color: #fff;
+  background: rgba(255,101,122,.1);
+  border-color: rgba(255,101,122,.17);
+}
+
+.windows-touchpad-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 18px 18px;
+}
+
+.windows-touchpad-surface {
+  position: relative;
+  width: 100%;
+  min-height: 290px;
+  aspect-ratio: 1.65 / 1;
+  max-height: 370px;
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: crosshair;
+  outline: none;
+  border: 1px solid rgba(255,255,255,.09);
+  border-radius: 21px;
+  background:
+    radial-gradient(circle at 50% 15%, rgba(111,142,236,.10), transparent 41%),
+    linear-gradient(145deg, rgba(255,255,255,.038), rgba(255,255,255,.015));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.035), inset 0 -28px 65px rgba(0,0,0,.12);
+  transition: border-color .16s ease,background .16s ease,transform .12s ease;
+}
+
+.windows-touchpad-surface:focus-visible {
+  border-color: rgba(149,198,255,.28);
+}
+
+.windows-touchpad-surface.is-active {
+  border-color: rgba(147,197,255,.25);
+  background:
+    radial-gradient(circle at 50% 15%, rgba(111,142,236,.145), transparent 43%),
+    linear-gradient(145deg, rgba(255,255,255,.048), rgba(255,255,255,.019));
+}
+
+.windows-touchpad-grid {
+  position: absolute;
+  inset: 0;
+  opacity: .18;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(255,255,255,.028) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.028) 1px, transparent 1px);
+  background-size: 36px 36px;
+  mask-image: linear-gradient(to bottom, rgba(0,0,0,.8), transparent 95%);
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,.8), transparent 95%);
+}
+
+.windows-touchpad-cursor-mark {
+  position: absolute;
+  left: 50%;
+  top: 47%;
+  width: 58px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  transform: translate(-50%,-50%);
+  border: 1px solid rgba(255,255,255,.06);
+  border-radius: 19px;
+  color: rgba(229,240,255,.26);
+  background: rgba(255,255,255,.018);
+  pointer-events: none;
+  transition: color .16s ease,transform .16s ease,border-color .16s ease;
+}
+
+.windows-touchpad-cursor-mark svg {
+  width: 28px;
+  height: 28px;
+}
+
+.windows-touchpad-surface.is-active .windows-touchpad-cursor-mark {
+  color: rgba(214,235,255,.46);
+  border-color: rgba(153,205,255,.10);
+  transform: translate(-50%,-50%) scale(.96);
+}
+
+.windows-touchpad-hint {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 13px;
+  text-align: center;
+  color: rgba(235,240,250,.32);
+  font-size: 9.5px;
+  pointer-events: none;
+}
+
+.windows-touchpad-clicks {
+  display: grid;
+  grid-template-columns: repeat(2,minmax(0,1fr));
+  gap: 10px;
+}
+
+.windows-touchpad-click {
+  min-width: 0;
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 11px;
+  padding: 9px 12px;
+  border: 1px solid rgba(255,255,255,.075);
+  border-radius: 16px;
+  color: rgba(244,247,253,.76);
+  background: rgba(255,255,255,.03);
+  cursor: pointer;
+  text-align: left;
+  transition: background .14s ease,border-color .14s ease,transform .12s ease,color .14s ease;
+}
+
+.windows-touchpad-click svg {
+  width: 25px;
+  height: 25px;
+  flex: 0 0 25px;
+  color: rgba(194,219,255,.68);
+}
+
+.windows-touchpad-click span {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.windows-touchpad-click strong {
+  font-size: 10.5px;
+  font-weight: 750;
+}
+
+.windows-touchpad-click small {
+  overflow: hidden;
+  color: rgba(235,240,250,.32);
+  font-size: 8.5px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.windows-touchpad-click:hover,
+.windows-touchpad-click:focus-visible {
+  color: #fff;
+  border-color: rgba(150,199,255,.18);
+  background: rgba(103,158,222,.07);
+}
+
+.windows-touchpad-click:active {
+  transform: scale(.985);
+  background: rgba(103,158,222,.12);
+}
+
+.windows-touchpad-note {
+  min-height: 14px;
+  color: rgba(232,237,248,.29);
+  font-size: 8.5px;
+  line-height: 1.45;
+  text-align: center;
+}
+
+@media (max-width: 760px) {
+  .multimedia-cursor-toggle {
+    width: 31px;
+    height: 31px;
+    flex-basis: 31px;
+  }
+
+  .windows-touchpad-modal {
+    padding: 0;
+    align-items: stretch;
+  }
+
+  .windows-touchpad-card {
+    width: 100vw;
+    max-height: 100dvh;
+    min-height: 100dvh;
+    border: 0;
+    border-radius: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .windows-touchpad-header {
+    padding:
+      max(12px, env(safe-area-inset-top))
+      max(13px, env(safe-area-inset-right))
+      11px
+      max(13px, env(safe-area-inset-left));
+    gap: 9px;
+  }
+
+  .windows-touchpad-heading h3 {
+    font-size: 16px;
+  }
+
+  .windows-touchpad-heading p {
+    max-width: 48vw;
+    font-size: 8.5px;
+  }
+
+  .windows-touchpad-connection {
+    min-height: 28px;
+    padding-inline: 8px;
+    font-size: 7.5px;
+  }
+
+  .windows-touchpad-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    justify-content: center;
+    padding:
+      12px
+      max(13px, env(safe-area-inset-right))
+      max(14px, env(safe-area-inset-bottom))
+      max(13px, env(safe-area-inset-left));
+  }
+
+  .windows-touchpad-surface {
+    flex: 1 1 auto;
+    min-height: 280px;
+    max-height: none;
+    aspect-ratio: auto;
+    border-radius: 22px;
+  }
+
+  .windows-touchpad-click {
+    min-height: 62px;
+  }
+}
+
+@media (max-width: 430px) {
+  .multimedia-topbar-actions {
+    gap: 5px;
+  }
+
+  .multimedia-cursor-toggle {
+    width: 30px;
+    height: 30px;
+    flex-basis: 30px;
+  }
+
+  .windows-touchpad-header-actions {
+    gap: 5px;
+  }
+
+  .windows-touchpad-connection span {
+    max-width: 58px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .windows-touchpad-clicks {
+    gap: 7px;
+  }
+
+  .windows-touchpad-click {
+    padding-inline: 10px;
+    gap: 8px;
+  }
+
+  .windows-touchpad-click svg {
+    width: 22px;
+    height: 22px;
+    flex-basis: 22px;
+  }
+
+  .windows-touchpad-click strong {
+    font-size: 9.5px;
+  }
+
+  .windows-touchpad-click small {
+    font-size: 7.5px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .windows-touchpad-connection[data-state="connecting"] i {
+    animation: none;
+  }
+  .windows-touchpad-surface,
+  .windows-touchpad-cursor-mark,
+  .windows-touchpad-click,
+  .multimedia-cursor-toggle {
     transition: none;
   }
 }

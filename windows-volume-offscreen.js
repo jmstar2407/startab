@@ -22,6 +22,8 @@
     nativeState: null,
     deviceRef: null,
     unsubscribeDevice: null,
+    unsubscribePointerSessions: null,
+    pointerPeers: new Map(),
     heartbeat: 0,
     lastCommandId: null,
     bridgeKey: null,
@@ -64,6 +66,7 @@
   function stopDeviceListener() {
     state.unsubscribeDevice?.();
     state.unsubscribeDevice = null;
+    stopPointerSessionBridge();
     state.deviceRef = null;
     state.lastCommandId = null;
     state.bridgeKey = null;
@@ -87,6 +90,7 @@
 
     if (state.bridgeKey === nextBridgeKey && state.unsubscribeDevice) {
       await publishNativeState(false);
+      if (state.nativeConnected && !state.unsubscribePointerSessions) startPointerSessionBridge();
       return;
     }
 
@@ -119,6 +123,172 @@
         void executeCommand(command);
       },
       (error) => console.error('StarTab Windows bridge: listener Firestore:', error),
+    );
+
+    startPointerSessionBridge();
+  }
+
+  function waitForIceGathering(pc, timeoutMs = 3200) {
+    if (!pc || pc.iceGatheringState === 'complete') return Promise.resolve();
+    return new Promise((resolve) => {
+      let done = false;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        pc.removeEventListener('icegatheringstatechange', onState);
+        resolve();
+      };
+      const onState = () => { if (pc.iceGatheringState === 'complete') finish(); };
+      const timer = setTimeout(finish, timeoutMs);
+      pc.addEventListener('icegatheringstatechange', onState);
+    });
+  }
+
+  async function sendPointerNative(command) {
+    if (!state.nativeConnected || !command) return false;
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: 'STARTAB_WINDOWS_NATIVE_COMMAND',
+        command,
+      });
+      return !!response?.ok;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function closePointerPeer(sessionId) {
+    const entry = state.pointerPeers.get(sessionId);
+    if (!entry) return;
+    entry.closed = true;
+    try { entry.pc?.close(); } catch (_) {}
+    state.pointerPeers.delete(sessionId);
+  }
+
+  function stopPointerSessionBridge() {
+    state.unsubscribePointerSessions?.();
+    state.unsubscribePointerSessions = null;
+    for (const sessionId of [...state.pointerPeers.keys()]) closePointerPeer(sessionId);
+  }
+
+  function handlePointerPayload(payload) {
+    if (!payload || typeof payload !== 'object') return;
+    if (payload.t === 'move') {
+      const dx = Math.max(-500, Math.min(500, Number(payload.dx) || 0));
+      const dy = Math.max(-500, Math.min(500, Number(payload.dy) || 0));
+      if (dx || dy) void sendPointerNative({ type: 'pointerMove', dx, dy });
+      return;
+    }
+    if (payload.t === 'click' && (payload.button === 'left' || payload.button === 'right')) {
+      void sendPointerNative({ type: 'pointerClick', button: payload.button });
+    }
+  }
+
+  function attachPointerDataChannel(channel) {
+    if (!channel) return;
+    channel.addEventListener('message', (event) => {
+      try { handlePointerPayload(JSON.parse(String(event.data || ''))); } catch (_) {}
+    });
+  }
+
+  async function answerPointerOffer(sessionId, ref, data, entry) {
+    if (!globalThis.RTCPeerConnection || !data?.offer?.sdp || !data?.offer?.type) return;
+    const pc = new RTCPeerConnection({
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+      ],
+    });
+    entry.pc = pc;
+    pc.addEventListener('datachannel', (event) => attachPointerDataChannel(event.channel));
+    pc.addEventListener('connectionstatechange', () => {
+      const status = pc.connectionState;
+      if (!['connected', 'failed', 'disconnected', 'closed'].includes(status)) return;
+      ref.set({
+        pcConnectionState: status,
+        pcAtClient: Date.now(),
+      }, { merge: true }).catch(() => {});
+    });
+
+    try {
+      await pc.setRemoteDescription(data.offer);
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      await waitForIceGathering(pc);
+      if (state.pointerPeers.get(sessionId) !== entry || entry.closed) {
+        try { pc.close(); } catch (_) {}
+        return;
+      }
+      if (!pc.localDescription) throw new Error('WebRTC answer vacía');
+      await ref.set({
+        answer: { type: pc.localDescription.type, sdp: pc.localDescription.sdp },
+        status: 'answered',
+        answeredAtClient: Date.now(),
+      }, { merge: true });
+    } catch (error) {
+      console.warn('StarTab Windows Touchpad: WebRTC answer:', error);
+      try { pc.close(); } catch (_) {}
+      entry.pc = null;
+      if (state.pointerPeers.get(sessionId) === entry && !entry.closed) {
+        ref.set({ status: 'relay', pcConnectionState: 'failed', pcAtClient: Date.now() }, { merge: true }).catch(() => {});
+      }
+    }
+  }
+
+  function handlePointerRelay(data, entry) {
+    const motion = data?.motionRelay;
+    const motionSeq = Number(motion?.seq) || 0;
+    if (motionSeq && motionSeq !== entry.lastMotionSeq) {
+      entry.lastMotionSeq = motionSeq;
+      const dx = Math.max(-1200, Math.min(1200, Number(motion.dx) || 0));
+      const dy = Math.max(-1200, Math.min(1200, Number(motion.dy) || 0));
+      if (dx || dy) void sendPointerNative({ type: 'pointerMove', dx, dy });
+    }
+
+    const click = data?.clickRelay;
+    const clickSeq = Number(click?.seq) || 0;
+    if (clickSeq && clickSeq !== entry.lastClickSeq && (click.button === 'left' || click.button === 'right')) {
+      entry.lastClickSeq = clickSeq;
+      void sendPointerNative({ type: 'pointerClick', button: click.button });
+    }
+  }
+
+  function handlePointerSessionSnapshot(doc) {
+    const sessionId = doc.id;
+    const data = doc.data() || {};
+    const expiresAt = Number(data.expiresAtClient) || 0;
+    if (expiresAt && Date.now() > expiresAt + 5000) {
+      closePointerPeer(sessionId);
+      doc.ref.delete().catch(() => {});
+      return;
+    }
+
+    let entry = state.pointerPeers.get(sessionId);
+    if (!entry) {
+      entry = { pc: null, offerId: null, lastMotionSeq: 0, lastClickSeq: 0, closed: false };
+      state.pointerPeers.set(sessionId, entry);
+    }
+    handlePointerRelay(data, entry);
+
+    const offerId = String(data.offerId || '');
+    if (!offerId || !data.offer?.sdp || offerId === entry.offerId) return;
+    entry.offerId = offerId;
+    if (entry.pc) { try { entry.pc.close(); } catch (_) {} entry.pc = null; }
+    void answerPointerOffer(sessionId, doc.ref, data, entry);
+  }
+
+  function startPointerSessionBridge() {
+    stopPointerSessionBridge();
+    if (!state.deviceRef || !state.nativeConnected) return;
+    state.unsubscribePointerSessions = state.deviceRef.collection('pointerSessions').onSnapshot(
+      (snapshot) => {
+        snapshot.docChanges().forEach((change) => {
+          if (change.type === 'removed') closePointerPeer(change.doc.id);
+          else handlePointerSessionSnapshot(change.doc);
+        });
+      },
+      (error) => console.error('StarTab Windows Touchpad: listener Firestore:', error),
     );
   }
 
@@ -217,6 +387,7 @@
 
     if (payload.kind === 'disconnected') {
       state.nativeConnected = false;
+      stopPointerSessionBridge();
       await publishNativeState(false);
       return;
     }
