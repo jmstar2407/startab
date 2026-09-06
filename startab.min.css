@@ -11818,18 +11818,15 @@ body.windows-touchpad-open {
 .windows-touchpad-modal {
   position: fixed;
   inset: 0;
-  z-index: 2147483647;
+  z-index: 10040;
   display: none;
   align-items: center;
   justify-content: center;
   padding: 18px;
   box-sizing: border-box;
-  isolation: isolate;
-  pointer-events: none;
 }
 
 .windows-touchpad-modal.is-open {
-  pointer-events: auto;
   display: flex;
 }
 
@@ -11983,13 +11980,6 @@ body.windows-touchpad-open {
   padding: 16px 18px 18px;
 }
 
-.windows-touchpad-main {
-  display: grid;
-  grid-template-columns: minmax(0,1fr) 64px;
-  gap: 10px;
-  min-height: 0;
-}
-
 .windows-touchpad-surface {
   position: relative;
   width: 100%;
@@ -12061,99 +12051,6 @@ body.windows-touchpad-open {
   color: rgba(214,235,255,.46);
   border-color: rgba(153,205,255,.10);
   transform: translate(-50%,-50%) scale(.96);
-}
-
-.windows-touchpad-scroll {
-  position: relative;
-  min-width: 0;
-  min-height: 290px;
-  touch-action: none;
-  user-select: none;
-  -webkit-user-select: none;
-  outline: none;
-  overflow: hidden;
-  display: grid;
-  grid-template-rows: 40px minmax(0,1fr) auto 40px;
-  place-items: center;
-  gap: 4px;
-  padding: 7px 5px;
-  border: 1px solid rgba(255,255,255,.09);
-  border-radius: 20px;
-  color: rgba(218,232,255,.5);
-  background: linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,.018));
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.035), inset 0 -24px 60px rgba(0,0,0,.12);
-  cursor: ns-resize;
-  transition: border-color .14s ease,background .14s ease,transform .12s ease;
-}
-
-.windows-touchpad-scroll:focus-visible,
-.windows-touchpad-scroll.is-active {
-  border-color: rgba(147,197,255,.26);
-  background: linear-gradient(180deg,rgba(112,155,236,.09),rgba(255,255,255,.022));
-}
-
-.windows-touchpad-scroll.is-active {
-  transform: scale(.992);
-}
-
-.windows-touchpad-scroll-arrow {
-  width: 34px;
-  height: 34px;
-  display: grid;
-  place-items: center;
-  border-radius: 12px;
-  color: rgba(215,232,255,.55);
-  background: rgba(255,255,255,.028);
-  font-size: 19px;
-  font-weight: 500;
-  line-height: 1;
-  pointer-events: none;
-}
-
-.windows-touchpad-scroll-track {
-  position: relative;
-  width: 12px;
-  height: 100%;
-  min-height: 105px;
-  display: flex;
-  justify-content: center;
-  pointer-events: none;
-}
-
-.windows-touchpad-scroll-track::before {
-  content: '';
-  width: 2px;
-  height: 100%;
-  border-radius: 999px;
-  background: linear-gradient(180deg,transparent,rgba(188,215,255,.20) 12%,rgba(188,215,255,.20) 88%,transparent);
-}
-
-.windows-touchpad-scroll-track i {
-  position: absolute;
-  top: 50%;
-  width: 8px;
-  height: 42px;
-  transform: translateY(-50%);
-  border: 1px solid rgba(192,219,255,.14);
-  border-radius: 999px;
-  background: rgba(181,211,255,.08);
-  box-shadow: 0 0 18px rgba(130,180,255,.04);
-  transition: height .14s ease,background .14s ease;
-}
-
-.windows-touchpad-scroll.is-active .windows-touchpad-scroll-track i {
-  height: 58px;
-  background: rgba(181,211,255,.15);
-}
-
-.windows-touchpad-scroll strong {
-  writing-mode: vertical-rl;
-  transform: rotate(180deg);
-  color: rgba(222,233,250,.28);
-  font-size: 7px;
-  font-weight: 800;
-  letter-spacing: .18em;
-  pointer-events: none;
 }
 
 .windows-touchpad-hint {
@@ -12294,23 +12191,12 @@ body.windows-touchpad-open {
       max(13px, env(safe-area-inset-left));
   }
 
-  .windows-touchpad-main {
-    flex: 1 1 auto;
-    grid-template-columns: minmax(0,1fr) 58px;
-    gap: 8px;
-    min-height: 0;
-  }
-
   .windows-touchpad-surface {
+    flex: 1 1 auto;
     min-height: 280px;
     max-height: none;
     aspect-ratio: auto;
     border-radius: 22px;
-  }
-
-  .windows-touchpad-scroll {
-    min-height: 280px;
-    border-radius: 19px;
   }
 
   .windows-touchpad-click {
@@ -12338,22 +12224,6 @@ body.windows-touchpad-open {
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
-  }
-
-  .windows-touchpad-main {
-    grid-template-columns: minmax(0,1fr) 50px;
-    gap: 7px;
-  }
-
-  .windows-touchpad-scroll {
-    grid-template-rows: 36px minmax(0,1fr) auto 36px;
-    padding-inline: 4px;
-  }
-
-  .windows-touchpad-scroll-arrow {
-    width: 30px;
-    height: 30px;
-    font-size: 17px;
   }
 
   .windows-touchpad-clicks {
@@ -12385,8 +12255,6 @@ body.windows-touchpad-open {
     animation: none;
   }
   .windows-touchpad-surface,
-  .windows-touchpad-scroll,
-  .windows-touchpad-scroll-track i,
   .windows-touchpad-cursor-mark,
   .windows-touchpad-click,
   .multimedia-cursor-toggle {

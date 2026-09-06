@@ -5,10 +5,8 @@
   const FIREBASE_MAX_RETRIES = 40;
   const DEVICE_STALE_MS = 90_000;
   const SESSION_TTL_MS = 5 * 60_000;
-  const RELAY_INTERVAL_MS = 55;
-  const ICE_TIMEOUT_MS = 2400;
-  const MOTION_BUFFER_LIMIT = 4096;
-  const POINTER_PROTOCOL_VERSION = 2;
+  const RELAY_INTERVAL_MS = 95;
+  const ICE_TIMEOUT_MS = 3200;
   const SELECTED_DEVICE_KEY = 'startab_windows_volume_selected_device_v2';
   const CLIENT_ID_KEY = 'startab_windows_pointer_client_v1';
   const RTC_CONFIG = {
@@ -16,8 +14,6 @@
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
     ],
-    iceCandidatePoolSize: 4,
-    bundlePolicy: 'max-bundle',
   };
 
   const state = {
@@ -39,21 +35,15 @@
     lastX: 0,
     lastY: 0,
     moved: false,
-    travelDistance: 0,
     downAt: 0,
-    pendingMotionDx: 0,
-    pendingMotionDy: 0,
-    scrollPointerId: null,
-    scrollLastY: 0,
-    scrollDy: 0,
-    scrollRelayTimer: 0,
+    motionDx: 0,
+    motionDy: 0,
+    raf: 0,
     relayTimer: 0,
     relayDx: 0,
     relayDy: 0,
     relaySeq: 0,
     clickSeq: 0,
-    scrollSeq: 0,
-    rawInput: false,
   };
 
   const dom = {};
@@ -62,7 +52,7 @@
 
   function supportsPointerAgent(version) {
     const parts = String(version || '').split('.').map((part) => Number.parseInt(part, 10) || 0);
-    return (parts[0] || 0) > 2 || ((parts[0] || 0) === 2 && (parts[1] || 0) >= 3);
+    return (parts[0] || 0) > 2 || ((parts[0] || 0) === 2 && (parts[1] || 0) >= 2);
   }
 
   const clientId = (() => {
@@ -83,7 +73,6 @@
     dom.backdrop = $('windows-touchpad-backdrop');
     dom.close = $('windows-touchpad-close');
     dom.surface = $('windows-touchpad-surface');
-    dom.scroll = $('windows-touchpad-scroll');
     dom.left = $('windows-touchpad-left');
     dom.right = $('windows-touchpad-right');
     dom.connection = $('windows-touchpad-connection');
@@ -168,7 +157,7 @@
   function updateTransportStatus() {
     if (!state.open) return;
     if (channelOpen(state.motionChannel) && channelOpen(state.controlChannel)) {
-      setStatus('connected', state.rawInput ? 'Directo · RAW' : 'Directo', state.rawInput ? 'WebRTC P2P binario + pointerrawupdate + fast path nativo.' : 'WebRTC P2P binario con fast path nativo de baja latencia.');
+      setStatus('connected', 'Directo', 'Conexión WebRTC directa: movimientos y clics con baja latencia.');
       return;
     }
     if (state.pc && ['new', 'connecting'].includes(state.pc.connectionState)) {
@@ -193,14 +182,9 @@
     state.unsubscribeSession = null;
     closePeer();
     clearTimeout(state.relayTimer);
-    clearTimeout(state.scrollRelayTimer);
     state.relayTimer = 0;
-    state.scrollRelayTimer = 0;
     state.relayDx = 0;
     state.relayDy = 0;
-    state.scrollDy = 0;
-    state.pendingMotionDx = 0;
-    state.pendingMotionDy = 0;
     const ref = state.sessionRef;
     state.sessionRef = null;
     state.sessionId = null;
@@ -217,12 +201,8 @@
 
     const pc = new RTCPeerConnection(RTC_CONFIG);
     state.pc = pc;
-    state.motionChannel = pc.createDataChannel('pointer-fast-v2', { ordered: false, maxRetransmits: 0, priority: 'high' });
-    state.controlChannel = pc.createDataChannel('pointer-control-v2', { ordered: true, priority: 'high' });
-    state.motionChannel.binaryType = 'arraybuffer';
-    state.controlChannel.binaryType = 'arraybuffer';
-    state.motionChannel.bufferedAmountLowThreshold = 512;
-    state.motionChannel.addEventListener('bufferedamountlow', flushPendingMotion);
+    state.motionChannel = pc.createDataChannel('motion', { ordered: false, maxRetransmits: 0 });
+    state.controlChannel = pc.createDataChannel('control', { ordered: true });
 
     const handleChannel = (channel) => {
       if (!channel) return;
@@ -244,8 +224,7 @@
     await state.sessionRef.set({
       offer: { type: pc.localDescription.type, sdp: pc.localDescription.sdp },
       offerId: crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`,
-      transport: 'webrtc-binary-fastpath-with-firestore-relay',
-      pointerProtocol: POINTER_PROTOCOL_VERSION,
+      transport: 'webrtc-with-firestore-relay',
       updatedAtClient: Date.now(),
     }, { merge: true });
   }
@@ -283,7 +262,7 @@
       return;
     }
     if (!supportsPointerAgent(device.data.agentVersion)) {
-      setStatus('error', 'Actualiza EXE', 'Este PC usa un agente anterior. Compila e instala StartabWindowsVolume.exe v2.3 para habilitar cursor + scroll remoto de ultra baja latencia.');
+      setStatus('error', 'Actualiza EXE', 'Este PC usa un agente anterior. Compila e instala StartabWindowsVolume.exe v2.2 para habilitar el cursor remoto.');
       return;
     }
 
@@ -299,7 +278,7 @@
         createdAtClient: Date.now(),
         expiresAtClient: Date.now() + SESSION_TTL_MS,
         status: 'offering',
-        protocol: POINTER_PROTOCOL_VERSION,
+        protocol: 1,
       }, { merge: true });
 
       state.unsubscribeSession = state.sessionRef.onSnapshot((snapshot) => {
@@ -343,91 +322,22 @@
     }, RELAY_INTERVAL_MS);
   }
 
-  function binaryMovePacket(dx, dy) {
-    const buffer = new ArrayBuffer(9);
-    const view = new DataView(buffer);
-    view.setUint8(0, 1);
-    view.setFloat32(1, dx, true);
-    view.setFloat32(5, dy, true);
-    return buffer;
-  }
-
-  function binaryClickPacket(button) {
-    return new Uint8Array([2, button === 'right' ? 2 : 1]).buffer;
-  }
-
-  function binaryScrollPacket(delta) {
-    const buffer = new ArrayBuffer(5);
-    const view = new DataView(buffer);
-    view.setUint8(0, 3);
-    view.setFloat32(1, delta, true);
-    return buffer;
-  }
-
-  function flushPendingMotion() {
-    if (!channelOpen(state.motionChannel) || state.motionChannel.bufferedAmount > MOTION_BUFFER_LIMIT) return;
-    const dx = state.pendingMotionDx;
-    const dy = state.pendingMotionDy;
-    state.pendingMotionDx = 0;
-    state.pendingMotionDy = 0;
-    if (!dx && !dy) return;
-    try { state.motionChannel.send(binaryMovePacket(dx, dy)); } catch (_) {
-      queueRelayMotion(dx, dy);
-    }
-  }
-
   function sendMotion(dx, dy) {
-    dx = clamp(dx, -700, 700);
-    dy = clamp(dy, -700, 700);
+    dx = clamp(dx, -500, 500);
+    dy = clamp(dy, -500, 500);
     if (!dx && !dy) return;
+    const payload = JSON.stringify({ t: 'move', dx: Math.round(dx), dy: Math.round(dy) });
     if (channelOpen(state.motionChannel)) {
-      if (state.motionChannel.bufferedAmount > MOTION_BUFFER_LIMIT) {
-        state.pendingMotionDx += dx;
-        state.pendingMotionDy += dy;
-        return;
-      }
-      if (state.pendingMotionDx || state.pendingMotionDy) {
-        dx += state.pendingMotionDx;
-        dy += state.pendingMotionDy;
-        state.pendingMotionDx = 0;
-        state.pendingMotionDy = 0;
-      }
-      try { state.motionChannel.send(binaryMovePacket(dx, dy)); return; } catch (_) {}
+      try { state.motionChannel.send(payload); return; } catch (_) {}
     }
     queueRelayMotion(dx, dy);
   }
 
-  function queueRelayScroll(delta) {
-    state.scrollDy += delta;
-    if (state.scrollRelayTimer) return;
-    state.scrollRelayTimer = window.setTimeout(async () => {
-      state.scrollRelayTimer = 0;
-      const wheel = state.scrollDy;
-      state.scrollDy = 0;
-      if (!state.sessionRef || !wheel) return;
-      state.scrollSeq += 1;
-      try {
-        await state.sessionRef.set({
-          scrollRelay: { seq: state.scrollSeq, delta: Math.round(wheel), clientAt: Date.now() },
-          expiresAtClient: Date.now() + SESSION_TTL_MS,
-        }, { merge: true });
-      } catch (_) {}
-    }, 48);
-  }
-
-  function sendScroll(delta) {
-    delta = clamp(delta, -720, 720);
-    if (!delta) return;
-    if (channelOpen(state.motionChannel) && state.motionChannel.bufferedAmount <= MOTION_BUFFER_LIMIT) {
-      try { state.motionChannel.send(binaryScrollPacket(delta)); return; } catch (_) {}
-    }
-    queueRelayScroll(delta);
-  }
-
   async function sendClick(button) {
     if (!['left', 'right'].includes(button)) return;
+    const payload = JSON.stringify({ t: 'click', button });
     if (channelOpen(state.controlChannel)) {
-      try { state.controlChannel.send(binaryClickPacket(button)); return; } catch (_) {}
+      try { state.controlChannel.send(payload); return; } catch (_) {}
     }
     if (!state.sessionRef) return;
     state.clickSeq += 1;
@@ -437,6 +347,15 @@
         expiresAtClient: Date.now() + SESSION_TTL_MS,
       }, { merge: true });
     } catch (_) {}
+  }
+
+  function flushMotion() {
+    state.raf = 0;
+    const dx = state.motionDx;
+    const dy = state.motionDy;
+    state.motionDx = 0;
+    state.motionDy = 0;
+    sendMotion(dx, dy);
   }
 
   function acceleratedDelta(rawX, rawY) {
@@ -452,7 +371,6 @@
     state.lastX = event.clientX;
     state.lastY = event.clientY;
     state.moved = false;
-    state.travelDistance = 0;
     state.downAt = performance.now();
     dom.surface.classList.add('is-active');
     try { dom.surface.setPointerCapture(event.pointerId); } catch (_) {}
@@ -463,61 +381,25 @@
     if (event.pointerId !== state.pointerId) return;
     const samples = typeof event.getCoalescedEvents === 'function' ? event.getCoalescedEvents() : [event];
     const points = samples?.length ? samples : [event];
-    let totalX = 0;
-    let totalY = 0;
     for (const sample of points) {
       const rawX = sample.clientX - state.lastX;
       const rawY = sample.clientY - state.lastY;
       state.lastX = sample.clientX;
       state.lastY = sample.clientY;
-      state.travelDistance += Math.hypot(rawX, rawY);
-      if (state.travelDistance > 6.5) state.moved = true;
-      const accelerated = acceleratedDelta(rawX, rawY);
-      totalX += accelerated.dx;
-      totalY += accelerated.dy;
+      if (Math.abs(rawX) + Math.abs(rawY) > 0.4) state.moved = true;
+      const { dx, dy } = acceleratedDelta(rawX, rawY);
+      state.motionDx += dx;
+      state.motionDy += dy;
     }
-    sendMotion(totalX, totalY);
-    if (event.cancelable) event.preventDefault();
-  }
-
-  function onScrollPointerDown(event) {
-    if (!state.open || !dom.scroll || state.scrollPointerId !== null) return;
-    state.scrollPointerId = event.pointerId;
-    state.scrollLastY = event.clientY;
-    dom.scroll.classList.add('is-active');
-    try { dom.scroll.setPointerCapture(event.pointerId); } catch (_) {}
+    if (!state.raf) state.raf = requestAnimationFrame(flushMotion);
     event.preventDefault();
-  }
-
-  function onScrollPointerMove(event) {
-    if (event.pointerId !== state.scrollPointerId) return;
-    const samples = typeof event.getCoalescedEvents === 'function' ? event.getCoalescedEvents() : [event];
-    const points = samples?.length ? samples : [event];
-    let delta = 0;
-    for (const sample of points) {
-      const rawY = sample.clientY - state.scrollLastY;
-      state.scrollLastY = sample.clientY;
-      delta += -rawY * 11.5;
-    }
-    sendScroll(delta);
-    if (event.cancelable) event.preventDefault();
-  }
-
-  function finishScrollPointer(event) {
-    if (event.pointerId !== state.scrollPointerId) return;
-    state.scrollPointerId = null;
-    dom.scroll?.classList.remove('is-active');
-    try { dom.scroll?.releasePointerCapture(event.pointerId); } catch (_) {}
-    if (event.cancelable) event.preventDefault();
   }
 
   function finishPointer(event) {
     if (event.pointerId !== state.pointerId) return;
     const wasTap = !state.moved && performance.now() - state.downAt < 260;
     state.pointerId = null;
-    state.scrollPointerId = null;
     dom.surface?.classList.remove('is-active');
-    dom.scroll?.classList.remove('is-active');
     try { dom.surface?.releasePointerCapture(event.pointerId); } catch (_) {}
     if (wasTap) void sendClick('left');
     event.preventDefault();
@@ -526,12 +408,10 @@
   async function openModal() {
     if (!dom.modal || state.open) return;
     state.open = true;
-    if (dom.modal.parentElement !== document.body) document.body.appendChild(dom.modal);
-    dom.modal.style.zIndex = '2147483647';
     dom.modal.classList.add('is-open');
     dom.modal.setAttribute('aria-hidden', 'false');
     document.body.classList.add('windows-touchpad-open');
-    if (dom.hint) dom.hint.textContent = 'Desliza para mover · toca una vez para clic izquierdo';
+    if (dom.hint) dom.hint.textContent = 'Desliza el dedo para mover el cursor · toca una vez para clic izquierdo';
     await beginSession();
     dom.surface?.focus({ preventScroll: true });
   }
@@ -543,9 +423,7 @@
     dom.modal?.setAttribute('aria-hidden', 'true');
     document.body.classList.remove('windows-touchpad-open');
     state.pointerId = null;
-    state.scrollPointerId = null;
     dom.surface?.classList.remove('is-active');
-    dom.scroll?.classList.remove('is-active');
     await cleanupSession(true);
     setStatus('idle', 'Preparando');
   }
@@ -557,28 +435,9 @@
     dom.left?.addEventListener('click', () => void sendClick('left'));
     dom.right?.addEventListener('click', () => void sendClick('right'));
     dom.surface?.addEventListener('pointerdown', onPointerDown, { passive: false });
-    state.rawInput = !!(dom.surface && 'onpointerrawupdate' in dom.surface);
-    dom.surface?.addEventListener(state.rawInput ? 'pointerrawupdate' : 'pointermove', onPointerMove, { passive: false });
+    dom.surface?.addEventListener('pointermove', onPointerMove, { passive: false });
     dom.surface?.addEventListener('pointerup', finishPointer, { passive: false });
     dom.surface?.addEventListener('pointercancel', finishPointer, { passive: false });
-    dom.scroll?.addEventListener('pointerdown', onScrollPointerDown, { passive: false });
-    dom.scroll?.addEventListener(state.rawInput ? 'pointerrawupdate' : 'pointermove', onScrollPointerMove, { passive: false });
-    dom.scroll?.addEventListener('pointerup', finishScrollPointer, { passive: false });
-    dom.scroll?.addEventListener('pointercancel', finishScrollPointer, { passive: false });
-    dom.scroll?.addEventListener('wheel', (event) => {
-      event.preventDefault();
-      sendScroll(-event.deltaY * 1.3);
-    }, { passive: false });
-    dom.scroll?.addEventListener('keydown', (event) => {
-      const amount = event.shiftKey ? 480 : 180;
-      if (event.key === 'ArrowUp' || event.key === 'PageUp') {
-        event.preventDefault();
-        sendScroll(amount);
-      } else if (event.key === 'ArrowDown' || event.key === 'PageDown') {
-        event.preventDefault();
-        sendScroll(-amount);
-      }
-    });
     dom.surface?.addEventListener('keydown', (event) => {
       const step = event.shiftKey ? 36 : 14;
       const movement = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[event.key];
