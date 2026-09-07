@@ -180,6 +180,11 @@
       if (dx || dy) void sendPointerNative({ type: 'pointerMove', dx, dy });
       return;
     }
+    if (payload.t === 'scroll') {
+      const delta = Math.max(-1440, Math.min(1440, Number(payload.delta) || 0));
+      if (delta) void sendPointerNative({ type: 'pointerWheel', delta });
+      return;
+    }
     if (payload.t === 'click' && (payload.button === 'left' || payload.button === 'right')) {
       void sendPointerNative({ type: 'pointerClick', button: payload.button });
     }
@@ -246,6 +251,14 @@
       if (dx || dy) void sendPointerNative({ type: 'pointerMove', dx, dy });
     }
 
+    const scroll = data?.scrollRelay;
+    const scrollSeq = Number(scroll?.seq) || 0;
+    if (scrollSeq && scrollSeq !== entry.lastScrollSeq) {
+      entry.lastScrollSeq = scrollSeq;
+      const delta = Math.max(-2400, Math.min(2400, Number(scroll.delta) || 0));
+      if (delta) void sendPointerNative({ type: 'pointerWheel', delta });
+    }
+
     const click = data?.clickRelay;
     const clickSeq = Number(click?.seq) || 0;
     if (clickSeq && clickSeq !== entry.lastClickSeq && (click.button === 'left' || click.button === 'right')) {
@@ -266,7 +279,7 @@
 
     let entry = state.pointerPeers.get(sessionId);
     if (!entry) {
-      entry = { pc: null, offerId: null, lastMotionSeq: 0, lastClickSeq: 0, closed: false };
+      entry = { pc: null, offerId: null, lastMotionSeq: 0, lastScrollSeq: 0, lastClickSeq: 0, closed: false };
       state.pointerPeers.set(sessionId, entry);
     }
     handlePointerRelay(data, entry);

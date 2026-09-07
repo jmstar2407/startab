@@ -1,48 +1,43 @@
-# StarTab · Touchpad remoto de Windows
+# StarTab · Touchpad remoto de Windows · Stable + Haptics
 
-## Qué se agregó
+## Arquitectura
 
-- Botón con icono de cursor al inicio de `multimedia-topbar-actions`.
-- Modal responsive de touchpad, a pantalla completa en móvil.
-- Movimiento relativo del cursor con Pointer Events y eventos coalescidos.
-- Toque corto sobre el touchpad = clic izquierdo.
-- Botones dedicados de clic izquierdo y clic derecho.
-- WebRTC DataChannel para movimiento de baja latencia.
-- Firestore como señalización de WebRTC y como respaldo automático cuando no se logra conexión P2P.
-- El documento offscreen mantiene el receptor activo aunque no exista una pestaña de StarTab abierta, mientras Chrome/Edge y la extensión sigan ejecutándose.
-- El agente nativo v2.2 usa `user32.dll -> SendInput` para mover el cursor y ejecutar los clics.
+Esta versión vuelve al pipeline estable de v2.2 para el movimiento del cursor:
 
-## Actualizar el agente de Windows
+`Pointer Events -> requestAnimationFrame -> JSON -> WebRTC DataChannel -> Offscreen -> Native Messaging -> EXE -> SendInput`
 
-El EXE anterior (v2.1 o inferior) no entiende los comandos del cursor. En Windows:
+No usa `pointerrawupdate`, paquetes binarios ni el fast path experimental de v2.3. Firestore sigue siendo señalización y respaldo cuando WebRTC no está disponible.
 
-1. Cierra completamente Chrome/Edge para liberar el agente anterior.
+## Funciones
+
+- Touchpad relativo para mover el cursor.
+- Toque corto = clic izquierdo.
+- Botones dedicados de clic izquierdo y derecho.
+- Banda vertical de **SCROLL** a la derecha: dedo hacia arriba = scroll arriba; dedo hacia abajo = scroll abajo.
+- Modal elevado al `body` con `z-index: 2147483647` para quedar por encima del resto de StarTab.
+- Respuesta háptica en móviles compatibles: textura ligera al mover, ticks de scroll, clics, dial de volumen y mute.
+
+## Agente Windows
+
+El agente es v2.2.1. Mantiene el comportamiento estable de v2.2 y añade únicamente `pointerWheel` para el scroll. Usa `user32!SendInput` y no abre puertos ni se conecta directamente a Firebase.
+
+Para actualizarlo:
+
+1. Cierra completamente Chrome/Edge.
 2. Abre `windows-native-host`.
-3. Ejecuta `build.bat` (requiere .NET SDK 8+ solamente para compilar).
-4. Ejecuta `dist\\StartabWindowsVolume.exe`.
-5. Pega el ID de tu extensión StarTab cuando lo solicite.
-6. Abre Chrome/Edge y recarga la extensión.
-
-El panel del touchpad comprueba `agentVersion` y avisará **Actualiza EXE** si el PC todavía usa una versión anterior a 2.2.
+3. Ejecuta `build.bat` (requiere .NET SDK 8+ para compilar).
+4. Ejecuta `dist\StartabWindowsVolume.exe`.
+5. Pega el ID de la extensión cuando lo solicite.
+6. Abre Chrome/Edge y recarga StarTab.
 
 ## Firestore
 
-Además del acceso a `users/{uid}/windowsDevices/{deviceId}`, las reglas deben permitir las sesiones efímeras:
+Las sesiones efímeras siguen usando:
 
-```text
-users/{uid}/windowsDevices/{deviceId}/pointerSessions/{sessionId}
-```
+`users/{uid}/windowsDevices/{deviceId}/pointerSessions/{sessionId}`
 
-Usa el bloque incluido en `windows-native-host/firestore.rules.snippet` si tus reglas actuales no cubren subcolecciones con un wildcard más amplio.
+El mismo documento puede contener `motionRelay`, `scrollRelay` y `clickRelay` cuando se usa el respaldo por Firebase.
 
-## Transporte
+## Haptics
 
-El movimiento intenta primero:
-
-`Móvil -> Firestore (señalización) -> WebRTC DataChannel -> Offscreen de StarTab -> Native Messaging -> EXE -> SendInput`
-
-Si la red/NAT impide WebRTC, cambia automáticamente a:
-
-`Móvil -> Firestore (relay coalescido) -> Offscreen de StarTab -> Native Messaging -> EXE -> SendInput`
-
-El EXE no contiene credenciales, no abre un servidor y no se conecta directamente a Firebase.
+La vibración se activa solo cuando `navigator.vibrate()` está disponible y el dispositivo tiene entrada táctil/coarse. Los pulsos se agrupan y limitan para no saturar el motor de vibración. Si el navegador no ofrece esa API, StarTab continúa funcionando sin vibración.

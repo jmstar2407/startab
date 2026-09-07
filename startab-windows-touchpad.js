@@ -7,6 +7,7 @@
   const SESSION_TTL_MS = 5 * 60_000;
   const RELAY_INTERVAL_MS = 95;
   const ICE_TIMEOUT_MS = 3200;
+  const SCROLL_RELAY_INTERVAL_MS = 80;
   const SELECTED_DEVICE_KEY = 'startab_windows_volume_selected_device_v2';
   const CLIENT_ID_KEY = 'startab_windows_pointer_client_v1';
   const RTC_CONFIG = {
@@ -44,6 +45,11 @@
     relayDy: 0,
     relaySeq: 0,
     clickSeq: 0,
+    scrollPointerId: null,
+    scrollLastY: 0,
+    scrollDy: 0,
+    scrollRelayTimer: 0,
+    scrollSeq: 0,
   };
 
   const dom = {};
@@ -52,7 +58,10 @@
 
   function supportsPointerAgent(version) {
     const parts = String(version || '').split('.').map((part) => Number.parseInt(part, 10) || 0);
-    return (parts[0] || 0) > 2 || ((parts[0] || 0) === 2 && (parts[1] || 0) >= 2);
+    if ((parts[0] || 0) > 2) return true;
+    if ((parts[0] || 0) !== 2) return false;
+    if ((parts[1] || 0) > 2) return true;
+    return (parts[1] || 0) === 2 && (parts[2] || 0) >= 1;
   }
 
   const clientId = (() => {
@@ -73,6 +82,7 @@
     dom.backdrop = $('windows-touchpad-backdrop');
     dom.close = $('windows-touchpad-close');
     dom.surface = $('windows-touchpad-surface');
+    dom.scroll = $('windows-touchpad-scroll');
     dom.left = $('windows-touchpad-left');
     dom.right = $('windows-touchpad-right');
     dom.connection = $('windows-touchpad-connection');
@@ -182,9 +192,12 @@
     state.unsubscribeSession = null;
     closePeer();
     clearTimeout(state.relayTimer);
+    clearTimeout(state.scrollRelayTimer);
     state.relayTimer = 0;
+    state.scrollRelayTimer = 0;
     state.relayDx = 0;
     state.relayDy = 0;
+    state.scrollDy = 0;
     const ref = state.sessionRef;
     state.sessionRef = null;
     state.sessionId = null;
@@ -262,7 +275,7 @@
       return;
     }
     if (!supportsPointerAgent(device.data.agentVersion)) {
-      setStatus('error', 'Actualiza EXE', 'Este PC usa un agente anterior. Compila e instala StartabWindowsVolume.exe v2.2 para habilitar el cursor remoto.');
+      setStatus('error', 'Actualiza EXE', 'Este PC usa un agente anterior. Compila e instala StartabWindowsVolume.exe v2.2.1 para habilitar cursor y scroll remoto.');
       return;
     }
 
@@ -333,8 +346,37 @@
     queueRelayMotion(dx, dy);
   }
 
+  function queueRelayScroll(delta) {
+    state.scrollDy += delta;
+    if (state.scrollRelayTimer) return;
+    state.scrollRelayTimer = window.setTimeout(async () => {
+      state.scrollRelayTimer = 0;
+      const wheel = state.scrollDy;
+      state.scrollDy = 0;
+      if (!state.sessionRef || !wheel) return;
+      state.scrollSeq += 1;
+      try {
+        await state.sessionRef.set({
+          scrollRelay: { seq: state.scrollSeq, delta: Math.round(wheel), clientAt: Date.now() },
+          expiresAtClient: Date.now() + SESSION_TTL_MS,
+        }, { merge: true });
+      } catch (_) {}
+    }, SCROLL_RELAY_INTERVAL_MS);
+  }
+
+  function sendScroll(delta) {
+    delta = clamp(delta, -720, 720);
+    if (!delta) return;
+    const payload = JSON.stringify({ t: 'scroll', delta: Math.round(delta) });
+    if (channelOpen(state.motionChannel)) {
+      try { state.motionChannel.send(payload); return; } catch (_) {}
+    }
+    queueRelayScroll(delta);
+  }
+
   async function sendClick(button) {
     if (!['left', 'right'].includes(button)) return;
+    globalThis.StartabHaptics?.click?.(button);
     const payload = JSON.stringify({ t: 'click', button });
     if (channelOpen(state.controlChannel)) {
       try { state.controlChannel.send(payload); return; } catch (_) {}
@@ -372,6 +414,8 @@
     state.lastY = event.clientY;
     state.moved = false;
     state.downAt = performance.now();
+    globalThis.StartabHaptics?.resetTexture?.('touchpad-move');
+    globalThis.StartabHaptics?.pulse?.('touchpad-start', 6, 90);
     dom.surface.classList.add('is-active');
     try { dom.surface.setPointerCapture(event.pointerId); } catch (_) {}
     event.preventDefault();
@@ -387,6 +431,11 @@
       state.lastX = sample.clientX;
       state.lastY = sample.clientY;
       if (Math.abs(rawX) + Math.abs(rawY) > 0.4) state.moved = true;
+      globalThis.StartabHaptics?.texture?.('touchpad-move', Math.hypot(rawX, rawY), {
+        threshold: 16,
+        duration: 5,
+        minInterval: 48,
+      });
       const { dx, dy } = acceleratedDelta(rawX, rawY);
       state.motionDx += dx;
       state.motionDy += dy;
@@ -405,9 +454,49 @@
     event.preventDefault();
   }
 
+  function onScrollPointerDown(event) {
+    if (!state.open || !dom.scroll || state.scrollPointerId !== null) return;
+    state.scrollPointerId = event.pointerId;
+    state.scrollLastY = event.clientY;
+    globalThis.StartabHaptics?.resetTexture?.('touchpad-scroll');
+    globalThis.StartabHaptics?.pulse?.('scroll-start', 7, 90);
+    dom.scroll.classList.add('is-active');
+    try { dom.scroll.setPointerCapture(event.pointerId); } catch (_) {}
+    event.preventDefault();
+  }
+
+  function onScrollPointerMove(event) {
+    if (event.pointerId !== state.scrollPointerId) return;
+    const samples = typeof event.getCoalescedEvents === 'function' ? event.getCoalescedEvents() : [event];
+    const points = samples?.length ? samples : [event];
+    let delta = 0;
+    for (const sample of points) {
+      const rawY = sample.clientY - state.scrollLastY;
+      state.scrollLastY = sample.clientY;
+      delta += -rawY * 11.5;
+      globalThis.StartabHaptics?.texture?.('touchpad-scroll', Math.abs(rawY), {
+        threshold: 10,
+        duration: 7,
+        minInterval: 38,
+      });
+    }
+    sendScroll(delta);
+    event.preventDefault();
+  }
+
+  function finishScrollPointer(event) {
+    if (event.pointerId !== state.scrollPointerId) return;
+    state.scrollPointerId = null;
+    dom.scroll?.classList.remove('is-active');
+    try { dom.scroll?.releasePointerCapture(event.pointerId); } catch (_) {}
+    event.preventDefault();
+  }
+
   async function openModal() {
     if (!dom.modal || state.open) return;
     state.open = true;
+    if (dom.modal.parentElement !== document.body) document.body.appendChild(dom.modal);
+    dom.modal.style.zIndex = '2147483647';
     dom.modal.classList.add('is-open');
     dom.modal.setAttribute('aria-hidden', 'false');
     document.body.classList.add('windows-touchpad-open');
@@ -423,7 +512,9 @@
     dom.modal?.setAttribute('aria-hidden', 'true');
     document.body.classList.remove('windows-touchpad-open');
     state.pointerId = null;
+    state.scrollPointerId = null;
     dom.surface?.classList.remove('is-active');
+    dom.scroll?.classList.remove('is-active');
     await cleanupSession(true);
     setStatus('idle', 'Preparando');
   }
@@ -438,6 +529,24 @@
     dom.surface?.addEventListener('pointermove', onPointerMove, { passive: false });
     dom.surface?.addEventListener('pointerup', finishPointer, { passive: false });
     dom.surface?.addEventListener('pointercancel', finishPointer, { passive: false });
+    dom.scroll?.addEventListener('pointerdown', onScrollPointerDown, { passive: false });
+    dom.scroll?.addEventListener('pointermove', onScrollPointerMove, { passive: false });
+    dom.scroll?.addEventListener('pointerup', finishScrollPointer, { passive: false });
+    dom.scroll?.addEventListener('pointercancel', finishScrollPointer, { passive: false });
+    dom.scroll?.addEventListener('wheel', (event) => {
+      event.preventDefault();
+      sendScroll(-event.deltaY * 1.3);
+    }, { passive: false });
+    dom.scroll?.addEventListener('keydown', (event) => {
+      const amount = event.shiftKey ? 480 : 180;
+      if (event.key === 'ArrowUp' || event.key === 'PageUp') {
+        event.preventDefault();
+        sendScroll(amount);
+      } else if (event.key === 'ArrowDown' || event.key === 'PageDown') {
+        event.preventDefault();
+        sendScroll(-amount);
+      }
+    });
     dom.surface?.addEventListener('keydown', (event) => {
       const step = event.shiftKey ? 36 : 14;
       const movement = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[event.key];

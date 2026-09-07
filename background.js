@@ -109,7 +109,7 @@ const MENU_ROOT='startab-add-root';const MENU_PREFIX='startab-add-category-';con
     if (!nativePort || !nativeConnected) return false;
     if (!command || typeof command !== 'object') return false;
     const type = String(command.type || '');
-    if (!['getState', 'setVolume', 'setMute', 'toggleMute', 'step', 'pointerMove', 'pointerClick', 'ping'].includes(type)) return false;
+    if (!['getState', 'setVolume', 'setMute', 'toggleMute', 'step', 'pointerMove', 'pointerWheel', 'pointerClick', 'ping'].includes(type)) return false;
     try {
       nativePort.postMessage(command);
       return true;

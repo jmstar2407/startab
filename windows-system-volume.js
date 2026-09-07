@@ -21,6 +21,7 @@
     statusTimer: 0,
     dialDragging: false,
     dialValue: 0,
+    dialHapticBucket: null,
     mobileLayoutMql: null,
     optimisticVolume: null,
     optimisticMuted: null,
@@ -265,6 +266,11 @@
   function commitDialVolume(value, final = false) {
     if (!dom.dial || dom.dial.getAttribute('aria-disabled') === 'true') return;
     const normalized = clamp(value, 0, 100);
+    const hapticBucket = Math.round((normalized / 100) * (DIAL_SEGMENTS - 1));
+    if (hapticBucket !== state.dialHapticBucket) {
+      state.dialHapticBucket = hapticBucket;
+      globalThis.StartabHaptics?.pulse?.('windows-volume-dial', 6, 28);
+    }
     holdOptimisticState({ volume: normalized, muted: false });
     renderDial(normalized, false);
     if (dom.range) dom.range.value = String(Math.round(normalized));
@@ -613,6 +619,8 @@
       if (event.target.closest?.('button')) return;
       if (dom.dial.getAttribute('aria-disabled') === 'true') return;
       state.dialDragging = true;
+      state.dialHapticBucket = null;
+      globalThis.StartabHaptics?.resetTexture?.('windows-volume-dial');
       dom.dial.classList.add('is-dragging');
       try { dom.dial.setPointerCapture(event.pointerId); } catch (_) {}
       event.preventDefault();
@@ -640,6 +648,7 @@
     });
     dom.dialMute?.addEventListener('click', async () => {
       const nextMuted = !effectiveMuted();
+      globalThis.StartabHaptics?.mute?.(nextMuted);
       holdOptimisticState({ muted: nextMuted });
       render();
       const ok = await sendCommand('toggleMute');
@@ -673,6 +682,7 @@
 
     dom.mute?.addEventListener('click', async () => {
       const nextMuted = !effectiveMuted();
+      globalThis.StartabHaptics?.mute?.(nextMuted);
       holdOptimisticState({ muted: nextMuted });
       render();
       const ok = await sendCommand('toggleMute');

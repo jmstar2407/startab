@@ -1,4 +1,4 @@
-# StarTab · Control remoto de Windows v2.2
+# StarTab · Control remoto de Windows v2.2.1 · Stable
 
 ## Arquitectura simplificada
 
@@ -65,10 +65,15 @@ Esta versión mantiene el puente `mediaRemote` dentro del documento offscreen de
 
 El botón con icono de cursor dentro de **Controles multimedia** abre un touchpad remoto. El móvil usa Firestore para señalizar la sesión y, cuando es posible, crea un **WebRTC DataChannel** directo con el documento offscreen del PC para enviar movimientos con baja latencia. Si WebRTC no logra establecerse por la red/NAT, StarTab usa automáticamente un modo de respaldo por Firestore.
 
-El agente nativo v2.2 ejecuta el movimiento y los clics mediante `SendInput` de Windows. El EXE sigue sin conectarse directamente a Firebase.
+El agente nativo v2.2.1 ejecuta movimiento, scroll y clics mediante `SendInput` de Windows. El movimiento conserva el pipeline estable de v2.2. El EXE sigue sin conectarse directamente a Firebase.
 
 Rutas adicionales usadas:
 
 `users/{uid}/windowsDevices/{deviceId}/pointerSessions/{sessionId}`
 
 Asegúrate de añadir también el bloque `pointerSessions` incluido en `windows-native-host/firestore.rules.snippet`.
+
+
+## Respuesta háptica móvil
+
+StarTab incluye `startab-haptics.js`, una capa ligera que usa la API de vibración del navegador cuando el dispositivo móvil la permite. Produce pulsos cortos y limitados por frecuencia para evitar una vibración continua: textura al desplazar el touchpad, pasos en la banda de scroll, respuesta diferenciada en clic izquierdo/derecho, dientes al girar `windows-volume-dial` y patrón al activar/desactivar mute. En navegadores que no exponen vibración, la interfaz sigue funcionando normalmente sin errores.
