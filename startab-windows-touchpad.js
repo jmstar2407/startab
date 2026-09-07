@@ -8,6 +8,7 @@
   const RELAY_INTERVAL_MS = 95;
   const ICE_TIMEOUT_MS = 3200;
   const SCROLL_RELAY_INTERVAL_MS = 80;
+  const KEYBOARD_RELAY_INTERVAL_MS = 55;
   const SELECTED_DEVICE_KEY = 'startab_windows_volume_selected_device_v2';
   const CLIENT_ID_KEY = 'startab_windows_pointer_client_v1';
   const RTC_CONFIG = {
@@ -50,16 +51,36 @@
     scrollDy: 0,
     scrollRelayTimer: 0,
     scrollSeq: 0,
+    buttonSeq: 0,
+    keyboardSeq: 0,
+    keyboardOps: [],
+    keyboardRelayTimer: 0,
+    dragLocked: false,
+    keyboardComposing: false,
+    skipNextInput: false,
+    skipInputTimer: 0,
+    agentVersion: '',
+    capabilities: { pointer: false, scroll: false, advanced: false },
   };
 
   const dom = {};
   const $ = (id) => document.getElementById(id);
   const clamp = (value, min, max) => Math.min(max, Math.max(min, Number(value) || 0));
 
-  function supportsPointerAgent(version) {
+  function versionAtLeast(version, major, minor = 0, patch = 0) {
     const parts = String(version || '').split('.').map((part) => Number.parseInt(part, 10) || 0);
-    return (parts[0] || 0) > 2 || ((parts[0] || 0) === 2 && (parts[1] || 0) >= 2);
+    const current = [parts[0] || 0, parts[1] || 0, parts[2] || 0];
+    const wanted = [major, minor, patch];
+    for (let index = 0; index < 3; index += 1) {
+      if (current[index] > wanted[index]) return true;
+      if (current[index] < wanted[index]) return false;
+    }
+    return true;
   }
+
+  const supportsPointerAgent = (version) => versionAtLeast(version, 2, 2, 0);
+  const supportsScrollAgent = (version) => versionAtLeast(version, 2, 2, 1);
+  const supportsAdvancedAgent = (version) => versionAtLeast(version, 2, 3, 0);
 
   const clientId = (() => {
     try {
@@ -88,6 +109,10 @@
     dom.hint = $('windows-touchpad-hint');
     dom.note = $('windows-touchpad-note');
     dom.deviceSelect = $('windows-device-select');
+    dom.keyboard = $('windows-touchpad-keyboard');
+    dom.keyboardInput = $('windows-touchpad-keyboard-input');
+    dom.keyboardState = $('windows-touchpad-keyboard-state');
+    dom.dragLock = $('windows-touchpad-drag-lock');
   }
 
   function readSavedUser() {
@@ -112,6 +137,35 @@
     if (dom.connection) dom.connection.dataset.state = kind;
     if (dom.connectionText) dom.connectionText.textContent = text;
     if (note && dom.note) dom.note.textContent = note;
+  }
+
+  function renderCapabilityUi() {
+    const { scroll, advanced } = state.capabilities;
+    if (dom.scroll) {
+      dom.scroll.setAttribute('aria-disabled', scroll ? 'false' : 'true');
+      dom.scroll.tabIndex = scroll ? 0 : -1;
+      dom.scroll.title = scroll ? 'Desliza para hacer scroll en Windows' : 'El scroll requiere el agente Windows v2.2.1 o superior';
+    }
+    if (dom.keyboardInput) {
+      dom.keyboardInput.disabled = !advanced;
+      dom.keyboardInput.placeholder = advanced ? 'Escribe en la PC…' : 'Actualiza el EXE para usar teclado remoto';
+    }
+    if (dom.keyboard) dom.keyboard.classList.toggle('is-ready', advanced);
+    if (dom.keyboardState) dom.keyboardState.textContent = advanced ? 'TECLADO REMOTO' : 'REQUIERE EXE 2.3';
+    if (dom.dragLock) {
+      dom.dragLock.disabled = !advanced;
+      dom.dragLock.title = advanced ? 'Mantener clic izquierdo para arrastrar' : 'El arrastre bloqueado requiere el agente Windows v2.3.0 o superior';
+    }
+  }
+
+  function applyAgentCapabilities(version) {
+    state.agentVersion = String(version || '');
+    state.capabilities = {
+      pointer: supportsPointerAgent(state.agentVersion),
+      scroll: supportsScrollAgent(state.agentVersion),
+      advanced: supportsAdvancedAgent(state.agentVersion),
+    };
+    renderCapabilityUi();
   }
 
   function selectedDeviceId() {
@@ -190,11 +244,17 @@
     closePeer();
     clearTimeout(state.relayTimer);
     clearTimeout(state.scrollRelayTimer);
+    clearTimeout(state.keyboardRelayTimer);
+    clearTimeout(state.skipInputTimer);
     state.relayTimer = 0;
     state.scrollRelayTimer = 0;
+    state.keyboardRelayTimer = 0;
+    state.skipInputTimer = 0;
+    state.skipNextInput = false;
     state.relayDx = 0;
     state.relayDy = 0;
     state.scrollDy = 0;
+    state.keyboardOps = [];
     const ref = state.sessionRef;
     state.sessionRef = null;
     state.sessionId = null;
@@ -271,7 +331,8 @@
       setStatus('error', 'Desconectado', 'El PC seleccionado no está en línea.');
       return;
     }
-    if (!supportsPointerAgent(device.data.agentVersion)) {
+    applyAgentCapabilities(device.data.agentVersion);
+    if (!state.capabilities.pointer) {
       setStatus('error', 'Actualiza EXE', 'Este PC usa un agente anterior. El cursor remoto requiere StartabWindowsVolume.exe v2.2.0 o superior.');
       return;
     }
@@ -362,6 +423,7 @@
   }
 
   function sendScroll(delta) {
+    if (!state.capabilities.scroll) return;
     delta = clamp(delta, -720, 720);
     if (!delta) return;
     const payload = JSON.stringify({ t: 'scroll', delta: Math.round(delta) });
@@ -373,6 +435,10 @@
 
   async function sendClick(button) {
     if (!['left', 'right'].includes(button)) return;
+    if (button === 'left' && state.dragLocked) {
+      await setDragLocked(false);
+      return;
+    }
     globalThis.StartabHaptics?.click?.(button);
     const payload = JSON.stringify({ t: 'click', button });
     if (channelOpen(state.controlChannel)) {
@@ -386,6 +452,109 @@
         expiresAtClient: Date.now() + SESSION_TTL_MS,
       }, { merge: true });
     } catch (_) {}
+  }
+
+  async function sendButtonState(button, down) {
+    if (!state.capabilities.advanced || !['left', 'right'].includes(button)) return false;
+    const payload = JSON.stringify({ t: 'button', button, down: !!down });
+    if (channelOpen(state.controlChannel)) {
+      try {
+        state.controlChannel.send(payload);
+        return true;
+      } catch (_) {}
+    }
+    if (!state.sessionRef) return false;
+    state.buttonSeq += 1;
+    try {
+      await state.sessionRef.set({
+        buttonRelay: { seq: state.buttonSeq, button, down: !!down, clientAt: Date.now() },
+        expiresAtClient: Date.now() + SESSION_TTL_MS,
+      }, { merge: true });
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function queueKeyboardRelay(operation) {
+    if (!state.sessionRef || !state.capabilities.advanced || !operation) return;
+    state.keyboardSeq += 1;
+    state.keyboardOps.push({ seq: state.keyboardSeq, ...operation });
+    if (state.keyboardOps.length > 40) state.keyboardOps.splice(0, state.keyboardOps.length - 40);
+    if (state.keyboardRelayTimer) return;
+    state.keyboardRelayTimer = window.setTimeout(async () => {
+      state.keyboardRelayTimer = 0;
+      if (!state.sessionRef || !state.keyboardOps.length) return;
+      try {
+        await state.sessionRef.set({
+          keyboardRelay: { ops: state.keyboardOps.slice(-40), clientAt: Date.now() },
+          expiresAtClient: Date.now() + SESSION_TTL_MS,
+        }, { merge: true });
+      } catch (_) {}
+    }, KEYBOARD_RELAY_INTERVAL_MS);
+  }
+
+  function markKeyboardActivity() {
+    if (!dom.keyboard || !dom.keyboardState) return;
+    dom.keyboard.classList.add('is-sending');
+    dom.keyboardState.textContent = 'ENVIANDO';
+    clearTimeout(markKeyboardActivity.timer);
+    markKeyboardActivity.timer = window.setTimeout(() => {
+      dom.keyboard?.classList.remove('is-sending');
+      if (dom.keyboardState) dom.keyboardState.textContent = state.capabilities.advanced ? 'TECLADO REMOTO' : 'REQUIERE EXE 2.3';
+    }, 180);
+  }
+
+  function sendKeyboardText(text) {
+    if (!state.capabilities.advanced) return;
+    const normalized = String(text || '').slice(0, 2048);
+    if (!normalized) return;
+    markKeyboardActivity();
+    globalThis.StartabHaptics?.pulse?.('remote-keyboard', 4, 34);
+    const payload = JSON.stringify({ t: 'text', text: normalized });
+    if (channelOpen(state.controlChannel)) {
+      try { state.controlChannel.send(payload); return; } catch (_) {}
+    }
+    queueKeyboardRelay({ kind: 'text', text: normalized });
+  }
+
+  function sendKeyboardKey(key) {
+    if (!state.capabilities.advanced) return;
+    const normalized = String(key || '').toLowerCase();
+    if (!['backspace', 'delete', 'enter', 'tab'].includes(normalized)) return;
+    markKeyboardActivity();
+    globalThis.StartabHaptics?.pulse?.(`remote-key-${normalized}`, normalized === 'enter' ? 8 : 5, 42);
+    const payload = JSON.stringify({ t: 'key', key: normalized });
+    if (channelOpen(state.controlChannel)) {
+      try { state.controlChannel.send(payload); return; } catch (_) {}
+    }
+    queueKeyboardRelay({ kind: 'key', key: normalized });
+  }
+
+  function renderDragLock() {
+    if (dom.dragLock) {
+      dom.dragLock.classList.toggle('is-active', state.dragLocked);
+      dom.dragLock.setAttribute('aria-pressed', state.dragLocked ? 'true' : 'false');
+      dom.dragLock.setAttribute('aria-label', state.dragLocked ? 'Soltar clic izquierdo sostenido' : 'Mantener pulsado el clic izquierdo para arrastrar');
+    }
+    dom.surface?.classList.toggle('is-drag-locked', state.dragLocked);
+    if (dom.hint) {
+      dom.hint.textContent = state.dragLocked
+        ? 'Clic izquierdo sostenido · mueve el cursor para arrastrar'
+        : 'Desliza para mover · toca una vez para clic izquierdo';
+    }
+  }
+
+  async function setDragLocked(enabled, { haptic = true } = {}) {
+    const next = !!enabled;
+    if (next === state.dragLocked) return true;
+    if (next && !state.capabilities.advanced) return false;
+    const ok = await sendButtonState('left', next);
+    if (!ok) return false;
+    state.dragLocked = next;
+    if (haptic) globalThis.StartabHaptics?.pulse?.(next ? 'drag-lock-on' : 'drag-lock-off', next ? 16 : 10, 70);
+    renderDragLock();
+    return true;
   }
 
   function flushMotion() {
@@ -447,12 +616,12 @@
     state.pointerId = null;
     dom.surface?.classList.remove('is-active');
     try { dom.surface?.releasePointerCapture(event.pointerId); } catch (_) {}
-    if (wasTap) void sendClick('left');
+    if (wasTap && !state.dragLocked) void sendClick('left');
     event.preventDefault();
   }
 
   function onScrollPointerDown(event) {
-    if (!state.open || !dom.scroll || state.scrollPointerId !== null) return;
+    if (!state.open || !dom.scroll || !state.capabilities.scroll || state.scrollPointerId !== null) return;
     state.scrollPointerId = event.pointerId;
     state.scrollLastY = event.clientY;
     globalThis.StartabHaptics?.resetTexture?.('touchpad-scroll');
@@ -492,26 +661,31 @@
   async function openModal() {
     if (!dom.modal || state.open) return;
     state.open = true;
+    state.dragLocked = false;
+    applyAgentCapabilities('');
+    renderDragLock();
     if (dom.modal.parentElement !== document.body) document.body.appendChild(dom.modal);
     dom.modal.style.zIndex = '2147483647';
     dom.modal.classList.add('is-open');
     dom.modal.setAttribute('aria-hidden', 'false');
     document.body.classList.add('windows-touchpad-open');
     if (dom.hint) dom.hint.textContent = 'Desliza el dedo para mover el cursor · toca una vez para clic izquierdo';
-    await beginSession();
     dom.surface?.focus({ preventScroll: true });
+    await beginSession();
   }
 
   async function closeModal() {
     if (!state.open) return;
+    if (state.dragLocked) await setDragLocked(false, { haptic: false });
     state.open = false;
     dom.modal?.classList.remove('is-open');
     dom.modal?.setAttribute('aria-hidden', 'true');
     document.body.classList.remove('windows-touchpad-open');
     state.pointerId = null;
     state.scrollPointerId = null;
-    dom.surface?.classList.remove('is-active');
+    dom.surface?.classList.remove('is-active', 'is-drag-locked');
     dom.scroll?.classList.remove('is-active');
+    if (dom.keyboardInput) dom.keyboardInput.value = '';
     await cleanupSession(true);
     setStatus('idle', 'Preparando');
   }
@@ -520,8 +694,68 @@
     dom.toggle?.addEventListener('click', () => void openModal());
     dom.close?.addEventListener('click', () => void closeModal());
     dom.backdrop?.addEventListener('click', () => void closeModal());
-    dom.left?.addEventListener('click', () => void sendClick('left'));
+    dom.left?.addEventListener('click', () => {
+      if (state.dragLocked) void setDragLocked(false);
+      else void sendClick('left');
+    });
     dom.right?.addEventListener('click', () => void sendClick('right'));
+    dom.dragLock?.addEventListener('pointerdown', (event) => {
+      event.stopPropagation();
+    }, { passive: true });
+    dom.dragLock?.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      void setDragLocked(!state.dragLocked);
+    });
+    dom.keyboard?.addEventListener('submit', (event) => event.preventDefault());
+    dom.keyboardInput?.addEventListener('compositionstart', () => {
+      state.keyboardComposing = true;
+    });
+    dom.keyboardInput?.addEventListener('compositionend', (event) => {
+      state.keyboardComposing = false;
+      state.skipNextInput = true;
+      clearTimeout(state.skipInputTimer);
+      state.skipInputTimer = window.setTimeout(() => { state.skipNextInput = false; }, 80);
+      const text = String(event.data || dom.keyboardInput?.value || '');
+      if (text) sendKeyboardText(text);
+      if (dom.keyboardInput) dom.keyboardInput.value = '';
+    });
+    dom.keyboardInput?.addEventListener('input', (event) => {
+      if (state.keyboardComposing || event.isComposing) return;
+      if (state.skipNextInput) {
+        state.skipNextInput = false;
+        clearTimeout(state.skipInputTimer);
+        state.skipInputTimer = 0;
+        if (dom.keyboardInput) dom.keyboardInput.value = '';
+        return;
+      }
+      const inputType = String(event.inputType || '');
+      if (inputType.startsWith('deleteContentBackward')) sendKeyboardKey('backspace');
+      else if (inputType.startsWith('deleteContentForward')) sendKeyboardKey('delete');
+      else if (inputType === 'insertLineBreak' || inputType === 'insertParagraph') sendKeyboardKey('enter');
+      else {
+        const text = event.data ?? dom.keyboardInput?.value ?? '';
+        if (text) sendKeyboardText(text);
+      }
+      if (dom.keyboardInput) dom.keyboardInput.value = '';
+    });
+    dom.keyboardInput?.addEventListener('keydown', (event) => {
+      if (event.isComposing || state.keyboardComposing) return;
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        sendKeyboardKey('enter');
+        if (dom.keyboardInput) dom.keyboardInput.value = '';
+      } else if (event.key === 'Tab') {
+        event.preventDefault();
+        sendKeyboardKey('tab');
+      } else if (event.key === 'Backspace' && !dom.keyboardInput?.value) {
+        event.preventDefault();
+        sendKeyboardKey('backspace');
+      } else if (event.key === 'Delete' && !dom.keyboardInput?.value) {
+        event.preventDefault();
+        sendKeyboardKey('delete');
+      }
+    });
     dom.surface?.addEventListener('pointerdown', onPointerDown, { passive: false });
     dom.surface?.addEventListener('pointermove', onPointerMove, { passive: false });
     dom.surface?.addEventListener('pointerup', finishPointer, { passive: false });
@@ -531,10 +765,12 @@
     dom.scroll?.addEventListener('pointerup', finishScrollPointer, { passive: false });
     dom.scroll?.addEventListener('pointercancel', finishScrollPointer, { passive: false });
     dom.scroll?.addEventListener('wheel', (event) => {
+      if (!state.capabilities.scroll) return;
       event.preventDefault();
       sendScroll(-event.deltaY * 1.3);
     }, { passive: false });
     dom.scroll?.addEventListener('keydown', (event) => {
+      if (!state.capabilities.scroll) return;
       const amount = event.shiftKey ? 480 : 180;
       if (event.key === 'ArrowUp' || event.key === 'PageUp') {
         event.preventDefault();
@@ -564,7 +800,13 @@
       event.stopImmediatePropagation();
       void closeModal();
     }, true);
-    window.addEventListener('pagehide', () => { void cleanupSession(true); });
+    window.addEventListener('pagehide', () => {
+      if (state.dragLocked) {
+        void setDragLocked(false, { haptic: false }).finally(() => cleanupSession(true));
+      } else {
+        void cleanupSession(true);
+      }
+    });
   }
 
   function connectFirebase() {

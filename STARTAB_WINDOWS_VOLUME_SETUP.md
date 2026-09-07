@@ -1,4 +1,4 @@
-# StarTab · Control remoto de Windows v2.2.1 · Stable
+# StarTab · Control remoto de Windows v2.3.0 · Stable
 
 ## Arquitectura simplificada
 
@@ -65,13 +65,13 @@ Esta versión mantiene el puente `mediaRemote` dentro del documento offscreen de
 
 El botón con icono de cursor dentro de **Controles multimedia** abre un touchpad remoto. El móvil usa Firestore para señalizar la sesión y, cuando es posible, crea un **WebRTC DataChannel** directo con el documento offscreen del PC para enviar movimientos con baja latencia. Si WebRTC no logra establecerse por la red/NAT, StarTab usa automáticamente un modo de respaldo por Firestore.
 
-El agente nativo v2.2.1 ejecuta movimiento, scroll y clics mediante `SendInput` de Windows. El movimiento conserva el pipeline estable de v2.2. El EXE sigue sin conectarse directamente a Firebase.
+El agente nativo v2.3.0 ejecuta movimiento, scroll, clics, clic sostenido y entrada de teclado mediante `SendInput` de Windows. El movimiento conserva el pipeline estable de v2.2. Compatibilidad: cursor/clic desde v2.2.0, scroll desde v2.2.1 y teclado remoto + modo ARRASTRAR desde v2.3.0. El EXE sigue sin conectarse directamente a Firebase.
 
 Rutas adicionales usadas:
 
 `users/{uid}/windowsDevices/{deviceId}/pointerSessions/{sessionId}`
 
-Asegúrate de añadir también el bloque `pointerSessions` incluido en `windows-native-host/firestore.rules.snippet`.
+Asegúrate de añadir también el bloque `pointerSessions` incluido en `windows-native-host/firestore.rules.snippet`. La misma sesión transporta, cuando hace falta el fallback, movimiento, scroll, clic, estado de botón y operaciones ordenadas de teclado.
 
 
 ## Respuesta háptica móvil

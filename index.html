@@ -275,12 +275,25 @@
 </div>
 </header>
 <div class="windows-touchpad-body">
+<form class="windows-touchpad-keyboard" id="windows-touchpad-keyboard" autocomplete="off">
+<label class="windows-touchpad-keyboard-shell" for="windows-touchpad-keyboard-input">
+<span class="windows-touchpad-keyboard-icon" aria-hidden="true">
+<svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.65" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="3"></rect><path d="M7 10h.01M10 10h.01M13 10h.01M16 10h.01M7 13h.01M10 13h.01M13 13h4M8 16h8"></path></svg>
+</span>
+<input id="windows-touchpad-keyboard-input" type="text" inputmode="text" enterkeyhint="enter" autocomplete="off" autocorrect="off" autocapitalize="sentences" spellcheck="false" placeholder="Escribe en la PC…" aria-label="Teclado remoto de Windows" disabled>
+<span class="windows-touchpad-keyboard-state" id="windows-touchpad-keyboard-state">TECLADO REMOTO</span>
+</label>
+</form>
 <div class="windows-touchpad-main">
 <div class="windows-touchpad-surface" id="windows-touchpad-surface" tabindex="0" role="application" aria-label="Área táctil para mover el cursor de Windows">
 <div class="windows-touchpad-grid" aria-hidden="true"></div>
 <div class="windows-touchpad-cursor-mark" aria-hidden="true">
 <svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.55" viewBox="0 0 24 24"><path d="M5.3 3.8 18.7 11c.8.4.7 1.6-.2 1.8l-5.4 1.2-2.4 5.1c-.4.9-1.7.8-2-.1L4 5c-.3-.9.5-1.7 1.3-1.2Z"></path><path d="m13.2 14 4.3 4.3"></path></svg>
 </div>
+<button class="windows-touchpad-drag-lock" id="windows-touchpad-drag-lock" type="button" aria-pressed="false" aria-label="Mantener pulsado el clic izquierdo para arrastrar" title="Mantener clic izquierdo" disabled>
+<svg aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" viewBox="0 0 24 24"><rect x="3.5" y="3" width="11" height="18" rx="5.5"></rect><path d="M9 3v7H3.5"></path><rect x="13" y="12.5" width="8" height="7" rx="2"></rect><path d="M15 12.5v-1.2a2 2 0 0 1 4 0v1.2"></path></svg>
+<span>ARRASTRAR</span>
+</button>
 <div class="windows-touchpad-hint" id="windows-touchpad-hint">Desliza el dedo para mover el cursor</div>
 </div>
 <div class="windows-touchpad-scroll" id="windows-touchpad-scroll" tabindex="0" role="application" aria-label="Zona vertical de scroll de Windows">

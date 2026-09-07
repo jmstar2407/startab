@@ -12393,3 +12393,221 @@ body.windows-touchpad-open {
     transition: none;
   }
 }
+
+/* StarTab · Touchpad remoto · teclado móvil + arrastre bloqueado */
+.windows-touchpad-keyboard {
+  margin: 0;
+  min-width: 0;
+}
+
+.windows-touchpad-keyboard-shell {
+  min-width: 0;
+  min-height: 46px;
+  display: grid;
+  grid-template-columns: 34px minmax(0,1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 5px 8px 5px 7px;
+  border: 1px solid rgba(255,255,255,.085);
+  border-radius: 15px;
+  background: linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,.023));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.035);
+  transition: border-color .15s ease, background .15s ease;
+}
+
+.windows-touchpad-keyboard-shell:focus-within {
+  border-color: rgba(147,197,255,.24);
+  background: linear-gradient(180deg,rgba(117,164,236,.075),rgba(255,255,255,.025));
+}
+
+.windows-touchpad-keyboard-icon {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  color: rgba(201,220,249,.62);
+  background: rgba(255,255,255,.035);
+}
+
+.windows-touchpad-keyboard-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+#windows-touchpad-keyboard-input {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  padding: 0 2px;
+  border: 0;
+  outline: 0;
+  color: rgba(248,250,255,.9);
+  background: transparent;
+  font: inherit;
+  font-size: 14px;
+  caret-color: #b8d8ff;
+}
+
+#windows-touchpad-keyboard-input::placeholder {
+  color: rgba(232,238,249,.31);
+}
+
+#windows-touchpad-keyboard-input:disabled {
+  cursor: not-allowed;
+  opacity: .5;
+}
+
+.windows-touchpad-keyboard-state {
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+  border: 1px solid rgba(255,255,255,.065);
+  border-radius: 999px;
+  color: rgba(221,231,247,.36);
+  background: rgba(255,255,255,.025);
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: .095em;
+  white-space: nowrap;
+}
+
+.windows-touchpad-keyboard.is-ready .windows-touchpad-keyboard-state {
+  color: rgba(164,222,194,.67);
+  border-color: rgba(121,225,176,.12);
+  background: rgba(121,225,176,.045);
+}
+
+.windows-touchpad-keyboard.is-sending .windows-touchpad-keyboard-state {
+  color: rgba(183,215,255,.82);
+  border-color: rgba(147,197,255,.16);
+  background: rgba(105,160,230,.075);
+}
+
+.windows-touchpad-drag-lock {
+  position: absolute;
+  left: 12px;
+  bottom: 11px;
+  z-index: 5;
+  min-width: 98px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 9px;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 11px;
+  color: rgba(229,234,245,.51);
+  background: rgba(7,10,16,.62);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  font: inherit;
+  font-size: 7.5px;
+  font-weight: 850;
+  letter-spacing: .09em;
+  cursor: pointer;
+  transition: color .14s ease, border-color .14s ease, background .14s ease, transform .12s ease, box-shadow .14s ease;
+}
+
+.windows-touchpad-drag-lock svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+}
+
+.windows-touchpad-drag-lock:hover:not(:disabled),
+.windows-touchpad-drag-lock:focus-visible:not(:disabled) {
+  color: rgba(255,255,255,.88);
+  border-color: rgba(185,170,255,.2);
+}
+
+.windows-touchpad-drag-lock:active:not(:disabled) {
+  transform: scale(.975);
+}
+
+.windows-touchpad-drag-lock.is-active,
+.windows-touchpad-drag-lock[aria-pressed="true"] {
+  color: #f5f0ff;
+  border-color: rgba(166,118,255,.54);
+  background: linear-gradient(180deg,rgba(125,68,235,.92),rgba(99,49,204,.92));
+  box-shadow: 0 0 0 1px rgba(178,136,255,.08), 0 8px 24px rgba(99,49,204,.24);
+}
+
+.windows-touchpad-drag-lock:disabled {
+  opacity: .34;
+  cursor: not-allowed;
+}
+
+.windows-touchpad-surface .windows-touchpad-hint {
+  left: 122px;
+  right: 13px;
+  text-align: right;
+}
+
+.windows-touchpad-surface.is-drag-locked {
+  border-color: rgba(166,118,255,.27);
+  background:
+    radial-gradient(circle at 38% 84%, rgba(127,74,226,.12), transparent 32%),
+    radial-gradient(circle at 50% 15%, rgba(111,142,236,.12), transparent 41%),
+    linear-gradient(145deg, rgba(255,255,255,.042), rgba(255,255,255,.016));
+}
+
+.windows-touchpad-scroll[aria-disabled="true"] {
+  opacity: .4;
+  cursor: not-allowed;
+}
+
+@media (max-width: 760px) {
+  .windows-touchpad-keyboard-shell {
+    min-height: 48px;
+    grid-template-columns: 35px minmax(0,1fr) auto;
+    border-radius: 16px;
+  }
+
+  #windows-touchpad-keyboard-input {
+    min-height: 38px;
+    font-size: 16px;
+  }
+
+  .windows-touchpad-keyboard-state {
+    font-size: 6.5px;
+    padding-inline: 7px;
+  }
+}
+
+@media (max-width: 430px) {
+  .windows-touchpad-keyboard-shell {
+    grid-template-columns: 32px minmax(0,1fr);
+    gap: 7px;
+  }
+
+  .windows-touchpad-keyboard-icon {
+    width: 32px;
+    height: 32px;
+  }
+
+  .windows-touchpad-keyboard-state {
+    display: none;
+  }
+
+  .windows-touchpad-drag-lock {
+    min-width: 88px;
+    height: 32px;
+    padding-inline: 8px;
+    font-size: 6.8px;
+  }
+
+  .windows-touchpad-surface .windows-touchpad-hint {
+    left: 109px;
+    font-size: 8.25px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .windows-touchpad-keyboard-shell,
+  .windows-touchpad-drag-lock {
+    transition: none;
+  }
+}

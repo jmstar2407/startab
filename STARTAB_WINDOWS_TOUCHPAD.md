@@ -1,4 +1,4 @@
-# StarTab · Touchpad remoto de Windows · Stable + Haptics
+# StarTab · Touchpad remoto de Windows · Stable + Haptics + Keyboard
 
 ## Arquitectura
 
@@ -6,7 +6,7 @@ Esta versión vuelve al pipeline estable de v2.2 para el movimiento del cursor:
 
 `Pointer Events -> requestAnimationFrame -> JSON -> WebRTC DataChannel -> Offscreen -> Native Messaging -> EXE -> SendInput`
 
-No usa `pointerrawupdate`, paquetes binarios ni el fast path experimental de v2.3. Firestore sigue siendo señalización y respaldo cuando WebRTC no está disponible.
+No usa `pointerrawupdate`, paquetes binarios ni el fast path experimental de la edición UltraLowLatency. Firestore sigue siendo señalización y respaldo cuando WebRTC no está disponible.
 
 ## Funciones
 
@@ -14,12 +14,14 @@ No usa `pointerrawupdate`, paquetes binarios ni el fast path experimental de v2.
 - Toque corto = clic izquierdo.
 - Botones dedicados de clic izquierdo y derecho.
 - Banda vertical de **SCROLL** a la derecha: dedo hacia arriba = scroll arriba; dedo hacia abajo = scroll abajo.
+- Barra de **TECLADO REMOTO** sobre el touchpad para escribir en Windows usando el teclado del móvil.
+- Modo **ARRASTRAR** dentro del touchpad: mantiene pulsado el clic izquierdo mientras mueves el cursor; el estado activo se resalta en morado.
 - Modal elevado al `body` con `z-index: 2147483647` para quedar por encima del resto de StarTab.
 - Respuesta háptica en móviles compatibles: textura ligera al mover, ticks de scroll, clics, dial de volumen y mute.
 
 ## Agente Windows
 
-El paquete incluye el agente v2.2.1. El cursor y los clics son compatibles desde v2.2.0; v2.2.1 añade `pointerWheel` para el scroll lateral. Usa `user32!SendInput` y no abre puertos ni se conecta directamente a Firebase.
+El paquete incluye el agente v2.3.0. El cursor y los clics normales son compatibles desde v2.2.0; v2.2.1 añade `pointerWheel` para el scroll lateral; v2.3.0 añade escritura remota (`textInput`/`keyInput`) y `pointerButton` para mantener pulsado el clic durante el modo ARRASTRAR. Usa `user32!SendInput` y no abre puertos ni se conecta directamente a Firebase.
 
 Para actualizarlo:
 
@@ -36,7 +38,7 @@ Las sesiones efímeras siguen usando:
 
 `users/{uid}/windowsDevices/{deviceId}/pointerSessions/{sessionId}`
 
-El mismo documento puede contener `motionRelay`, `scrollRelay` y `clickRelay` cuando se usa el respaldo por Firebase.
+El mismo documento puede contener `motionRelay`, `scrollRelay`, `clickRelay`, `buttonRelay` y `keyboardRelay` cuando se usa el respaldo por Firebase. Los comandos de teclado del respaldo llevan secuencia para conservar el orden.
 
 ## Haptics
 

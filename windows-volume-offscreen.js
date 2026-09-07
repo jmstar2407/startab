@@ -162,6 +162,10 @@
     const entry = state.pointerPeers.get(sessionId);
     if (!entry) return;
     entry.closed = true;
+    if (entry.leftDown) {
+      entry.leftDown = false;
+      void sendPointerNative({ type: 'pointerButton', button: 'left', down: false });
+    }
     try { entry.pc?.close(); } catch (_) {}
     state.pointerPeers.delete(sessionId);
   }
@@ -172,7 +176,7 @@
     for (const sessionId of [...state.pointerPeers.keys()]) closePointerPeer(sessionId);
   }
 
-  function handlePointerPayload(payload) {
+  function handlePointerPayload(payload, entry) {
     if (!payload || typeof payload !== 'object') return;
     if (payload.t === 'move') {
       const dx = Math.max(-500, Math.min(500, Number(payload.dx) || 0));
@@ -187,13 +191,35 @@
     }
     if (payload.t === 'click' && (payload.button === 'left' || payload.button === 'right')) {
       void sendPointerNative({ type: 'pointerClick', button: payload.button });
+      return;
+    }
+    if (payload.t === 'button' && (payload.button === 'left' || payload.button === 'right')) {
+      const down = !!payload.down;
+      if (entry && payload.button === 'left') entry.leftDown = down;
+      void sendPointerNative({ type: 'pointerButton', button: payload.button, down });
+      return;
+    }
+    if (payload.t === 'text') {
+      const text = String(payload.text || '').slice(0, 2048);
+      if (text) void sendPointerNative({ type: 'textInput', text });
+      return;
+    }
+    if (payload.t === 'key') {
+      const key = String(payload.key || '').toLowerCase();
+      if (['backspace', 'delete', 'enter', 'tab'].includes(key)) void sendPointerNative({ type: 'keyInput', key });
     }
   }
 
-  function attachPointerDataChannel(channel) {
+  function attachPointerDataChannel(channel, entry) {
     if (!channel) return;
     channel.addEventListener('message', (event) => {
-      try { handlePointerPayload(JSON.parse(String(event.data || ''))); } catch (_) {}
+      try { handlePointerPayload(JSON.parse(String(event.data || '')), entry); } catch (_) {}
+    });
+    channel.addEventListener('close', () => {
+      if (channel.label === 'control' && entry?.leftDown) {
+        entry.leftDown = false;
+        void sendPointerNative({ type: 'pointerButton', button: 'left', down: false });
+      }
     });
   }
 
@@ -206,10 +232,14 @@
       ],
     });
     entry.pc = pc;
-    pc.addEventListener('datachannel', (event) => attachPointerDataChannel(event.channel));
+    pc.addEventListener('datachannel', (event) => attachPointerDataChannel(event.channel, entry));
     pc.addEventListener('connectionstatechange', () => {
       const status = pc.connectionState;
       if (!['connected', 'failed', 'disconnected', 'closed'].includes(status)) return;
+      if (entry.leftDown && ['failed', 'disconnected', 'closed'].includes(status)) {
+        entry.leftDown = false;
+        void sendPointerNative({ type: 'pointerButton', button: 'left', down: false });
+      }
       ref.set({
         pcConnectionState: status,
         pcAtClient: Date.now(),
@@ -265,6 +295,32 @@
       entry.lastClickSeq = clickSeq;
       void sendPointerNative({ type: 'pointerClick', button: click.button });
     }
+
+    const button = data?.buttonRelay;
+    const buttonSeq = Number(button?.seq) || 0;
+    if (buttonSeq && buttonSeq !== entry.lastButtonSeq && (button.button === 'left' || button.button === 'right')) {
+      entry.lastButtonSeq = buttonSeq;
+      const down = !!button.down;
+      if (button.button === 'left') entry.leftDown = down;
+      void sendPointerNative({ type: 'pointerButton', button: button.button, down });
+    }
+
+    const keyboardOps = Array.isArray(data?.keyboardRelay?.ops) ? data.keyboardRelay.ops : [];
+    const pendingKeyboardOps = keyboardOps
+      .filter((operation) => Number(operation?.seq) > entry.lastKeyboardSeq)
+      .sort((a, b) => Number(a.seq) - Number(b.seq));
+    for (const operation of pendingKeyboardOps) {
+      const seq = Number(operation.seq) || 0;
+      if (!seq) continue;
+      entry.lastKeyboardSeq = Math.max(entry.lastKeyboardSeq, seq);
+      if (operation.kind === 'text') {
+        const text = String(operation.text || '').slice(0, 2048);
+        if (text) void sendPointerNative({ type: 'textInput', text });
+      } else if (operation.kind === 'key') {
+        const key = String(operation.key || '').toLowerCase();
+        if (['backspace', 'delete', 'enter', 'tab'].includes(key)) void sendPointerNative({ type: 'keyInput', key });
+      }
+    }
   }
 
   function handlePointerSessionSnapshot(doc) {
@@ -279,7 +335,7 @@
 
     let entry = state.pointerPeers.get(sessionId);
     if (!entry) {
-      entry = { pc: null, offerId: null, lastMotionSeq: 0, lastScrollSeq: 0, lastClickSeq: 0, closed: false };
+      entry = { pc: null, offerId: null, lastMotionSeq: 0, lastScrollSeq: 0, lastClickSeq: 0, lastButtonSeq: 0, lastKeyboardSeq: 0, leftDown: false, closed: false };
       state.pointerPeers.set(sessionId, entry);
     }
     handlePointerRelay(data, entry);
