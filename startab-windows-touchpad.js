@@ -58,10 +58,7 @@
 
   function supportsPointerAgent(version) {
     const parts = String(version || '').split('.').map((part) => Number.parseInt(part, 10) || 0);
-    if ((parts[0] || 0) > 2) return true;
-    if ((parts[0] || 0) !== 2) return false;
-    if ((parts[1] || 0) > 2) return true;
-    return (parts[1] || 0) === 2 && (parts[2] || 0) >= 1;
+    return (parts[0] || 0) > 2 || ((parts[0] || 0) === 2 && (parts[1] || 0) >= 2);
   }
 
   const clientId = (() => {
@@ -275,7 +272,7 @@
       return;
     }
     if (!supportsPointerAgent(device.data.agentVersion)) {
-      setStatus('error', 'Actualiza EXE', 'Este PC usa un agente anterior. Compila e instala StartabWindowsVolume.exe v2.2.1 para habilitar cursor y scroll remoto.');
+      setStatus('error', 'Actualiza EXE', 'Este PC usa un agente anterior. El cursor remoto requiere StartabWindowsVolume.exe v2.2.0 o superior.');
       return;
     }
 

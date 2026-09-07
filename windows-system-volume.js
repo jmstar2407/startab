@@ -269,7 +269,7 @@
     const hapticBucket = Math.round((normalized / 100) * (DIAL_SEGMENTS - 1));
     if (hapticBucket !== state.dialHapticBucket) {
       state.dialHapticBucket = hapticBucket;
-      globalThis.StartabHaptics?.pulse?.('windows-volume-dial', 6, 28);
+      globalThis.StartabHaptics?.pulse?.('windows-volume-dial', 5, 40);
     }
     holdOptimisticState({ volume: normalized, muted: false });
     renderDial(normalized, false);

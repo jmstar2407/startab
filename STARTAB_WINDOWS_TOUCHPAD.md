@@ -19,7 +19,7 @@ No usa `pointerrawupdate`, paquetes binarios ni el fast path experimental de v2.
 
 ## Agente Windows
 
-El agente es v2.2.1. Mantiene el comportamiento estable de v2.2 y añade únicamente `pointerWheel` para el scroll. Usa `user32!SendInput` y no abre puertos ni se conecta directamente a Firebase.
+El paquete incluye el agente v2.2.1. El cursor y los clics son compatibles desde v2.2.0; v2.2.1 añade `pointerWheel` para el scroll lateral. Usa `user32!SendInput` y no abre puertos ni se conecta directamente a Firebase.
 
 Para actualizarlo:
 
@@ -40,4 +40,4 @@ El mismo documento puede contener `motionRelay`, `scrollRelay` y `clickRelay` cu
 
 ## Haptics
 
-La vibración se activa solo cuando `navigator.vibrate()` está disponible y el dispositivo tiene entrada táctil/coarse. Los pulsos se agrupan y limitan para no saturar el motor de vibración. Si el navegador no ofrece esa API, StarTab continúa funcionando sin vibración.
+La vibración se activa solo cuando `navigator.vibrate()` está disponible y el dispositivo tiene entrada táctil/coarse. Los pulsos se agrupan, limitan y se ejecutan fuera del evento de movimiento para que la vibración no frene el touchpad ni el dial de volumen. Si el navegador no ofrece esa API, StarTab continúa funcionando sin vibración.

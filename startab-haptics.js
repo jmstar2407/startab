@@ -14,12 +14,14 @@
 
   const lastPulseAt = new Map();
   const textureDistance = new Map();
+  const pendingVibrations = new Map();
+  const scheduledKeys = new Set();
 
   function canVibrate() {
     return supported && coarsePointer && document.visibilityState !== 'hidden';
   }
 
-  function vibrate(pattern) {
+  function vibrateNow(pattern) {
     if (!canVibrate()) return false;
     try {
       return !!navigator.vibrate(pattern);
@@ -28,13 +30,41 @@
     }
   }
 
+  // Haptics must never live in the hot pointer path. We only enqueue here and
+  // let the browser execute the hardware vibration after the current input
+  // event has finished. Repeated requests for the same effect are coalesced.
+  function scheduleVibration(key, pattern) {
+    if (!canVibrate()) return false;
+    pendingVibrations.set(key, pattern);
+    if (scheduledKeys.has(key)) return true;
+    scheduledKeys.add(key);
+
+    const run = () => {
+      scheduledKeys.delete(key);
+      const queued = pendingVibrations.get(key);
+      pendingVibrations.delete(key);
+      if (queued !== undefined) vibrateNow(queued);
+    };
+
+    // Prefer a background-priority task when Chromium exposes the Scheduling API.
+    // This gives pointer/drag input priority over haptic hardware commands.
+    if (globalThis.scheduler?.postTask) {
+      globalThis.scheduler.postTask(run, { priority: 'background' }).catch(() => {
+        window.setTimeout(run, 0);
+      });
+    } else {
+      window.setTimeout(run, 0);
+    }
+    return true;
+  }
+
   function pulse(key, duration = 6, minInterval = 42) {
     if (!canVibrate()) return false;
     const now = performance.now();
     const previous = lastPulseAt.get(key) || 0;
     if (now - previous < minInterval) return false;
     lastPulseAt.set(key, now);
-    return vibrate(Math.max(1, Math.min(35, Math.round(duration))));
+    return scheduleVibration(key, Math.max(1, Math.min(35, Math.round(duration))));
   }
 
   function texture(key, distance, options = {}) {
@@ -65,7 +95,7 @@
     const previous = lastPulseAt.get(key) || 0;
     if (now - previous < 90) return false;
     lastPulseAt.set(key, now);
-    return vibrate(muted ? [14, 22, 9] : [9, 18, 14]);
+    return scheduleVibration(key, muted ? [14, 22, 9] : [9, 18, 14]);
   }
 
   function resetTexture(key) {
