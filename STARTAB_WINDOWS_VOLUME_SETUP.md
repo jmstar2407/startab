@@ -77,3 +77,7 @@ Asegúrate de añadir también el bloque `pointerSessions` incluido en `windows-
 ## Respuesta háptica móvil
 
 StarTab incluye `startab-haptics.js`, una capa ligera que usa la API de vibración del navegador cuando el dispositivo móvil la permite. Produce pulsos cortos y limitados por frecuencia para evitar una vibración continua: textura al desplazar el touchpad, pasos en la banda de scroll, respuesta diferenciada en clic izquierdo/derecho, dientes al girar `windows-volume-dial` y patrón al activar/desactivar mute. En navegadores que no exponen vibración, la interfaz sigue funcionando normalmente sin errores.
+
+## Agente v2.4.0 · control del sistema
+
+Después de compilar e instalar v2.4.0, el mismo agente permite los controles remotos del PC desde el modal Touchpad remoto. No es necesario instalar otro servicio. El panel de PC requiere v2.4.0; las funciones anteriores siguen siendo compatibles con sus versiones mínimas correspondientes.

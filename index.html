@@ -16,6 +16,7 @@
 <script defer="" src="startab-haptics.js"></script>
 <script defer="" src="windows-system-volume.js"></script>
 <script defer="" src="startab-windows-touchpad.js"></script>
+<script defer="" src="startab-windows-system-control.js"></script>
 </head>
 <body>
 <!-- BARRA SUPERIOR: CONTADOR DE PESTAÑAS + PERFIL/LOGIN -->
@@ -63,6 +64,15 @@
 <span class="refresh-icon">🔄</span>
 </button>
 </div>
+<a class="web-btn" href="https://jmstar2407.github.io/startab/" target="_blank" rel="noopener noreferrer" aria-label="Abrir StarTab Web">
+<svg aria-hidden="true" class="web-btn-icon" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" viewBox="0 0 24 24">
+<rect x="3" y="4" width="18" height="16" rx="2"></rect>
+<path d="M3 8h18"></path>
+<path d="M7 6h.01"></path>
+<path d="M10 6h.01"></path>
+</svg>
+<span>StarTab <small>(Web)</small></span>
+</a>
 <div class="dropdown-divider"></div>
 <button class="logout-btn" id="logout-btn">
 <span class="logout-icon">🚪</span>
@@ -90,7 +100,6 @@
 <path d="M16 17H8"></path>
 </svg></span>
 </div>
-<span class="nota-icono-tooltip">Notas rápidas (Ctrl+N)</span>
 </div>
 <!-- CENTRO MULTIMEDIA · SESIONES DEL NAVEGADOR -->
 <div class="multimedia-button-container" id="multimedia-button-container">
@@ -217,7 +226,7 @@
 <svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" viewBox="0 0 24 24"><path d="M11 5 6 9H3v6h3l5 4V5Z"></path><path d="M15.5 8.5a5 5 0 0 1 0 7"></path><path d="M18 6a8 8 0 0 1 0 12"></path></svg>
 </span>
 <span>Volumen del sistema</span>
-<svg class="multimedia-system-volume-chevron" aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" viewBox="0 0 24 24"><path d="m7 9 5 5 5-5"></path></svg>
+<svg class="multimedia-system-volume-chevron" aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" viewBox="0 0 24 24"><path d="m7 15 5-5 5 5"></path></svg>
 </button>
 <section class="windows-system-volume" id="windows-system-volume" aria-label="Volumen maestro de Windows">
 <div class="windows-volume-head">
@@ -229,6 +238,8 @@
 </div>
 </div>
 <div class="windows-volume-dial-panel" id="windows-volume-dial-panel">
+<div class="windows-volume-dial-stage">
+<button class="windows-volume-dial-step is-down" id="windows-volume-dial-down" type="button" aria-label="Bajar 1 punto el volumen de Windows">−</button>
 <div class="windows-volume-dial" id="windows-volume-dial" role="slider" tabindex="0" aria-label="Volumen maestro de Windows" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
 <div class="windows-volume-dial-segments" id="windows-volume-dial-segments" aria-hidden="true"></div>
 <div class="windows-volume-dial-knob" aria-hidden="true">
@@ -237,6 +248,8 @@
 <button class="windows-volume-dial-mute" id="windows-volume-dial-mute" type="button" aria-label="Silenciar volumen de Windows" aria-pressed="false" title="Silenciar Windows">
 <svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" viewBox="0 0 24 24"><path d="M11 5 6 9H3v6h3l5 4V5Z"></path><path class="windows-dial-wave" d="M15.5 8.5a5 5 0 0 1 0 7"></path><path class="windows-dial-wave" d="M18 6a8 8 0 0 1 0 12"></path><path class="windows-dial-muted-mark" d="m16 10 5 5m0-5-5 5"></path></svg>
 </button>
+</div>
+<button class="windows-volume-dial-step is-up" id="windows-volume-dial-up" type="button" aria-label="Subir 1 punto el volumen de Windows">+</button>
 </div>
 <div class="windows-volume-dial-readout"><strong id="windows-volume-dial-value">0%</strong><span>Volumen Mestre</span></div>
 </div>
@@ -271,6 +284,9 @@
 </div>
 <div class="windows-touchpad-header-actions">
 <span class="windows-touchpad-connection" id="windows-touchpad-connection" data-state="idle"><i aria-hidden="true"></i><span>Preparando</span></span>
+<button aria-label="Controles del PC" class="windows-pc-control-toggle" id="windows-pc-control-toggle" title="Controlar PC principal" type="button">
+<svg aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.65" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2.5"></rect><path d="M8 21h8M12 17v4"></path><path d="M7 8h10"></path></svg>
+</button>
 <button aria-label="Cerrar touchpad" class="windows-touchpad-close" id="windows-touchpad-close" type="button">×</button>
 </div>
 </header>
@@ -314,6 +330,58 @@
 </button>
 </div>
 <div class="windows-touchpad-note" id="windows-touchpad-note" aria-live="polite">El movimiento y el scroll usan el canal WebRTC estable; Firebase queda como respaldo cuando el enlace directo no está disponible.</div>
+</div>
+</section>
+</div>
+
+<!-- CONTROL REMOTO · PC PRINCIPAL -->
+<div aria-hidden="true" class="windows-pc-control-modal" id="windows-pc-control-modal" role="presentation">
+<div class="windows-pc-control-backdrop" id="windows-pc-control-backdrop"></div>
+<section aria-labelledby="windows-pc-control-title" aria-modal="true" class="windows-pc-control-card" role="dialog">
+<header class="windows-pc-control-header">
+<div class="windows-pc-control-heading">
+<span>StarTab · WINDOWS SYSTEM</span>
+<h3 id="windows-pc-control-title">Control del PC principal</h3>
+<p id="windows-pc-control-device">Selecciona un PC Windows conectado.</p>
+</div>
+<div class="windows-pc-control-header-actions">
+<span class="windows-pc-control-online" id="windows-pc-control-online" data-state="idle"><i aria-hidden="true"></i><span>Preparando</span></span>
+<button aria-label="Cerrar controles del PC" class="windows-pc-control-close" id="windows-pc-control-close" type="button">×</button>
+</div>
+</header>
+<div class="windows-pc-control-body">
+<div class="windows-pc-control-grid" id="windows-pc-control-grid">
+<button class="windows-pc-action" data-system-action="monitorOff" type="button">
+<span class="windows-pc-action-icon"><svg aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.65" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2.5"></rect><path d="M8 21h8M12 17v4"></path><path d="M8.5 10.5h7"></path></svg></span>
+<span><strong>Apagar monitor</strong><small>Apaga la pantalla</small></span>
+</button>
+<button class="windows-pc-action is-danger" data-system-action="shutdown" data-confirm="true" type="button">
+<span class="windows-pc-action-icon"><svg aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" viewBox="0 0 24 24"><path d="M12 2v10"></path><path d="M6.4 5.6a8 8 0 1 0 11.2 0"></path></svg></span>
+<span><strong>Apagar PC</strong><small>Apagado completo</small></span>
+</button>
+<button class="windows-pc-action" data-system-action="sleep" type="button">
+<span class="windows-pc-action-icon"><svg aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.65" viewBox="0 0 24 24"><path d="M20.7 14.4A8.5 8.5 0 0 1 9.6 3.3 8.5 8.5 0 1 0 20.7 14.4Z"></path></svg></span>
+<span><strong>Suspender</strong><small>Modo de suspensión</small></span>
+</button>
+<button class="windows-pc-action is-warning" data-system-action="restart" data-confirm="true" type="button">
+<span class="windows-pc-action-icon"><svg aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.65" viewBox="0 0 24 24"><path d="M20 7v5h-5"></path><path d="M19 12a7 7 0 1 0-2.05 4.95"></path></svg></span>
+<span><strong>Reiniciar PC</strong><small>Reinicio de Windows</small></span>
+</button>
+<button class="windows-pc-action" data-system-action="logoff" data-confirm="true" type="button">
+<span class="windows-pc-action-icon"><svg aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.65" viewBox="0 0 24 24"><path d="M10 17l5-5-5-5"></path><path d="M15 12H3"></path><path d="M14 3h5a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-5"></path></svg></span>
+<span><strong>Cerrar sesión</strong><small>Sesión de Windows</small></span>
+</button>
+<button class="windows-pc-action" data-system-action="lock" type="button">
+<span class="windows-pc-action-icon"><svg aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.65" viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="11" rx="2.5"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path><path d="M12 14v3"></path></svg></span>
+<span><strong>Bloquear PC</strong><small>Pantalla de bloqueo</small></span>
+</button>
+</div>
+<button class="windows-pc-hotspot" id="windows-pc-hotspot" type="button" aria-pressed="false" disabled>
+<span class="windows-pc-hotspot-icon"><svg aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" viewBox="0 0 24 24"><path d="M5 12.5a10 10 0 0 1 14 0"></path><path d="M8 15.5a6 6 0 0 1 8 0"></path><path d="M10.8 18.4a2 2 0 0 1 2.4 0"></path><circle cx="12" cy="20" r=".8" fill="currentColor" stroke="none"></circle></svg></span>
+<span class="windows-pc-hotspot-copy"><strong>Mobile Hotspot</strong><small id="windows-pc-hotspot-note">Consultando estado del PC…</small></span>
+<span class="windows-pc-hotspot-state" id="windows-pc-hotspot-state">--</span>
+</button>
+<div class="windows-pc-control-note" id="windows-pc-control-note" aria-live="polite">Los comandos se envían únicamente al PC Windows seleccionado en StarTab.</div>
 </div>
 </section>
 </div>
@@ -449,6 +517,30 @@
 </main>
 </div>
 </section>
+</div>
+
+<!-- MODAL MODERNO · CREAR / RENOMBRAR CATEGORÍA -->
+<div aria-hidden="true" class="category-name-modal" id="modal-categoria-nombre" role="presentation" style="display:none">
+  <div class="category-name-backdrop" aria-hidden="true"></div>
+  <section aria-labelledby="categoria-nombre-title" aria-modal="true" class="category-name-card" role="dialog">
+    <div class="category-name-symbol" aria-hidden="true">
+      <svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" viewBox="0 0 24 24"><path d="M4 6h16"></path><path d="M4 12h16"></path><path d="M4 18h10"></path><path d="M18 15v6"></path><path d="M15 18h6"></path></svg>
+    </div>
+    <div class="category-name-heading">
+      <span>StarTab · CATEGORÍAS</span>
+      <h2 id="categoria-nombre-title">Nueva categoría</h2>
+      <p id="categoria-nombre-subtitle">Ponle un nombre a tu nuevo espacio de accesos directos.</p>
+    </div>
+    <label class="category-name-field" for="categoria-nombre-input">
+      <span>Nombre</span>
+      <input id="categoria-nombre-input" maxlength="20" autocomplete="off" inputmode="text" placeholder="Ej: Trabajo" type="text" />
+      <small><b id="categoria-nombre-error" aria-live="polite"></b><em>Máximo 20 caracteres</em></small>
+    </label>
+    <div class="category-name-actions">
+      <button class="category-name-cancel" id="categoria-nombre-cancelar" type="button">Cancelar</button>
+      <button class="category-name-confirm" id="categoria-nombre-confirmar" type="button">Crear</button>
+    </div>
+  </section>
 </div>
 <!-- MODAL DE ICONOS (AGREGAR/EDITAR) -->
 <div class="modal-moderno" id="modal-iconos">

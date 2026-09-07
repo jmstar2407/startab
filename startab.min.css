@@ -2410,6 +2410,52 @@ body.fondo-video {
   font-size: 1.1rem;
 }
 
+.web-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 0.8rem 1rem;
+  margin-top: 0.25rem;
+  background: transparent;
+  border: none;
+  border-radius: 10px;
+  color: rgba(255,255,255,0.8);
+  font-size: 0.9rem;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease;
+}
+
+.web-btn:hover {
+  background: rgba(99,102,241,0.2);
+  color: #c7d2fe;
+}
+
+.web-btn:active {
+  transform: scale(0.985);
+}
+
+.web-btn:focus-visible {
+  outline: 2px solid rgba(199,210,254,0.95);
+  outline-offset: 2px;
+}
+
+.web-btn-icon {
+  width: 1.15rem;
+  height: 1.15rem;
+  flex: 0 0 auto;
+}
+
+.web-btn small {
+  font-size: 0.78em;
+  color: rgba(255,255,255,0.55);
+}
+
+.web-btn:hover small {
+  color: currentColor;
+}
+
 .box-master {
   width: 100%;
   height: 100dvh;
@@ -3631,7 +3677,7 @@ body.startab-tabs-modal-open {
 .view-list .startab-preview-body img, .view-list .startab-fallback-icon {
   width: 15px;
   height: 15px;
-  font-size: 8px;
+  font-size: 0.9rem;
 }
 
 .view-list .startab-preview-lines {
@@ -6627,7 +6673,7 @@ svg.lucide-panels-top-left, svg.lucide-maximize {
   }
 
   .nota-footer-info {
-    font-size: .78rem;
+    font-size: 0.9rem;
   }
 
   .nota-botones-container {
@@ -7613,7 +7659,7 @@ body:has(.nota-modal.nota-modal-abierto) {
   align-items: center;
   gap: 8px;
   color: #666b7d;
-  font-size: 8px;
+  font-size: 0.9rem;
 }
 
 .nota-footer-info > span {
@@ -7904,7 +7950,13 @@ body:has(.nota-modal.nota-modal-abierto) {
 
   .nota-botones-container {
     width: 100%;
-    overflow: hidden;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    justify-content: space-between;
+    overflow-x: auto;
+    overflow-y: hidden;
     gap: 6px;
   }
 
@@ -7913,6 +7965,21 @@ body:has(.nota-modal.nota-modal-abierto) {
     width: auto;
     max-width: none;
     flex: 1 1 0;
+  }
+}
+
+@media (max-width:480px) and (pointer:coarse) {
+  .nota-botones-container {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    gap: 5px;
+  }
+
+  .nota-btn-numero {
+    min-width: 0;
+    width: auto;
+    flex: 1 1 0;
+    padding-inline: 4px;
   }
 }
 
@@ -12610,4 +12677,556 @@ body.windows-touchpad-open {
   .windows-touchpad-drag-lock {
     transition: none;
   }
+}
+
+
+/* ==========================================================================
+   StarTab · Mobile UX + Stable Category Editor + Volume Footer Gestures
+   ========================================================================== */
+.category-name-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483200;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  opacity: 0;
+  transition: opacity .18s ease;
+}
+.category-name-modal.is-open { opacity: 1; }
+.category-name-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(4, 6, 12, .68);
+  backdrop-filter: blur(15px) saturate(1.08);
+  -webkit-backdrop-filter: blur(15px) saturate(1.08);
+}
+.category-name-card {
+  position: relative;
+  z-index: 1;
+  width: min(430px, 100%);
+  padding: 22px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.10);
+  border-radius: 20px;
+  color: #f5f7fb;
+  background: linear-gradient(180deg, rgba(25,28,37,.985), rgba(13,15,22,.995));
+  box-shadow: 0 30px 90px rgba(0,0,0,.46), inset 0 1px 0 rgba(255,255,255,.045);
+  transform: translateY(10px) scale(.985);
+  transition: transform .2s cubic-bezier(.2,.8,.2,1);
+}
+.category-name-modal.is-open .category-name-card { transform: translateY(0) scale(1); }
+.category-name-symbol {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 14px;
+  border: 1px solid rgba(96,228,166,.22);
+  border-radius: 13px;
+  color: #71e7b2;
+  background: rgba(67,211,146,.075);
+}
+.category-name-symbol svg { width: 21px; height: 21px; }
+.category-name-heading span {
+  color: rgba(105,232,176,.70);
+  font-size: 8px;
+  font-weight: 850;
+  letter-spacing: .16em;
+}
+.category-name-heading h2 { margin: 5px 0 5px; font-size: 19px; line-height: 1.15; }
+.category-name-heading p { margin: 0; color: rgba(235,239,248,.48); font-size: 11px; line-height: 1.45; }
+.category-name-field { display: block; margin-top: 19px; }
+.category-name-field > span { display: block; margin-bottom: 7px; color: rgba(242,245,252,.7); font-size: 10px; font-weight: 700; }
+.category-name-field input {
+  width: 100%;
+  height: 46px;
+  padding: 0 13px;
+  outline: none;
+  border: 1px solid rgba(255,255,255,.10);
+  border-radius: 13px;
+  background: rgba(0,0,0,.20);
+  color: #fff;
+  font: 600 14px/1.2 inherit;
+  box-sizing: border-box;
+  transition: border-color .16s ease, box-shadow .16s ease, background .16s ease;
+}
+.category-name-field input:focus {
+  border-color: rgba(87,226,161,.52);
+  background: rgba(0,0,0,.27);
+  box-shadow: 0 0 0 4px rgba(67,211,146,.07);
+}
+.category-name-field small { min-height: 20px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-top: 6px; font-size: 8.5px; }
+.category-name-field b { color: #ff9c9c; font-weight: 650; }
+.category-name-field em { margin-left: auto; color: rgba(255,255,255,.28); font-style: normal; white-space: nowrap; }
+.category-name-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 15px; }
+.category-name-actions button {
+  min-height: 43px;
+  border-radius: 12px;
+  font: 750 11px/1 inherit;
+  cursor: pointer;
+  transition: transform .15s ease, border-color .15s ease, background .15s ease, opacity .15s ease;
+}
+.category-name-actions button:active { transform: scale(.985); }
+.category-name-cancel { border: 1px solid rgba(255,255,255,.10); background: rgba(255,255,255,.055); color: rgba(244,247,252,.74); }
+.category-name-confirm { border: 1px solid rgba(74,229,157,.28); background: linear-gradient(180deg, rgba(58,205,137,.95), rgba(35,169,109,.95)); color: #06150e; box-shadow: 0 9px 24px rgba(36,180,115,.15); }
+.category-name-confirm:disabled { opacity: .55; cursor: default; }
+body.category-name-modal-open { overflow: hidden; }
+.startab-category-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  z-index: 2147483250;
+  max-width: min(430px, calc(100vw - 28px));
+  padding: 11px 14px;
+  border: 1px solid rgba(255,140,140,.18);
+  border-radius: 12px;
+  background: rgba(34,17,20,.94);
+  color: #ffd8d8;
+  box-shadow: 0 14px 40px rgba(0,0,0,.34);
+  font-size: 10px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 8px);
+  transition: opacity .18s ease, transform .18s ease;
+}
+.startab-category-toast.is-visible { opacity: 1; transform: translate(-50%, 0); }
+
+.windows-volume-dial-stage { display: contents; }
+.windows-volume-dial-step { display: none; }
+
+@media (max-width: 760px), (hover: none) and (pointer: coarse) {
+  #acciones-personalizacion-flotantes,
+  #live-info-strip { display: none !important; }
+
+  #contenedor-iconos .icono-item,
+  #contenedor-iconos .icono-item img {
+    -webkit-user-drag: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .multimedia-system-volume-toggle {
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    will-change: transform;
+  }
+  .multimedia-system-volume-toggle.is-dragging { transition: none !important; }
+  .multimedia-system-volume-chevron { transform: none !important; }
+  .multimedia-system-footer.is-expanded .multimedia-system-volume-chevron { transform: none !important; }
+  .multimedia-system-footer.is-gesture .windows-system-volume { transition: none !important; }
+
+  .windows-volume-dial-panel { position: relative; }
+  .windows-volume-dial-stage {
+    width: min(330px, 92vw);
+    display: grid;
+    grid-template-columns: 46px minmax(0, auto) 46px;
+    align-items: end;
+    justify-content: center;
+    gap: clamp(13px, 4.6vw, 22px);
+  }
+  .windows-volume-dial-step {
+    width: 42px;
+    height: 42px;
+    display: grid;
+    place-items: center;
+    align-self: end;
+    margin-bottom: clamp(24px, 7vw, 36px);
+    padding: 0;
+    border: 1px solid rgba(198,153,255,.18);
+    border-radius: 13px;
+    background: rgba(136,78,205,.08);
+    color: rgba(224,199,255,.88);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.035);
+    font: 500 24px/1 system-ui, sans-serif;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: transform .12s ease, background .12s ease, border-color .12s ease, color .12s ease;
+  }
+  .windows-volume-dial-step:active:not(:disabled) {
+    transform: scale(.92);
+    color: #fff;
+    border-color: rgba(201,151,255,.42);
+    background: rgba(141,75,220,.20);
+  }
+  .windows-volume-dial-step:disabled { opacity: .34; }
+
+  .category-name-modal { padding: 14px; }
+  .category-name-card { padding: 19px; border-radius: 18px; }
+}
+
+
+/* StarTab v1.4.7 · compact shortcut upload + YouTube media source visuals */
+.multimedia-source-icon.is-artwork {
+  background: rgba(255,255,255,.045);
+}
+
+.multimedia-source-icon.is-artwork > img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.multimedia-source-title-row {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.multimedia-source-title-row > strong {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.multimedia-source-site-logo {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 13px;
+  border-radius: 3px;
+  object-fit: contain;
+}
+
+.multimedia-source-site-logo[hidden] {
+  display: none !important;
+}
+
+@media (max-height:819.98px) {
+  .shortcut-fields-row-icon {
+    gap: .65rem;
+  }
+
+  .control-grupo-subir-icono {
+    width: 72px;
+    min-width: 72px;
+    flex: 0 0 72px;
+  }
+
+  #icono-sitio,
+  .control-grupo-subir-icono .file-label {
+    min-height: 40px;
+  }
+
+  .control-grupo-subir-icono .file-label {
+    width: 100%;
+    height: 40px;
+    padding: .55rem .7rem;
+    border-width: 1px;
+    border-radius: 12px;
+  }
+
+  .control-grupo-subir-icono .file-text svg {
+    width: 17px;
+    height: 17px;
+  }
+}
+
+@media (max-width:520px), (max-height:700px) {
+  .control-grupo-subir-icono {
+    width: 64px;
+    min-width: 64px;
+    flex-basis: 64px;
+  }
+
+  .control-grupo-subir-icono .file-label {
+    padding-inline: .55rem;
+  }
+}
+
+/* ==========================================================================
+   StarTab · Windows System Control v2.4
+   ========================================================================== */
+.windows-pc-control-toggle {
+  width: 31px;
+  height: 31px;
+  flex: 0 0 31px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 11px;
+  color: rgba(226,235,249,.68);
+  background: rgba(255,255,255,.035);
+  cursor: pointer;
+  transition: color .16s ease, background .16s ease, border-color .16s ease, transform .12s ease;
+}
+.windows-pc-control-toggle svg { width: 17px; height: 17px; }
+.windows-pc-control-toggle:hover,
+.windows-pc-control-toggle:focus-visible {
+  color: #fff;
+  border-color: rgba(166,118,255,.28);
+  background: rgba(128,78,224,.10);
+  transform: translateY(-1px);
+}
+
+body.windows-pc-control-open { overscroll-behavior: none; }
+.windows-pc-control-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  box-sizing: border-box;
+  isolation: isolate;
+  pointer-events: none;
+}
+.windows-pc-control-modal.is-open { display: flex; pointer-events: auto; }
+.windows-pc-control-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(2,4,9,.78);
+  -webkit-backdrop-filter: blur(13px) saturate(1.08);
+  backdrop-filter: blur(13px) saturate(1.08);
+}
+.windows-pc-control-card {
+  position: relative;
+  z-index: 1;
+  width: min(520px, calc(100vw - 36px));
+  max-height: calc(100dvh - 36px);
+  overflow: auto;
+  border: 1px solid rgba(255,255,255,.10);
+  border-radius: 24px;
+  color: #f7f8fb;
+  background:
+    radial-gradient(circle at 75% -5%, rgba(130,79,224,.17), transparent 34%),
+    radial-gradient(circle at 20% 0%, rgba(91,139,211,.11), transparent 31%),
+    linear-gradient(180deg, rgba(19,22,31,.992), rgba(8,11,17,.997));
+  box-shadow: rgba(0,0,0,.58) 0 34px 100px, inset 0 1px 0 rgba(255,255,255,.055);
+}
+.windows-pc-control-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 18px 18px 14px;
+  border-bottom: 1px solid rgba(255,255,255,.06);
+}
+.windows-pc-control-heading { min-width: 0; }
+.windows-pc-control-heading > span {
+  display: block;
+  color: rgba(186,165,241,.63);
+  font-size: 8.5px;
+  font-weight: 850;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+.windows-pc-control-heading h3 {
+  margin: 4px 0 2px;
+  font-size: 18px;
+  line-height: 1.15;
+  letter-spacing: -.025em;
+}
+.windows-pc-control-heading p {
+  max-width: 310px;
+  margin: 0;
+  overflow: hidden;
+  color: rgba(236,240,249,.45);
+  font-size: 10px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.windows-pc-control-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+}
+.windows-pc-control-online {
+  min-height: 29px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 9px;
+  border: 1px solid rgba(255,255,255,.07);
+  border-radius: 999px;
+  color: rgba(239,243,251,.6);
+  background: rgba(255,255,255,.03);
+  font-size: 7.5px;
+  font-weight: 850;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+.windows-pc-control-online i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #8993a5;
+}
+.windows-pc-control-online[data-state="connected"] i { background: #79e1b0; box-shadow: 0 0 0 4px rgba(121,225,176,.07); }
+.windows-pc-control-online[data-state="warning"] i { background: #f0c76f; box-shadow: 0 0 0 4px rgba(240,199,111,.07); }
+.windows-pc-control-online[data-state="error"] i { background: #ff8292; box-shadow: 0 0 0 4px rgba(255,130,146,.07); }
+.windows-pc-control-close {
+  width: 31px;
+  height: 31px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 11px;
+  color: rgba(255,255,255,.66);
+  background: rgba(255,255,255,.035);
+  font: inherit;
+  font-size: 19px;
+  cursor: pointer;
+}
+.windows-pc-control-close:hover,
+.windows-pc-control-close:focus-visible { color: #fff; border-color: rgba(255,105,126,.18); background: rgba(255,105,126,.09); }
+.windows-pc-control-body { padding: 15px 18px 18px; }
+.windows-pc-control-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0,1fr));
+  gap: 9px;
+}
+.windows-pc-action {
+  min-width: 0;
+  min-height: 72px;
+  display: grid;
+  grid-template-columns: 38px minmax(0,1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 10px 11px;
+  border: 1px solid rgba(255,255,255,.075);
+  border-radius: 16px;
+  color: rgba(244,247,252,.82);
+  background: linear-gradient(180deg,rgba(255,255,255,.043),rgba(255,255,255,.022));
+  text-align: left;
+  cursor: pointer;
+  transition: transform .12s ease, border-color .15s ease, background .15s ease, opacity .15s ease;
+}
+.windows-pc-action:hover:not(:disabled),
+.windows-pc-action:focus-visible:not(:disabled) { border-color: rgba(154,193,255,.20); background: rgba(112,151,213,.075); transform: translateY(-1px); }
+.windows-pc-action:active:not(:disabled) { transform: scale(.985); }
+.windows-pc-action:disabled { opacity: .34; cursor: not-allowed; }
+.windows-pc-action-icon {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  color: rgba(207,222,245,.72);
+  background: rgba(255,255,255,.04);
+}
+.windows-pc-action-icon svg { width: 21px; height: 21px; }
+.windows-pc-action > span:last-child { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.windows-pc-action strong { font-size: 10px; font-weight: 820; letter-spacing: -.01em; }
+.windows-pc-action small { color: rgba(224,231,243,.39); font-size: 7.5px; line-height: 1.3; }
+.windows-pc-action.is-danger .windows-pc-action-icon { color: rgba(255,174,185,.8); background: rgba(255,93,117,.065); }
+.windows-pc-action.is-warning .windows-pc-action-icon { color: rgba(248,208,135,.82); background: rgba(234,173,72,.055); }
+.windows-pc-action[data-confirming="true"] {
+  border-color: rgba(255,111,133,.35);
+  background: linear-gradient(180deg,rgba(127,43,62,.30),rgba(95,28,44,.24));
+  box-shadow: inset 0 0 0 1px rgba(255,117,139,.06);
+}
+.windows-pc-action.is-sending { opacity: .62; pointer-events: none; }
+.windows-pc-hotspot {
+  width: 100%;
+  min-height: 62px;
+  display: grid;
+  grid-template-columns: 40px minmax(0,1fr) auto;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 9px 11px;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 17px;
+  color: rgba(244,247,252,.82);
+  background: linear-gradient(180deg,rgba(255,255,255,.043),rgba(255,255,255,.022));
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .15s ease, background .15s ease, opacity .15s ease, transform .12s ease;
+}
+.windows-pc-hotspot:not(:disabled):hover,
+.windows-pc-hotspot:not(:disabled):focus-visible { border-color: rgba(147,197,255,.20); transform: translateY(-1px); }
+.windows-pc-hotspot:disabled { opacity: .42; cursor: not-allowed; }
+.windows-pc-hotspot-icon {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 13px;
+  color: rgba(202,220,246,.66);
+  background: rgba(255,255,255,.04);
+}
+.windows-pc-hotspot-icon svg { width: 22px; height: 22px; }
+.windows-pc-hotspot-copy { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.windows-pc-hotspot-copy strong { font-size: 10.5px; font-weight: 840; }
+.windows-pc-hotspot-copy small { overflow: hidden; color: rgba(224,231,243,.41); font-size: 7.8px; white-space: nowrap; text-overflow: ellipsis; }
+.windows-pc-hotspot-state {
+  min-width: 44px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255,255,255,.075);
+  border-radius: 999px;
+  color: rgba(232,237,246,.5);
+  background: rgba(255,255,255,.028);
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: .08em;
+}
+.windows-pc-hotspot.is-on {
+  border-color: rgba(121,225,176,.24);
+  background: linear-gradient(180deg,rgba(58,131,97,.14),rgba(35,92,69,.08));
+}
+.windows-pc-hotspot.is-on .windows-pc-hotspot-icon { color: #92ebbd; background: rgba(66,169,119,.10); }
+.windows-pc-hotspot.is-on .windows-pc-hotspot-state { color: #a4efc7; border-color: rgba(121,225,176,.25); background: rgba(69,153,107,.10); }
+.windows-pc-hotspot.is-off .windows-pc-hotspot-state { color: rgba(220,226,237,.48); }
+.windows-pc-hotspot.is-sending { opacity: .64; }
+.windows-pc-control-note {
+  margin-top: 10px;
+  padding: 9px 10px;
+  border: 1px solid rgba(255,255,255,.055);
+  border-radius: 13px;
+  color: rgba(226,232,242,.40);
+  background: rgba(255,255,255,.018);
+  font-size: 8px;
+  line-height: 1.45;
+  text-align: center;
+}
+
+@media (max-width: 760px) {
+  .windows-pc-control-modal {
+    align-items: flex-end;
+    padding: 0;
+  }
+  .windows-pc-control-card {
+    width: 100%;
+    max-height: calc(100dvh - env(safe-area-inset-top));
+    border-left: 0;
+    border-right: 0;
+    border-bottom: 0;
+    border-radius: 24px 24px 0 0;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .windows-pc-control-header {
+    padding: 15px max(14px, env(safe-area-inset-right)) 12px max(14px, env(safe-area-inset-left));
+  }
+  .windows-pc-control-body {
+    padding: 13px max(14px, env(safe-area-inset-right)) 15px max(14px, env(safe-area-inset-left));
+  }
+  .windows-pc-action { min-height: 68px; }
+}
+
+@media (max-width: 430px) {
+  .windows-pc-control-toggle { width: 30px; height: 30px; flex-basis: 30px; }
+  .windows-pc-control-online span { max-width: 54px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .windows-pc-control-grid { gap: 7px; }
+  .windows-pc-action { grid-template-columns: 34px minmax(0,1fr); gap: 8px; min-height: 64px; padding: 8px; border-radius: 14px; }
+  .windows-pc-action-icon { width: 34px; height: 34px; border-radius: 11px; }
+  .windows-pc-action-icon svg { width: 19px; height: 19px; }
+  .windows-pc-action strong { font-size: 9px; }
+  .windows-pc-action small { font-size: 6.8px; }
+  .windows-pc-hotspot { min-height: 59px; grid-template-columns: 36px minmax(0,1fr) auto; padding: 8px; }
+  .windows-pc-hotspot-icon { width: 36px; height: 36px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .windows-pc-control-toggle,
+  .windows-pc-action,
+  .windows-pc-hotspot { transition: none; }
 }

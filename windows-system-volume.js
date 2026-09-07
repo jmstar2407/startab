@@ -22,6 +22,7 @@
     dialDragging: false,
     dialValue: 0,
     dialHapticBucket: null,
+    footerGesture: { pointerId: null, startY: 0, lastY: 0, startAt: 0, initialExpanded: false, dragged: false, suppressClick: false },
     mobileLayoutMql: null,
     optimisticVolume: null,
     optimisticMuted: null,
@@ -83,6 +84,8 @@
     dom.dialSegments = $('windows-volume-dial-segments');
     dom.dialValue = $('windows-volume-dial-value');
     dom.dialMute = $('windows-volume-dial-mute');
+    dom.dialDown = $('windows-volume-dial-down');
+    dom.dialUp = $('windows-volume-dial-up');
     dom.spectrum = $('windows-volume-spectrum');
     dom.sourceList = $('multimedia-source-list');
     dom.mobileSourceSlot = $('multimedia-mobile-source-slot');
@@ -319,14 +322,17 @@
 
   function setFooterExpanded(expanded) {
     if (!dom.footer || !dom.footerToggle) return;
-    dom.footer.classList.toggle('is-expanded', !!expanded);
-    dom.footerToggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    const next = !!expanded;
+    dom.footer.classList.toggle('is-expanded', next);
+    dom.footerToggle.setAttribute('aria-expanded', next ? 'true' : 'false');
+    const path = dom.footerToggle.querySelector('.multimedia-system-volume-chevron path');
+    if (path) path.setAttribute('d', next ? 'm7 9 5 5 5-5' : 'm7 15 5-5 5 5');
     window.requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
     window.setTimeout(() => window.dispatchEvent(new Event('resize')), 280);
   }
 
   function setControlDisabled(disabled) {
-    for (const element of [dom.range, dom.mute, dom.down, dom.up, dom.dialMute]) {
+    for (const element of [dom.range, dom.mute, dom.down, dom.up, dom.dialMute, dom.dialDown, dom.dialUp]) {
       if (element) element.disabled = !!disabled;
     }
     if (dom.dial) {
@@ -610,9 +616,88 @@
   }
 
   function bindEvents() {
-    dom.footerToggle?.addEventListener('click', () => {
+    const clearFooterGestureStyles = () => {
+      dom.footer?.classList.remove('is-gesture');
+      dom.footerToggle?.classList.remove('is-dragging');
+      if (dom.footerToggle) dom.footerToggle.style.transform = '';
+      if (dom.card) {
+        dom.card.style.maxHeight = '';
+        dom.card.style.opacity = '';
+        dom.card.style.transform = '';
+        dom.card.style.pointerEvents = '';
+      }
+    };
+    const updateFooterGesture = (event) => {
+      const g = state.footerGesture;
+      if (g.pointerId === null || event.pointerId !== g.pointerId) return;
+      g.lastY = event.clientY;
+      const dy = event.clientY - g.startY;
+      if (Math.abs(dy) > 4) g.dragged = true;
+      if (!g.dragged) return;
+      event.preventDefault();
+      const openingDistance = 118;
+      const progress = g.initialExpanded
+        ? clamp(1 - (Math.max(0, dy) / openingDistance), 0, 1)
+        : clamp(Math.max(0, -dy) / openingDistance, 0, 1);
+      dom.footer?.classList.add('is-gesture');
+      dom.footerToggle?.classList.add('is-dragging');
+      if (dom.footerToggle) dom.footerToggle.style.transform = `translateY(${clamp(dy * .08, -5, 5)}px)`;
+      if (dom.card) {
+        const maxPx = Math.min(510, Math.max(330, window.innerHeight * .70));
+        dom.card.style.maxHeight = `${Math.round(maxPx * progress)}px`;
+        dom.card.style.opacity = String(.08 + (.92 * progress));
+        dom.card.style.transform = `translateY(${Math.round(9 * (1 - progress))}px)`;
+        dom.card.style.pointerEvents = progress > .82 ? 'auto' : 'none';
+      }
+      const path = dom.footerToggle?.querySelector('.multimedia-system-volume-chevron path');
+      if (path) path.setAttribute('d', progress >= .5 ? 'm7 9 5 5 5-5' : 'm7 15 5-5 5 5');
+    };
+    const finishFooterGesture = (event) => {
+      const g = state.footerGesture;
+      if (g.pointerId === null || event.pointerId !== g.pointerId) return;
+      const dy = event.clientY - g.startY;
+      const elapsed = Math.max(1, performance.now() - g.startAt);
+      const velocity = dy / elapsed;
+      let nextExpanded = g.initialExpanded;
+      if (g.dragged) {
+        if (!g.initialExpanded) nextExpanded = dy < -38 || velocity < -.34;
+        else nextExpanded = !(dy > 38 || velocity > .34);
+        g.suppressClick = true;
+        globalThis.StartabHaptics?.pulse?.('windows-volume-footer', 8, 70);
+      }
+      try { dom.footerToggle?.releasePointerCapture?.(event.pointerId); } catch (_) {}
+      g.pointerId = null;
+      clearFooterGestureStyles();
+      setFooterExpanded(nextExpanded);
+    };
+    dom.footerToggle?.addEventListener('pointerdown', (event) => {
+      if (!(state.mobileLayoutMql?.matches ?? window.matchMedia(MOBILE_MEDIA_QUERY).matches)) return;
+      if (event.button !== undefined && event.button !== 0) return;
+      const g = state.footerGesture;
+      g.pointerId = event.pointerId;
+      g.startY = g.lastY = event.clientY;
+      g.startAt = performance.now();
+      g.initialExpanded = !!dom.footer?.classList.contains('is-expanded');
+      g.dragged = false;
+      try { dom.footerToggle.setPointerCapture(event.pointerId); } catch (_) {}
+    }, { passive: true });
+    dom.footerToggle?.addEventListener('pointermove', updateFooterGesture, { passive: false });
+    dom.footerToggle?.addEventListener('pointerup', finishFooterGesture);
+    dom.footerToggle?.addEventListener('pointercancel', finishFooterGesture);
+    dom.footerToggle?.addEventListener('click', (event) => {
+      const g = state.footerGesture;
+      if (g.suppressClick) {
+        g.suppressClick = false;
+        event.preventDefault();
+        return;
+      }
       setFooterExpanded(!dom.footer?.classList.contains('is-expanded'));
     });
+    document.addEventListener('pointerdown', (event) => {
+      if (!dom.footer?.classList.contains('is-expanded')) return;
+      if (dom.footer.contains(event.target)) return;
+      setFooterExpanded(false);
+    }, true);
 
     dom.dial?.addEventListener('pointerdown', (event) => {
       if (event.button !== undefined && event.button !== 0) return;
@@ -702,6 +787,8 @@
     };
     dom.down?.addEventListener('click', () => stepVolume(-5));
     dom.up?.addEventListener('click', () => stepVolume(5));
+    dom.dialDown?.addEventListener('click', () => { globalThis.StartabHaptics?.pulse?.('windows-volume-step', 7, 45); stepVolume(-1); });
+    dom.dialUp?.addEventListener('click', () => { globalThis.StartabHaptics?.pulse?.('windows-volume-step', 7, 45); stepVolume(1); });
     dom.pair?.addEventListener('click', () => void copyExtensionId());
   }
 

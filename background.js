@@ -85,7 +85,7 @@ const MENU_ROOT='startab-add-root';const MENU_PREFIX='startab-add-category-';con
 
     nativePort.onMessage.addListener((message) => {
       if (!message || typeof message !== 'object') return;
-      if (message.type === 'hello' || message.type === 'state' || message.type === 'meter') {
+      if (message.type === 'hello' || message.type === 'state' || message.type === 'meter' || message.type === 'systemState') {
         nativeConnected = true;
         nativeState = { ...(nativeState || {}), ...message };
       }
@@ -109,7 +109,7 @@ const MENU_ROOT='startab-add-root';const MENU_PREFIX='startab-add-category-';con
     if (!nativePort || !nativeConnected) return false;
     if (!command || typeof command !== 'object') return false;
     const type = String(command.type || '');
-    if (!['getState', 'setVolume', 'setMute', 'toggleMute', 'step', 'pointerMove', 'pointerWheel', 'pointerClick', 'pointerButton', 'textInput', 'keyInput', 'ping'].includes(type)) return false;
+    if (!['getState', 'setVolume', 'setMute', 'toggleMute', 'step', 'pointerMove', 'pointerWheel', 'pointerClick', 'pointerButton', 'textInput', 'keyInput', 'monitorOff', 'shutdown', 'sleep', 'restart', 'logoff', 'lock', 'getSystemState', 'setHotspot', 'ping'].includes(type)) return false;
     try {
       nativePort.postMessage(command);
       return true;

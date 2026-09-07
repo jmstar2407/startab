@@ -369,6 +369,8 @@
     if (action === 'toggleMute') return { type: 'toggleMute' };
     if (action === 'setMute') return { type: 'setMute', muted: !!command.muted };
     if (action === 'step') return { type: 'step', delta: Math.max(-100, Math.min(100, Number(command.value) || 0)) };
+    if (['monitorOff', 'shutdown', 'sleep', 'restart', 'logoff', 'lock', 'getSystemState'].includes(action)) return { type: action };
+    if (action === 'setHotspot') return { type: 'setHotspot', enabled: !!command.enabled };
     return null;
   }
 
@@ -442,6 +444,10 @@
     if (Number.isFinite(Number(native.volume))) payload.volume = Math.max(0, Math.min(100, Number(native.volume)));
     if (typeof native.muted === 'boolean') payload.muted = native.muted;
     if (typeof native.audioActive === 'boolean') payload.audioActive = native.audioActive;
+    if (typeof native.systemControl === 'boolean') payload.systemControl = native.systemControl;
+    if (typeof native.hotspotState === 'string') payload.hotspotState = native.hotspotState;
+    if (Number.isFinite(Number(native.hotspotClients))) payload.hotspotClients = Math.max(0, Number(native.hotspotClients));
+    if (typeof native.hotspotMessage === 'string') payload.hotspotMessage = native.hotspotMessage.slice(0, 500);
     if (force) payload.connectedAt = firebase.firestore.FieldValue.serverTimestamp();
 
     try {
@@ -479,6 +485,13 @@
     }
 
     if (message?.type === 'state') {
+      state.nativeConnected = true;
+      state.nativeState = { ...(state.nativeState || {}), ...message };
+      await publishNativeState(false);
+      return;
+    }
+
+    if (message?.type === 'systemState') {
       state.nativeConnected = true;
       state.nativeState = { ...(state.nativeState || {}), ...message };
       await publishNativeState(false);

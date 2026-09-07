@@ -43,3 +43,15 @@ El mismo documento puede contener `motionRelay`, `scrollRelay`, `clickRelay`, `b
 ## Haptics
 
 La vibración se activa solo cuando `navigator.vibrate()` está disponible y el dispositivo tiene entrada táctil/coarse. Los pulsos se agrupan, limitan y se ejecutan fuera del evento de movimiento para que la vibración no frene el touchpad ni el dial de volumen. Si el navegador no ofrece esa API, StarTab continúa funcionando sin vibración.
+
+## Control remoto del PC · agente v2.4.0
+
+StarTab v2.4 del agente añade un panel de control del sistema encima del Touchpad remoto. El nuevo panel permite apagar el monitor, apagar/reiniciar/suspender el PC, cerrar sesión, bloquear Windows y consultar/cambiar Mobile Hotspot.
+
+Compatibilidad por capacidad:
+- v2.2.0+: cursor y clics.
+- v2.2.1+: scroll remoto.
+- v2.3.0+: teclado remoto y clic izquierdo sostenido.
+- v2.4.0+: controles del sistema y estado ON/OFF de Mobile Hotspot.
+
+Los controles del sistema usan el mismo documento `users/{uid}/windowsDevices/{deviceId}` y la misma autenticación de StarTab. El estado del hotspot se consulta en Windows mediante la API de tethering de Windows Runtime y se publica como `hotspotState` (`on`, `off`, `unavailable`, `error`) y `hotspotClients`.
