@@ -87,7 +87,19 @@ const MENU_ROOT='startab-add-root';const MENU_PREFIX='startab-add-category-';con
       if (!message || typeof message !== 'object') return;
       if (message.type === 'hello' || message.type === 'state' || message.type === 'meter' || message.type === 'systemState') {
         nativeConnected = true;
-        nativeState = { ...(nativeState || {}), ...message };
+        if (message.type === 'systemState') {
+          const incomingRevision = Math.max(0, Number(message.rgbRevision) || 0);
+          const currentRevision = Math.max(0, Number(nativeState?.rgbRevision) || 0);
+          if (incomingRevision && currentRevision && incomingRevision < currentRevision) {
+            const filtered = { ...message };
+            ['rgbState', 'rgbProvider', 'rgbDevices', 'rgbMessage', 'rgbColor', 'rgbBrightness', 'rgbPowered', 'rgbFusionDetected', 'rgbRevision'].forEach((key) => delete filtered[key]);
+            nativeState = { ...(nativeState || {}), ...filtered };
+          } else {
+            nativeState = { ...(nativeState || {}), ...message };
+          }
+        } else {
+          nativeState = { ...(nativeState || {}), ...message };
+        }
       }
       emitToOffscreen({ kind: 'message', message });
       broadcastStatus();
@@ -109,7 +121,7 @@ const MENU_ROOT='startab-add-root';const MENU_PREFIX='startab-add-category-';con
     if (!nativePort || !nativeConnected) return false;
     if (!command || typeof command !== 'object') return false;
     const type = String(command.type || '');
-    if (!['getState', 'setVolume', 'setMute', 'toggleMute', 'step', 'pointerMove', 'pointerWheel', 'pointerClick', 'pointerButton', 'textInput', 'keyInput', 'monitorOff', 'shutdown', 'sleep', 'restart', 'logoff', 'lock', 'getSystemState', 'setHotspot', 'ping'].includes(type)) return false;
+    if (!['getState', 'setVolume', 'setMute', 'toggleMute', 'step', 'pointerMove', 'pointerWheel', 'pointerClick', 'pointerButton', 'textInput', 'keyInput', 'monitorOff', 'shutdown', 'sleep', 'restart', 'logoff', 'lock', 'rgbOff', 'rgbOn', 'rgbSet', 'getSystemState', 'setHotspot', 'ping'].includes(type)) return false;
     try {
       nativePort.postMessage(command);
       return true;

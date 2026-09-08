@@ -355,6 +355,10 @@
 <span class="windows-pc-action-icon"><svg aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.65" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2.5"></rect><path d="M8 21h8M12 17v4"></path><path d="M8.5 10.5h7"></path></svg></span>
 <span><strong>Apagar monitor</strong><small>Apaga la pantalla</small></span>
 </button>
+<button class="windows-pc-action windows-pc-rgb-action" id="windows-pc-rgb-open" type="button" disabled aria-expanded="true" aria-controls="windows-rgb-studio">
+<span class="windows-pc-action-icon"><svg aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.65" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9"></path><path d="M12 3a4.5 4.5 0 0 1 4.5 4.5c0 2.5-2 4.5-4.5 4.5s-4.5 2-4.5 4.5S9.5 21 12 21"></path><circle cx="12" cy="7.5" r="1"></circle><circle cx="12" cy="16.5" r="1"></circle></svg></span>
+<span><strong>Iluminación RGB</strong><small id="windows-pc-rgb-note">Color · brillo · encendido</small></span>
+</button>
 <button class="windows-pc-action is-danger" data-system-action="shutdown" data-confirm="true" type="button">
 <span class="windows-pc-action-icon"><svg aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" viewBox="0 0 24 24"><path d="M12 2v10"></path><path d="M6.4 5.6a8 8 0 1 0 11.2 0"></path></svg></span>
 <span><strong>Apagar PC</strong><small>Apagado completo</small></span>
@@ -376,6 +380,51 @@
 <span><strong>Bloquear PC</strong><small>Pantalla de bloqueo</small></span>
 </button>
 </div>
+<section class="windows-rgb-studio" id="windows-rgb-studio" aria-label="Control de iluminación RGB">
+  <div class="windows-rgb-studio-top">
+    <div class="windows-rgb-visual" id="windows-rgb-visual" style="--rgb-color:#7c5cff;--rgb-power:.9">
+      <div class="windows-rgb-aura"></div>
+      <div class="windows-rgb-core"><span>RGB</span><small id="windows-rgb-percent">100%</small></div>
+    </div>
+    <div class="windows-rgb-summary">
+      <span class="windows-rgb-eyebrow">RGB ENGINE PRO</span>
+      <strong id="windows-rgb-status">Preparando iluminación</strong>
+      <small id="windows-rgb-provider">OpenRGB</small>
+    </div>
+    <button class="windows-rgb-power" id="windows-rgb-power" type="button" aria-pressed="false" disabled title="Encender o apagar iluminación RGB">
+      <svg aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.9" viewBox="0 0 24 24"><path d="M12 2v10"></path><path d="M6.4 5.6a8 8 0 1 0 11.2 0"></path></svg>
+      <span>OFF</span>
+    </button>
+  </div>
+  <div class="windows-rgb-controls">
+    <div class="windows-rgb-color-row">
+      <label class="windows-rgb-picker" title="Elegir color">
+        <input id="windows-rgb-color" type="color" value="#7c5cff" disabled>
+        <span id="windows-rgb-color-swatch"></span>
+      </label>
+      <label class="windows-rgb-hex-wrap">
+        <span>COLOR</span>
+        <input id="windows-rgb-hex" type="text" value="#7C5CFF" maxlength="7" spellcheck="false" autocomplete="off" disabled>
+      </label>
+      <div class="windows-rgb-presets" id="windows-rgb-presets" aria-label="Colores rápidos">
+        <button type="button" data-rgb-color="#FF0000" style="--preset:#ff0000" aria-label="Rojo"></button>
+        <button type="button" data-rgb-color="#FF8000" style="--preset:#ff8000" aria-label="Naranja"></button>
+        <button type="button" data-rgb-color="#FFFF00" style="--preset:#ffff00" aria-label="Amarillo"></button>
+        <button type="button" data-rgb-color="#00FF00" style="--preset:#00ff00" aria-label="Verde"></button>
+        <button type="button" data-rgb-color="#00FFFF" style="--preset:#00ffff" aria-label="Cian"></button>
+        <button type="button" data-rgb-color="#0000FF" style="--preset:#0000ff" aria-label="Azul"></button>
+        <button type="button" data-rgb-color="#8000FF" style="--preset:#8000ff" aria-label="Violeta"></button>
+        <button type="button" data-rgb-color="#FFFFFF" style="--preset:#fff" aria-label="Blanco"></button>
+      </div>
+    </div>
+    <div class="windows-rgb-brightness">
+      <div class="windows-rgb-control-label"><span>Intensidad</span><strong id="windows-rgb-brightness-value">100%</strong></div>
+      <input id="windows-rgb-brightness" type="range" min="0" max="100" step="1" value="100" disabled aria-label="Intensidad de iluminación">
+      <div class="windows-rgb-scale"><span>0%</span><span>50%</span><span>100%</span></div>
+    </div>
+    <div class="windows-rgb-hardware-note" id="windows-rgb-hardware-note">Board · RAM · GPU · tiras LED compatibles</div>
+  </div>
+</section>
 <button class="windows-pc-hotspot" id="windows-pc-hotspot" type="button" aria-pressed="false" disabled>
 <span class="windows-pc-hotspot-icon"><svg aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" viewBox="0 0 24 24"><path d="M5 12.5a10 10 0 0 1 14 0"></path><path d="M8 15.5a6 6 0 0 1 8 0"></path><path d="M10.8 18.4a2 2 0 0 1 2.4 0"></path><circle cx="12" cy="20" r=".8" fill="currentColor" stroke="none"></circle></svg></span>
 <span class="windows-pc-hotspot-copy"><strong>Mobile Hotspot</strong><small id="windows-pc-hotspot-note">Consultando estado del PC…</small></span>

@@ -81,3 +81,20 @@ StarTab incluye `startab-haptics.js`, una capa ligera que usa la API de vibraci�
 ## Agente v2.4.0 · control del sistema
 
 Después de compilar e instalar v2.4.0, el mismo agente permite los controles remotos del PC desde el modal Touchpad remoto. No es necesario instalar otro servicio. El panel de PC requiere v2.4.0; las funciones anteriores siguen siendo compatibles con sus versiones mínimas correspondientes.
+
+
+## Agente v2.5.0 · apagar todas las luces RGB/LED compatibles
+
+En **Control del PC principal** aparece **Apagar luces RGB**. La función requiere `StartabWindowsVolume.exe` v2.5.0 y OpenRGB instalado o disponible junto al agente. El agente detecta OpenRGB automáticamente y el botón informa si no está disponible. Al pulsarlo se intenta apagar, de una sola vez, la iluminación de placa base, RAM, GPU y otros controladores/periféricos que OpenRGB detecte.
+
+Si OpenRGB está instalado en una ruta no estándar, crea la variable de entorno `STARTAB_OPENRGB_PATH` apuntando a `OpenRGB.exe`. Para algunos controladores de placa/RAM puede ser necesario abrir OpenRGB una vez como administrador para habilitar/detectar el hardware.
+
+
+## Agente v2.6.0 · RGB Studio
+
+El panel de Control del PC ahora permite encender/apagar RGB, escoger color y ajustar intensidad 0-100%. El último ajuste se recuerda localmente. El estado se sincroniza con StarTab remoto. RGB Fusion se detecta como software adicional en equipos Gigabyte, mientras OpenRGB sigue siendo el backend automatizado para los dispositivos que expone.
+
+
+## Agente v2.7.0 · RGB Engine Pro
+
+Reprograma el transporte RGB para eliminar la latencia de lanzar OpenRGB por cada cambio. El agente usa `OpenRGB.NET` con una conexión SDK persistente, aplica modo de software/directo al hardware compatible, coalesce cambios del slider para conservar solo el valor más reciente y añade `rgbRevision` para descartar respuestas antiguas. En el mismo PC, StarTab intenta enviar RGB directamente por Native Messaging; desde móvil/otro dispositivo mantiene Firebase como transporte remoto. Los presets rápidos ahora usan valores RGB exactos.
