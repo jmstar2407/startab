@@ -370,11 +370,11 @@
     if (action === 'setMute') return { type: 'setMute', muted: !!command.muted };
     if (action === 'step') return { type: 'step', delta: Math.max(-100, Math.min(100, Number(command.value) || 0)) };
     if (['monitorOff', 'shutdown', 'sleep', 'restart', 'logoff', 'lock', 'getSystemState'].includes(action)) return { type: action };
-    const rgbRevision = Math.max(0, Number(command.revision) || Number(command.clientAt) || 0);
-    if (action === 'rgbOff') return { type: 'rgbOff', revision: rgbRevision };
-    if (action === 'rgbOn') return { type: 'rgbOn', color: String(command.color || ''), brightness: Math.max(1, Math.min(100, Number(command.brightness) || 100)), revision: rgbRevision };
-    if (action === 'rgbSet') return { type: 'rgbSet', color: String(command.color || ''), brightness: Math.max(0, Math.min(100, Number(command.brightness) || 0)), revision: rgbRevision };
     if (action === 'setHotspot') return { type: 'setHotspot', enabled: !!command.enabled };
+    if (action === 'setRgb') {
+      const color = /^#[0-9a-f]{6}$/i.test(String(command.color || '')) ? String(command.color).toUpperCase() : '#FFFFFF';
+      return { type: 'setRgb', enabled: !!command.enabled, color };
+    }
     return null;
   }
 
@@ -452,15 +452,12 @@
     if (typeof native.hotspotState === 'string') payload.hotspotState = native.hotspotState;
     if (Number.isFinite(Number(native.hotspotClients))) payload.hotspotClients = Math.max(0, Number(native.hotspotClients));
     if (typeof native.hotspotMessage === 'string') payload.hotspotMessage = native.hotspotMessage.slice(0, 500);
+    if (typeof native.rgbControl === 'boolean') payload.rgbControl = native.rgbControl;
+    if (typeof native.rgbAvailable === 'boolean') payload.rgbAvailable = native.rgbAvailable;
     if (typeof native.rgbState === 'string') payload.rgbState = native.rgbState;
-    if (typeof native.rgbProvider === 'string') payload.rgbProvider = native.rgbProvider.slice(0, 80);
-    if (Number.isFinite(Number(native.rgbDevices))) payload.rgbDevices = Math.max(0, Number(native.rgbDevices));
+    if (typeof native.rgbColor === 'string') payload.rgbColor = native.rgbColor.slice(0, 16);
+    if (typeof native.rgbTransport === 'string') payload.rgbTransport = native.rgbTransport.slice(0, 40);
     if (typeof native.rgbMessage === 'string') payload.rgbMessage = native.rgbMessage.slice(0, 500);
-    if (typeof native.rgbColor === 'string') payload.rgbColor = native.rgbColor.slice(0, 9);
-    if (Number.isFinite(Number(native.rgbBrightness))) payload.rgbBrightness = Math.max(0, Math.min(100, Number(native.rgbBrightness)));
-    if (typeof native.rgbPowered === 'boolean') payload.rgbPowered = native.rgbPowered;
-    if (typeof native.rgbFusionDetected === 'boolean') payload.rgbFusionDetected = native.rgbFusionDetected;
-    if (Number.isFinite(Number(native.rgbRevision))) payload.rgbRevision = Math.max(0, Number(native.rgbRevision));
     if (force) payload.connectedAt = firebase.firestore.FieldValue.serverTimestamp();
 
     try {
@@ -506,15 +503,14 @@
 
     if (message?.type === 'systemState') {
       state.nativeConnected = true;
-      const incomingRevision = Math.max(0, Number(message.rgbRevision) || 0);
-      const currentRevision = Math.max(0, Number(state.nativeState?.rgbRevision) || 0);
-      if (incomingRevision && currentRevision && incomingRevision < currentRevision) {
-        const filtered = { ...message };
-        ['rgbState', 'rgbProvider', 'rgbDevices', 'rgbMessage', 'rgbColor', 'rgbBrightness', 'rgbPowered', 'rgbFusionDetected', 'rgbRevision'].forEach((key) => delete filtered[key]);
-        state.nativeState = { ...(state.nativeState || {}), ...filtered };
-      } else {
-        state.nativeState = { ...(state.nativeState || {}), ...message };
-      }
+      state.nativeState = { ...(state.nativeState || {}), ...message };
+      await publishNativeState(false);
+      return;
+    }
+
+    if (message?.type === 'rgbState') {
+      state.nativeConnected = true;
+      state.nativeState = { ...(state.nativeState || {}), ...message };
       await publishNativeState(false);
       return;
     }
