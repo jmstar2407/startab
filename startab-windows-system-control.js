@@ -8,7 +8,7 @@
   const CLIENT_ID_KEY = 'startab_windows_system_client_v1';
   const REFRESH_INTERVAL_MS = 15_000;
   const REQUIRED_AGENT = [2, 4, 0];
-  const RGB_REQUIRED_AGENT = [2, 5, 0];
+  const RGB_REQUIRED_AGENT = [2, 6, 1];
 
   const state = {
     db: null,
@@ -235,7 +235,7 @@
     if (dom.rgbState) dom.rgbState.textContent = rgbState === 'on' ? 'ON' : rgbState === 'off' ? 'OFF' : '--';
     if (dom.rgbTransport) {
       const transport = String(device?.rgbTransport || '').toLowerCase();
-      dom.rgbTransport.textContent = transport === 'sdk' ? 'SDK · 6742' : transport === 'cli' ? 'OPENRGB · CLI' : 'OPENRGB';
+      dom.rgbTransport.textContent = transport === 'sdk-task-admin' ? 'SDK · AUTO ADMIN · 6742' : transport === 'sdk-admin' ? 'SDK · ADMIN · 6742' : transport.startsWith('sdk') ? 'SDK · 6742' : transport === 'cli' ? 'OPENRGB · CLI' : 'OPENRGB';
       dom.rgbTransport.dataset.transport = transport || 'unknown';
     }
     if (dom.rgbNote) {
@@ -423,7 +423,7 @@
     }, 900);
   }
 
-  async function tryLocalRgbFastPath(enabled, color) {
+  async function tryLocalRgbFastPath(enabled, color, intent = 'power') {
     try {
       if (!globalThis.chrome?.runtime?.sendMessage || !state.lastDevice?.deviceId) return false;
       const status = await chrome.runtime.sendMessage({ type: 'STARTAB_WINDOWS_NATIVE_GET_STATE' });
@@ -431,7 +431,7 @@
       if (!versionAtLeast(status?.state?.agentVersion, RGB_REQUIRED_AGENT)) return false;
       const response = await chrome.runtime.sendMessage({
         type: 'STARTAB_WINDOWS_NATIVE_COMMAND',
-        command: { type: 'setRgb', enabled: !!enabled, color },
+        command: { type: 'setRgb', enabled: !!enabled, color, intent },
       });
       return !!response?.ok;
     } catch (_) {
@@ -439,13 +439,13 @@
     }
   }
 
-  async function sendRgbCommand(enabled, color) {
+  async function sendRgbCommand(enabled, color, intent = 'power') {
     if (!versionAtLeast(state.lastDevice?.agentVersion, RGB_REQUIRED_AGENT)) return false;
     const normalized = normalizeRgbColor(color);
     // Same-PC extension control bypasses Firestore for near-instant response.
     // Mobile/web clients automatically fall back to the existing realtime cloud bridge.
-    if (await tryLocalRgbFastPath(enabled, normalized)) return true;
-    return sendCommand('setRgb', { enabled: !!enabled, color: normalized });
+    if (await tryLocalRgbFastPath(enabled, normalized, intent)) return true;
+    return sendCommand('setRgb', { enabled: !!enabled, color: normalized, intent });
   }
 
   function optimisticRgb(enabled, color) {
@@ -467,7 +467,7 @@
     if (dom.rgbNote) dom.rgbNote.textContent = enabled ? `Aplicando ${normalized}…` : 'Apagando todas las luces…';
   }
 
-  async function applyRgb(enabled, color) {
+  async function applyRgb(enabled, color, intent = 'power') {
     if (!dom.rgbPower || state.rgbBusy || dom.rgbPower.disabled) return;
     const normalized = normalizeRgbColor(color || dom.rgbColor?.value || state.lastDevice?.rgbColor);
     state.rgbBusy = true;
@@ -475,7 +475,7 @@
     dom.rgb.classList.add('is-sending');
     dom.rgbPower.disabled = true;
     globalThis.StartabHaptics?.pulse?.(enabled ? 'pc-rgb-on' : 'pc-rgb-off', enabled ? 12 : 8, 60);
-    const ok = await sendRgbCommand(enabled, normalized);
+    const ok = await sendRgbCommand(enabled, normalized, intent);
     state.rgbBusy = false;
     dom.rgb.classList.remove('is-sending');
     if (!ok) {
@@ -492,7 +492,7 @@
 
   function toggleRgb() {
     const current = normalizeRgbState(dom.rgb?.dataset.state || state.lastDevice?.rgbState);
-    void applyRgb(current !== 'on', dom.rgbColor?.value || state.lastDevice?.rgbColor || '#FFFFFF');
+    void applyRgb(current !== 'on', dom.rgbColor?.value || state.lastDevice?.rgbColor || '#FFFFFF', 'power');
   }
 
   function bindUi() {
@@ -516,11 +516,11 @@
       const color = setRgbVisualColor(dom.rgbColor.value);
       if (dom.rgb) dom.rgb.style.setProperty('--active-rgb', color);
     });
-    dom.rgbColor?.addEventListener('change', () => void applyRgb(true, dom.rgbColor.value));
+    dom.rgbColor?.addEventListener('change', () => void applyRgb(true, dom.rgbColor.value, 'color'));
     dom.rgbSwatches?.addEventListener('click', (event) => {
       const swatch = event.target.closest?.('[data-rgb-color]');
       if (!swatch || state.rgbBusy || dom.rgbPower?.disabled) return;
-      void applyRgb(true, swatch.dataset.rgbColor);
+      void applyRgb(true, swatch.dataset.rgbColor, 'color');
     });
     dom.deviceSelect?.addEventListener('change', () => {
       if (state.open) {

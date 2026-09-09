@@ -373,7 +373,8 @@
     if (action === 'setHotspot') return { type: 'setHotspot', enabled: !!command.enabled };
     if (action === 'setRgb') {
       const color = /^#[0-9a-f]{6}$/i.test(String(command.color || '')) ? String(command.color).toUpperCase() : '#FFFFFF';
-      return { type: 'setRgb', enabled: !!command.enabled, color };
+      const intent = String(command.intent || 'power').toLowerCase() === 'color' ? 'color' : 'power';
+      return { type: 'setRgb', enabled: !!command.enabled, color, intent };
     }
     return null;
   }
