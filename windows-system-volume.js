@@ -6,6 +6,7 @@
   const DEVICE_STALE_MS = 90_000;
   const SELECTED_DEVICE_KEY = 'startab_windows_volume_selected_device_v2';
   const CLIENT_ID_KEY = 'startab_windows_volume_client_id_v2';
+  const NATIVE_DEVICE_KEY = 'startab_windows_native_device_id_v1';
 
   const state = {
     db: null,
@@ -342,6 +343,15 @@
     }
   }
 
+  function announceSelectedDevice(deviceId = state.selectedDeviceId) {
+    const id = String(deviceId || '').trim();
+    try {
+      window.dispatchEvent(new CustomEvent('startab-device-selection-change', {
+        detail: { deviceId: id },
+      }));
+    } catch (_) {}
+  }
+
   function persistSelectedDevice() {
     if (!state.user?.uid || !state.selectedDeviceId) return;
     try {
@@ -368,6 +378,7 @@
       option.textContent = state.user ? 'Sin PCs vinculados' : 'Inicia sesión';
       dom.device.append(option);
       state.selectedDeviceId = null;
+      announceSelectedDevice('');
       return;
     }
 
@@ -394,6 +405,7 @@
     state.selectedDeviceId = desired;
     dom.device.value = desired;
     persistSelectedDevice();
+    if (previous !== desired) announceSelectedDevice(desired);
   }
 
   function render() {
@@ -567,7 +579,15 @@
     if (!payload || typeof payload !== 'object') return;
     state.native.connected = !!payload.connected;
     const nativeState = payload.state || payload;
-    if (nativeState?.deviceId) state.native.deviceId = nativeState.deviceId;
+    if (nativeState?.deviceId) {
+      state.native.deviceId = nativeState.deviceId;
+      try { localStorage.setItem(NATIVE_DEVICE_KEY, String(nativeState.deviceId)); } catch (_) {}
+      try {
+        window.dispatchEvent(new CustomEvent('startab-local-device-ready', {
+          detail: { deviceId: String(nativeState.deviceId), deviceName: nativeState.deviceName || state.native.deviceName || 'PC Windows' },
+        }));
+      } catch (_) {}
+    }
     if (nativeState?.deviceName) state.native.deviceName = nativeState.deviceName;
     if (Number.isFinite(Number(nativeState?.volume))) state.native.volume = Number(nativeState.volume);
     if (typeof nativeState?.muted === 'boolean') state.native.muted = nativeState.muted;
@@ -744,6 +764,7 @@
       clearOptimisticState();
       state.selectedDeviceId = dom.device.value || null;
       persistSelectedDevice();
+      announceSelectedDevice(state.selectedDeviceId);
       render();
     });
 

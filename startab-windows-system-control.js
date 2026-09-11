@@ -253,7 +253,7 @@
     }
 
     if (dom.note) {
-      if (!loggedIn) dom.note.textContent = 'Inicia sesión en StarTab para controlar tu PC principal.';
+      if (!loggedIn) dom.note.textContent = 'Inicia sesión en StarTab para controlar el PC seleccionado.';
       else if (!device) dom.note.textContent = 'Selecciona primero un PC en “Volumen del sistema”.';
       else if (!online) dom.note.textContent = 'El PC seleccionado está desconectado.';
       else if (!supported) dom.note.textContent = `Estas acciones requieren StartabWindowsVolume.exe v2.4.0 o superior. Tu PC usa ${device.agentVersion || 'una versión anterior'}.`;
@@ -393,7 +393,7 @@
     globalThis.StartabHaptics?.pulse?.(`pc-control-${action}`, action === 'shutdown' || action === 'restart' ? 20 : 10, 70);
     const ok = await sendCommand(action);
     button.classList.remove('is-sending');
-    if (dom.note) dom.note.textContent = ok ? 'Comando enviado al PC principal.' : 'No se pudo enviar el comando al PC.';
+    if (dom.note) dom.note.textContent = ok ? 'Comando enviado al PC seleccionado.' : 'No se pudo enviar el comando al PC.';
     if (ok && ['shutdown', 'restart', 'logoff', 'sleep', 'lock', 'monitorOff'].includes(action)) {
       window.setTimeout(() => {
         if (state.open && dom.note) dom.note.textContent = 'Esperando la respuesta del PC…';

@@ -445,6 +445,8 @@
   async function publishNativeState(force = false) {
     if (!state.db || !state.user?.uid || !state.nativeState?.deviceId) return;
     const native = state.nativeState;
+    try { localStorage.setItem('startab_windows_native_device_id_v1', String(native.deviceId)); } catch (_) {}
+    try { if (native.deviceName) localStorage.setItem('startab_windows_native_device_name_v1', String(native.deviceName)); } catch (_) {}
     const target = state.db
       .collection('users')
       .doc(state.user.uid)
@@ -588,11 +590,10 @@
   } catch (_) {}
 })();
 
-/* StarTab NATIVE MEDIA · persistent Firestore bridge v2
- * Keeps the principal multimedia device reachable while no StarTab tab is open.
- * The service worker owns the browser media registry; this hidden document owns
- * the long-lived Firestore listeners/heartbeat. A Web Lock prevents duplicate
- * command execution when a visible StarTab page is open at the same time.
+/* StarTab NATIVE MEDIA · persistent Firestore bridge v3
+ * Cada PC publica sus propias sesiones multimedia usando el mismo deviceId
+ * del agente Windows. No existe un "principal": el cliente remoto elige qué PC
+ * desea ver/controlar mediante windows-device-select.
  */
 (() => {
   'use strict';
@@ -606,11 +607,11 @@
     appId: '1:874084877753:web:cf9cbe9a344356dc9be268',
   };
 
-  const DEVICE_ID_KEY = 'startab_media_remote_device_id_v1';
-  const LAST_COMMAND_KEY = 'startab_media_remote_last_command_v1';
-  const LEADER_LOCK = 'startab-media-cloud-bridge-v1';
+  const NATIVE_DEVICE_KEY = 'startab_windows_native_device_id_v1';
+  const LAST_COMMAND_PREFIX = 'startab_media_remote_last_command_v3_';
+  const LEADER_LOCK = 'startab-media-cloud-bridge-v3';
   const HEARTBEAT_MS = 12_000;
-  const COMMAND_MAX_AGE_MS = 20_000;
+  const COMMAND_MAX_AGE_MS = 25_000;
   const STATE_FORCE_REFRESH_MS = 45_000;
 
   const media = {
@@ -621,17 +622,14 @@
     uid: null,
     refs: null,
     unsubs: [],
-    principal: null,
-    isPrincipal: false,
+    boundDeviceId: '',
     isLeader: false,
     sessions: [],
     publishTimer: 0,
     lastPublishedFingerprint: '',
     lastPublishedSessions: [],
     lastPublishedAt: 0,
-    lastCommandId: (() => {
-      try { return localStorage.getItem(LAST_COMMAND_KEY) || ''; } catch (_) { return ''; }
-    })(),
+    lastCommandId: '',
   };
 
   function readSavedUser() {
@@ -659,22 +657,36 @@
 
   function mediaDeviceId() {
     try {
-      const saved = localStorage.getItem(DEVICE_ID_KEY);
-      if (saved) return saved;
-      const created = crypto.randomUUID?.() || `device-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      localStorage.setItem(DEVICE_ID_KEY, created);
-      return created;
+      return String(localStorage.getItem(NATIVE_DEVICE_KEY) || '').trim();
     } catch (_) {
-      return `device-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      return '';
     }
   }
 
   function mediaDeviceLabel() {
+    const id = mediaDeviceId();
+    try {
+      const raw = localStorage.getItem('startab_windows_native_device_name_v1');
+      if (raw) return raw;
+    } catch (_) {}
     const ua = String(navigator.userAgent || '');
     if (/Windows/i.test(ua)) return 'PC con Windows';
     if (/Macintosh|Mac OS X/i.test(ua)) return 'Mac';
     if (/Linux/i.test(ua)) return 'Linux';
-    return 'Dispositivo StarTab';
+    return id ? 'Dispositivo StarTab' : 'PC StarTab';
+  }
+
+  function lastCommandKey(deviceId) {
+    return `${LAST_COMMAND_PREFIX}${deviceId}`;
+  }
+
+  function restoreLastCommandId(deviceId) {
+    try { return localStorage.getItem(lastCommandKey(deviceId)) || ''; } catch (_) { return ''; }
+  }
+
+  function saveLastCommandId(deviceId, commandId) {
+    media.lastCommandId = String(commandId || '');
+    try { localStorage.setItem(lastCommandKey(deviceId), media.lastCommandId); } catch (_) {}
   }
 
   function serverTimestamp() {
@@ -747,11 +759,13 @@
   }
 
   function stableFingerprint(sessions) {
-    return JSON.stringify(sessions.map((s) => [
-      s.key, s.tabId, s.frameId, s.title, s.artist, s.album, s.artwork, s.favicon,
-      s.playbackState, Math.round(s.duration * 10) / 10, s.playbackRate,
-      Math.round(s.volume * 1000) / 1000, s.muted, s.canSeek, s.canSeekBackward,
-      s.canSeekForward, s.canPrev, s.canNext, s.canVolume, s.mediaKind, s.pageUrl,
+    return JSON.stringify(sessions.map((item) => [
+      item.key, item.tabId, item.frameId, item.title, item.artist, item.album,
+      item.artwork, item.favicon, item.playbackState,
+      Math.round(item.duration * 10) / 10, item.playbackRate,
+      Math.round(item.volume * 1000) / 1000, item.muted,
+      item.canSeek, item.canSeekBackward, item.canSeekForward,
+      item.canPrev, item.canNext, item.canVolume, item.mediaKind, item.pageUrl,
     ]));
   }
 
@@ -763,7 +777,7 @@
     if (Date.now() - media.lastPublishedAt > STATE_FORCE_REFRESH_MS) return true;
 
     const elapsed = Math.max(0, (Date.now() - media.lastPublishedAt) / 1000);
-    const previous = new Map(media.lastPublishedSessions.map((s) => [s.key, s]));
+    const previous = new Map(media.lastPublishedSessions.map((item) => [item.key, item]));
     for (const current of nextSessions) {
       const old = previous.get(current.key);
       if (!old) return true;
@@ -780,45 +794,42 @@
       try { unsubscribe?.(); } catch (_) {}
     }
     media.refs = null;
-    media.principal = null;
-    media.isPrincipal = false;
+    media.boundDeviceId = '';
   }
 
   async function syncUser() {
     const next = effectiveUser();
     const uid = next?.uid || null;
-    if (uid === media.uid && media.refs) return;
-    disconnectRefs();
+    const deviceId = mediaDeviceId();
+    const unchanged = uid === media.uid && deviceId === media.boundDeviceId && !!media.refs;
     media.user = next;
     media.uid = uid;
-    if (!uid || !media.db) return;
-    connectRefs();
+    if (unchanged) return;
+    disconnectRefs();
+    if (!uid || !deviceId || !media.db) return;
+    connectRefs(deviceId);
   }
 
-  function connectRefs() {
-    if (!media.db || !media.uid || media.refs) return;
-    const root = media.db.collection('users').doc(media.uid).collection('mediaRemote');
+  function connectRefs(deviceId) {
+    if (!media.db || !media.uid || !deviceId || media.refs) return;
+    const userRoot = media.db.collection('users').doc(media.uid);
+    media.boundDeviceId = deviceId;
+    media.lastCommandId = restoreLastCommandId(deviceId);
     media.refs = {
-      principal: root.doc('principal'),
-      state: root.doc('state'),
-      command: root.doc('command'),
+      state: userRoot.collection('mediaRemote').doc(`state_${deviceId}`),
+      command: userRoot.collection('mediaRemote').doc(`command_${deviceId}`),
     };
 
     media.unsubs.push(
-      media.refs.principal.onSnapshot((snapshot) => {
-        const wasPrincipal = media.isPrincipal;
-        const principal = snapshot?.exists ? (snapshot.data() || {}) : null;
-        media.principal = principal;
-        media.isPrincipal = !!principal?.active && principal?.deviceId === mediaDeviceId();
-        if (media.isPrincipal && media.isLeader && !wasPrincipal) {
-          void refreshRegistry(true);
-          void publishHeartbeat(false);
-        }
-      }, (error) => console.warn('StarTab Media background: principal listener:', error)),
       media.refs.command.onSnapshot((snapshot) => {
         void handleCommandSnapshot(snapshot);
       }, (error) => console.warn('StarTab Media background: command listener:', error)),
     );
+
+    if (media.isLeader) {
+      void refreshRegistry(true);
+      void publishHeartbeat(true);
+    }
   }
 
   async function refreshRegistry(forcePublish = false) {
@@ -832,14 +843,16 @@
   }
 
   async function publishState(force = false) {
-    if (!media.isLeader || !media.isPrincipal || !media.refs?.state || !media.uid) return;
+    const deviceId = media.boundDeviceId || mediaDeviceId();
+    if (!media.isLeader || !media.refs?.state || !media.uid || !deviceId) return;
     const sessions = normalizeSessions(media.sessions).map(serializeSession);
     if (!stateNeedsPublish(sessions, force)) return;
     const fingerprint = stableFingerprint(sessions);
     try {
       await media.refs.state.set({
-        deviceId: mediaDeviceId(),
+        deviceId,
         deviceLabel: mediaDeviceLabel(),
+        online: true,
         sessions,
         clientAt: Date.now(),
         serverAt: serverTimestamp(),
@@ -853,7 +866,7 @@
   }
 
   function schedulePublish(force = false) {
-    if (!media.isLeader || !media.isPrincipal) return;
+    if (!media.isLeader || !media.refs?.state) return;
     if (force) {
       clearTimeout(media.publishTimer);
       media.publishTimer = window.setTimeout(() => {
@@ -870,11 +883,11 @@
   }
 
   async function publishHeartbeat(forceState = false) {
-    if (!media.isLeader || !media.isPrincipal || !media.refs?.principal) return;
+    const deviceId = media.boundDeviceId || mediaDeviceId();
+    if (!media.isLeader || !media.refs?.state || !deviceId) return;
     try {
-      await media.refs.principal.set({
-        active: true,
-        deviceId: mediaDeviceId(),
+      await media.refs.state.set({
+        deviceId,
         deviceLabel: mediaDeviceLabel(),
         online: true,
         clientAt: Date.now(),
@@ -882,41 +895,31 @@
       }, { merge: true });
       if (forceState) await refreshRegistry(true);
     } catch (error) {
-      // No explicit offline write is possible after a hard power/network loss.
-      // Remote clients use clientAt staleness to switch to offline quickly.
       console.warn('StarTab Media background: heartbeat pendiente:', error);
     }
   }
 
   async function handleCommandSnapshot(snapshot) {
-    if (!media.isLeader || !media.isPrincipal || !snapshot?.exists) return;
+    const deviceId = media.boundDeviceId || mediaDeviceId();
+    if (!media.isLeader || !deviceId || !snapshot?.exists) return;
     const data = snapshot.data() || {};
     const id = String(data.id || '');
     if (!id || id === media.lastCommandId) return;
-    if (data.targetDeviceId !== mediaDeviceId()) return;
+    if (String(data.targetDeviceId || '') !== deviceId) return;
 
     const issuedAt = Number(data.clientAt) || 0;
     if (!issuedAt || Date.now() - issuedAt > COMMAND_MAX_AGE_MS + 5_000) {
-      media.lastCommandId = id;
-      try { localStorage.setItem(LAST_COMMAND_KEY, id); } catch (_) {}
+      saveLastCommandId(deviceId, id);
       return;
     }
 
-    const activatedAt = Number(media.principal?.activatedAtClient) || 0;
-    if (activatedAt && issuedAt < activatedAt - 1_500) return;
-
-    media.lastCommandId = id;
-    try { localStorage.setItem(LAST_COMMAND_KEY, id); } catch (_) {}
-
+    saveLastCommandId(deviceId, id);
     const target = data.target || {};
     const command = data.command || {};
     const action = String(command.action || '');
     const tabId = Number(target.tabId);
 
     try {
-      // Browser/window actions must be executed by the extension service worker,
-      // never forwarded to the media content script. This is what makes the
-      // mobile button behave exactly like pressing "Abrir esta pestaña" on PC.
       if (action === 'openTab') {
         if (Number.isInteger(tabId)) {
           await chrome.runtime.sendMessage({
@@ -955,14 +958,13 @@
   function startLeaderLock() {
     if (!navigator.locks?.request) {
       media.isLeader = true;
-      void refreshRegistry(true);
+      void syncUser().then(() => refreshRegistry(true));
       return;
     }
 
-    // Intentionally queue for the same lock used by visible StarTab pages.
-    // Once the visible page closes, this hidden bridge takes ownership instantly.
     navigator.locks.request(LEADER_LOCK, { mode: 'exclusive' }, async () => {
       media.isLeader = true;
+      await syncUser();
       await refreshRegistry(true);
       await publishHeartbeat(true);
       await new Promise(() => {});
@@ -991,10 +993,21 @@
       media.sessions = Array.isArray(message.sessions) ? message.sessions : [];
       schedulePublish(false);
     }
+    if (message?.type === 'STARTAB_WINDOWS_NATIVE_STATUS') {
+      const nativeId = String(message?.state?.deviceId || message?.deviceId || '').trim();
+      if (nativeId) {
+        try { localStorage.setItem(NATIVE_DEVICE_KEY, nativeId); } catch (_) {}
+        const nativeName = String(message?.state?.deviceName || message?.deviceName || '').trim();
+        if (nativeName) {
+          try { localStorage.setItem('startab_windows_native_device_name_v1', nativeName); } catch (_) {}
+        }
+        void syncUser();
+      }
+    }
   });
 
   window.addEventListener('storage', (event) => {
-    if (event.key === 'starTab_lastUser') void syncUser();
+    if (event.key === 'starTab_lastUser' || event.key === NATIVE_DEVICE_KEY) void syncUser();
   });
 
   window.addEventListener('online', () => {
@@ -1003,7 +1016,7 @@
 
   window.setInterval(() => {
     void syncUser();
-    if (media.isLeader && media.isPrincipal) void publishHeartbeat(false);
+    if (media.isLeader && media.refs?.state) void publishHeartbeat(false);
   }, HEARTBEAT_MS);
 
   initFirebase();

@@ -140,18 +140,10 @@
 <path d="m13.2 14 4.3 4.3"></path>
 </svg>
 </button>
-<button aria-label="Controles del PC" class="windows-pc-control-toggle" id="windows-pc-control-toggle-media" data-windows-pc-control-toggle title="Controlar PC principal" type="button">
+<button aria-label="Controles del PC" class="windows-pc-control-toggle" id="windows-pc-control-toggle-media" data-windows-pc-control-toggle title="Controlar PC seleccionado" type="button">
 <svg aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.65" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2.5"></rect><path d="M8 21h8M12 17v4"></path><path d="M7 8h10"></path></svg>
 </button>
-<button aria-pressed="false" class="multimedia-principal-toggle" id="multimedia-principal-toggle" title="Convertir este navegador en el dispositivo principal" type="button">
-<svg aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" viewbox="0 0 24 24">
-<rect height="12" rx="3" width="18" x="3" y="4"></rect>
-<path d="M8 20h8"></path><path d="M12 16v4"></path>
-<path d="M8.5 9.5 11 12l4.5-5"></path>
-</svg>
-<span id="multimedia-principal-text">Hacer principal</span>
-<i aria-hidden="true"></i>
-</button>
+
 <span class="multimedia-sync-pill" id="multimedia-sync-pill"><i></i><span id="multimedia-sync-text">SYNC GLOBAL</span></span>
 <button aria-label="Cerrar" class="multimedia-close" id="multimedia-close" type="button">×</button>
 </div>
@@ -235,7 +227,7 @@
 <div class="windows-volume-head">
 <div class="windows-volume-device-wrap">
 <span class="windows-volume-status" id="windows-volume-status" aria-hidden="true"></span>
-<select id="windows-device-select" aria-label="PC Windows a controlar"><option value="">Sin PCs vinculados</option></select>
+<select id="windows-device-select" aria-label="PC activo en StarTab"><option value="">Sin PCs vinculados</option></select>
 <button class="windows-volume-pair" id="windows-volume-pair" type="button" hidden>Vincular este PC</button>
 <small class="windows-volume-status-copy" id="windows-volume-status-text">Conectando con tus PCs…</small>
 </div>
@@ -287,7 +279,7 @@
 </div>
 <div class="windows-touchpad-header-actions">
 <span class="windows-touchpad-connection" id="windows-touchpad-connection" data-state="idle"><i aria-hidden="true"></i><span>Preparando</span></span>
-<button aria-label="Controles del PC" class="windows-pc-control-toggle" id="windows-pc-control-toggle" data-windows-pc-control-toggle title="Controlar PC principal" type="button">
+<button aria-label="Controles del PC" class="windows-pc-control-toggle" id="windows-pc-control-toggle" data-windows-pc-control-toggle title="Controlar PC seleccionado" type="button">
 <svg aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.65" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2.5"></rect><path d="M8 21h8M12 17v4"></path><path d="M7 8h10"></path></svg>
 </button>
 <button aria-label="Cerrar touchpad" class="windows-touchpad-close" id="windows-touchpad-close" type="button">×</button>
@@ -337,14 +329,14 @@
 </section>
 </div>
 
-<!-- CONTROL REMOTO · PC PRINCIPAL -->
+<!-- CONTROL REMOTO · PC SELECCIONADO -->
 <div aria-hidden="true" class="windows-pc-control-modal" id="windows-pc-control-modal" role="presentation">
 <div class="windows-pc-control-backdrop" id="windows-pc-control-backdrop"></div>
 <section aria-labelledby="windows-pc-control-title" aria-modal="true" class="windows-pc-control-card" role="dialog">
 <header class="windows-pc-control-header">
 <div class="windows-pc-control-heading">
 <span>StarTab · WINDOWS SYSTEM</span>
-<h3 id="windows-pc-control-title">Control del PC principal</h3>
+<h3 id="windows-pc-control-title">Control del PC seleccionado</h3>
 <p id="windows-pc-control-device">Selecciona un PC Windows conectado.</p>
 </div>
 <div class="windows-pc-control-header-actions">
@@ -430,7 +422,7 @@
 <h3 id="multimedia-tab-close-title">¿Cerrar esta pestaña?</h3>
 </div>
 </div>
-<p id="multimedia-tab-close-copy" class="multimedia-tab-close-copy">La pestaña se cerrará en el dispositivo principal. Esta acción detendrá también cualquier reproducción que dependa de ella.</p>
+<p id="multimedia-tab-close-copy" class="multimedia-tab-close-copy">La pestaña se cerrará en el PC seleccionado. Esta acción detendrá también cualquier reproducción que dependa de ella.</p>
 <div class="multimedia-tab-close-target">
 <span class="multimedia-tab-close-target-icon" aria-hidden="true">
 <img id="multimedia-tab-close-target-favicon" alt="" hidden>
