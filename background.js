@@ -85,7 +85,7 @@ const MENU_ROOT='startab-add-root';const MENU_PREFIX='startab-add-category-';con
 
     nativePort.onMessage.addListener((message) => {
       if (!message || typeof message !== 'object') return;
-      if (message.type === 'hello' || message.type === 'state' || message.type === 'meter' || message.type === 'systemState' || message.type === 'rgbState') {
+      if (message.type === 'hello' || message.type === 'state' || message.type === 'meter' || message.type === 'systemState' || message.type === 'rgbState' || message.type === 'cloudState') {
         nativeConnected = true;
         nativeState = { ...(nativeState || {}), ...message };
       }
@@ -109,7 +109,7 @@ const MENU_ROOT='startab-add-root';const MENU_PREFIX='startab-add-category-';con
     if (!nativePort || !nativeConnected) return false;
     if (!command || typeof command !== 'object') return false;
     const type = String(command.type || '');
-    if (!['getState', 'setVolume', 'setMute', 'toggleMute', 'step', 'pointerMove', 'pointerWheel', 'pointerClick', 'pointerButton', 'textInput', 'keyInput', 'monitorOff', 'shutdown', 'sleep', 'restart', 'logoff', 'lock', 'getSystemState', 'setHotspot', 'setRgb', 'ping'].includes(type)) return false;
+    if (!['getState', 'setVolume', 'setMute', 'toggleMute', 'step', 'pointerMove', 'pointerWheel', 'pointerClick', 'pointerButton', 'textInput', 'keyInput', 'monitorOff', 'shutdown', 'sleep', 'restart', 'logoff', 'lock', 'getSystemState', 'setHotspot', 'setRgb', 'configureCloud', 'getCloudState', 'ping'].includes(type)) return false;
     try {
       nativePort.postMessage(command);
       return true;
@@ -325,4 +325,38 @@ const MENU_ROOT='startab-add-root';const MENU_PREFIX='startab-add-category-';con
   if (chrome.webNavigation?.onHistoryStateUpdated) {
     chrome.webNavigation.onHistoryStateUpdated.addListener((details) => { void recordNavigation(details, 'history-state'); });
   }
+})();
+
+
+/* StarTab · capture Firebase refresh credential for standalone Windows agent v1 */
+(() => {
+  'use strict';
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message?.type !== 'STARTAB_CAPTURE_FIREBASE_CREDENTIALS') return;
+    (async () => {
+      const wantedUid = String(message.uid || '');
+      const tabs = await chrome.tabs.query({ url: 'https://jmstar2407.github.io/startab/auth.html*' });
+      const tab = [...tabs].reverse().find((item) => Number.isInteger(item.id));
+      if (!tab?.id) return { ok: false, reason: 'auth-tab-not-found' };
+      const result = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        world: 'MAIN',
+        func: async () => {
+          try {
+            const user = globalThis.firebase?.auth?.().currentUser;
+            if (!user?.uid || !user?.refreshToken) return { ok: false, reason: 'firebase-user-not-ready' };
+            const idToken = await user.getIdToken(true).catch(() => '');
+            return { ok: true, uid: user.uid, refreshToken: user.refreshToken, idToken };
+          } catch (error) {
+            return { ok: false, reason: String(error?.message || error) };
+          }
+        },
+      });
+      const payload = result?.find?.((entry) => entry?.result)?.result || null;
+      if (!payload?.ok) return payload || { ok: false, reason: 'credential-capture-failed' };
+      if (wantedUid && payload.uid !== wantedUid) return { ok: false, reason: 'uid-mismatch' };
+      return payload;
+    })().then(sendResponse).catch((error) => sendResponse({ ok: false, reason: String(error?.message || error) }));
+    return true;
+  });
 })();

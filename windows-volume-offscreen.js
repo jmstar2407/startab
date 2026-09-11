@@ -83,6 +83,11 @@
     await startDeviceBridge();
   }
 
+  function standaloneCloudActive(data) {
+    const at = Number(data?.clientAt) || 0;
+    return data?.standalone === true && data?.cloudLinked === true && data?.online === true && at > 0 && Date.now() - at < 70_000;
+  }
+
   async function startDeviceBridge() {
     if (!state.db || !state.user?.uid || !state.nativeState?.deviceId) return;
     const deviceId = state.nativeState.deviceId;
@@ -108,6 +113,11 @@
       (snapshot) => {
         if (!snapshot.exists) return;
         const data = snapshot.data() || {};
+        if (standaloneCloudActive(data)) {
+          stopPointerSessionBridge();
+          return;
+        }
+        if (state.nativeConnected && !state.unsubscribePointerSessions) startPointerSessionBridge();
         const command = data.command;
         if (!command?.id || command.id === state.lastCommandId || command.id === data.lastCommandId) return;
 
@@ -440,7 +450,7 @@
       deviceId: native.deviceId,
       deviceName: native.deviceName || 'PC Windows',
       platform: 'windows',
-      bridge: 'nativeMessaging',
+      bridge: String(native.agentVersion || '').startsWith('2.8.') ? 'standaloneNative' : 'nativeMessaging',
       agentVersion: native.agentVersion || '2.0.0',
       online: !!state.nativeConnected,
       clientAt: Date.now(),
@@ -474,7 +484,12 @@
     if (payload.kind === 'disconnected') {
       state.nativeConnected = false;
       stopPointerSessionBridge();
-      await publishNativeState(false);
+      // v2.8+ tiene un daemon cloud independiente. Que Chrome pierda Native
+      // Messaging no significa que el PC esté offline, por lo que no debemos
+      // pisar el heartbeat del agente standalone con online=false.
+      if (!String(state.nativeState?.agentVersion || '').startsWith('2.8.')) {
+        await publishNativeState(false);
+      }
       return;
     }
 
