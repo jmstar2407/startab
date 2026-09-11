@@ -13429,3 +13429,61 @@ body.windows-pc-control-open { overflow: hidden; overscroll-behavior: none; }
   .windows-pc-rgb-icon,
   .windows-pc-rgb-swatches button { transition: none; }
 }
+
+
+/* StarTab v1.4.9 · Mobile compact shortcuts */
+@media (max-width:700px), (hover:none) and (pointer:coarse) {
+  .contenedor-iconos-master {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding-left: clamp(4px,1.4vw,8px) !important;
+    padding-right: clamp(4px,1.4vw,8px) !important;
+    box-sizing: border-box !important;
+  }
+
+  #contenedor-iconos {
+    --shortcut-min-width: 0px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    padding: 2px 1px !important;
+    row-gap: clamp(4px,1.25vw,7px) !important;
+    column-gap: clamp(2px,.85vw,5px) !important;
+    justify-content: center !important;
+    overflow: visible !important;
+  }
+
+  #contenedor-iconos .icono-item {
+    width: var(--layout-cell-width) !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    padding: clamp(1px,.55vw,3px) !important;
+    border-radius: min(var(--redim-shortcut-radius,12px),10px) !important;
+    overflow: visible !important;
+  }
+
+  #contenedor-iconos .icono-item .icono-contenedor {
+    width: min(100%,52px) !important;
+    height: auto !important;
+    aspect-ratio: 1 / 1 !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    margin: 0 auto clamp(1px,.55vw,3px) !important;
+    padding: 0 !important;
+  }
+
+  #contenedor-iconos .icono-item > span,
+  #contenedor-iconos .icono-item span {
+    min-width: 0 !important;
+    width: 100% !important;
+    height: 1.18em !important;
+    min-height: 1.18em !important;
+    max-height: 1.18em !important;
+    font-size: clamp(7px,2vw,10px) !important;
+    line-height: 1.18 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+}

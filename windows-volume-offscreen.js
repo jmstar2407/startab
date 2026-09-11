@@ -28,6 +28,7 @@
     lastCommandId: null,
     bridgeKey: null,
     userTimer: 0,
+    standaloneCloudOnline: false,
   };
 
   function readSavedUser() {
@@ -70,6 +71,7 @@
     state.deviceRef = null;
     state.lastCommandId = null;
     state.bridgeKey = null;
+    state.standaloneCloudOnline = false;
   }
 
   async function syncUser() {
@@ -113,11 +115,12 @@
       (snapshot) => {
         if (!snapshot.exists) return;
         const data = snapshot.data() || {};
-        if (standaloneCloudActive(data)) {
-          stopPointerSessionBridge();
-          return;
-        }
+        state.standaloneCloudOnline = standaloneCloudActive(data);
+        // Incluso con el daemon cloud activo mantenemos el listener de sesiones
+        // para poder responder la oferta WebRTC del móvil. El relay Firestore no
+        // se ejecuta aquí mientras el daemon esté online, evitando doble cursor.
         if (state.nativeConnected && !state.unsubscribePointerSessions) startPointerSessionBridge();
+        if (state.standaloneCloudOnline) return;
         const command = data.command;
         if (!command?.id || command.id === state.lastCommandId || command.id === data.lastCommandId) return;
 
@@ -348,7 +351,10 @@
       entry = { pc: null, offerId: null, lastMotionSeq: 0, lastScrollSeq: 0, lastClickSeq: 0, lastButtonSeq: 0, lastKeyboardSeq: 0, leftDown: false, closed: false };
       state.pointerPeers.set(sessionId, entry);
     }
-    handlePointerRelay(data, entry);
+    // Cuando el daemon standalone está activo, él procesa el relay Firestore.
+    // Chrome conserva únicamente la ruta WebRTC directa para evitar duplicar
+    // movimientos y mantener la latencia mínima cuando está disponible.
+    if (!state.standaloneCloudOnline) handlePointerRelay(data, entry);
 
     const offerId = String(data.offerId || '');
     if (!offerId || !data.offer?.sdp || offerId === entry.offerId) return;
