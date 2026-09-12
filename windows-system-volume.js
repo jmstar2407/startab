@@ -181,7 +181,17 @@
     if (typeof muted === 'boolean') state.optimisticMuted = muted;
     state.optimisticUntil = Date.now() + 2400;
     clearTimeout(state.optimisticTimer);
-    state.optimisticTimer = window.setTimeout(() => {
+    state.optimisticTimer = window.setTimeout(function releaseOptimisticWhenSafe() {
+      // Do not let a slow Firebase round-trip visually undo the user's latest
+      // +/- press. Keep the optimistic value while its command is still queued
+      // or being sent, and retry the release check shortly afterwards.
+      const volumeStillPending = state.optimisticVolume != null
+        && (state.pendingVolume != null || state.volumeSendInFlight || state.commandTimer);
+      if (volumeStillPending) {
+        state.optimisticUntil = Date.now() + 1200;
+        state.optimisticTimer = window.setTimeout(releaseOptimisticWhenSafe, 350);
+        return;
+      }
       if (Date.now() >= state.optimisticUntil) {
         clearOptimisticState();
         render();
@@ -190,16 +200,37 @@
   }
 
   function reconcileOptimisticState(device) {
-    if (!device || Date.now() >= state.optimisticUntil) {
+    if (!device) {
       if (state.optimisticUntil) clearOptimisticState();
       return;
     }
 
+    const volumeCommandPending = state.optimisticVolume != null
+      && (state.pendingVolume != null || state.volumeSendInFlight || state.commandTimer);
+    if (Date.now() >= state.optimisticUntil) {
+      if (volumeCommandPending) {
+        // A delayed Firestore callback must not expire the local value while
+        // the latest command is still making its way to Windows.
+        state.optimisticUntil = Date.now() + 1200;
+      } else {
+        clearOptimisticState();
+        return;
+      }
+    }
+
+    // Never treat a nearby volume as an acknowledgement. Windows/Firebase can
+    // briefly publish the previous value after a local +/- press (for example
+    // target 7 while the last remote snapshot still says 6). Accepting a ±1
+    // difference here caused the visible 7 -> 6 -> 7 bounce.
     const volumeMatches = state.optimisticVolume == null
-      || Math.abs(clamp(device.volume, 0, 100) - state.optimisticVolume) <= 1;
+      || Math.round(clamp(device.volume, 0, 100)) === Math.round(state.optimisticVolume);
     const muteMatches = state.optimisticMuted == null
       || !!device.muted === state.optimisticMuted;
-    if (volumeMatches && muteMatches) clearOptimisticState();
+
+    // While a volume command is queued or in flight, the latest local value is
+    // authoritative for the UI. Only release it once Firestore/Windows reports
+    // that exact latest target.
+    if (volumeMatches && muteMatches && !volumeCommandPending) clearOptimisticState();
   }
 
   function effectiveMuted(device = selectedDevice()) {
