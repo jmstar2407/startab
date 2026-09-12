@@ -18,6 +18,8 @@
     firebaseRetry: 0,
     commandTimer: 0,
     pendingVolume: null,
+    volumeSendInFlight: false,
+    volumeRevision: 0,
     userTimer: 0,
     statusTimer: 0,
     dialDragging: false,
@@ -286,11 +288,7 @@
     setFill(normalized);
 
     if (final) {
-      clearTimeout(state.commandTimer);
-      state.pendingVolume = null;
-      void sendCommand('setVolume', normalized).then((ok) => {
-        if (!ok) { clearOptimisticState(); render(); }
-      });
+      queueVolume(normalized, { immediate: true });
     } else {
       queueVolume(normalized);
     }
@@ -562,17 +560,45 @@
     }
   }
 
-  function queueVolume(value) {
-    state.pendingVolume = clamp(value, 0, 100);
+  function pumpVolumeCommand() {
     clearTimeout(state.commandTimer);
-    state.commandTimer = window.setTimeout(() => {
-      const next = state.pendingVolume;
-      state.pendingVolume = null;
-      if (next == null) return;
-      void sendCommand('setVolume', next).then((ok) => {
-        if (!ok) { clearOptimisticState(); render(); }
-      });
-    }, 220);
+    state.commandTimer = 0;
+    if (state.volumeSendInFlight || state.pendingVolume == null) return;
+
+    const next = state.pendingVolume;
+    const revision = state.volumeRevision;
+    state.pendingVolume = null;
+    state.volumeSendInFlight = true;
+
+    void sendCommand('setVolume', next).then((ok) => {
+      state.volumeSendInFlight = false;
+
+      // Only roll the UI back if this failed command is still the latest user
+      // intent. A newer click/drag must never be undone by an older request.
+      if (!ok && state.pendingVolume == null && revision === state.volumeRevision) {
+        clearOptimisticState();
+        render();
+      }
+
+      // If the user changed volume while Firebase was busy, skip every stale
+      // intermediate value and immediately send the most recent one.
+      if (state.pendingVolume != null) pumpVolumeCommand();
+    });
+  }
+
+  function queueVolume(value, { immediate = false } = {}) {
+    state.pendingVolume = clamp(value, 0, 100);
+    state.volumeRevision += 1;
+    clearTimeout(state.commandTimer);
+
+    if (immediate) {
+      pumpVolumeCommand();
+      return;
+    }
+
+    // Small coalescing window keeps rapid +/- presses fluid locally while
+    // reducing Firestore traffic. The UI itself is updated synchronously.
+    state.commandTimer = window.setTimeout(pumpVolumeCommand, 55);
   }
 
   function applyNativeStatus(payload) {
@@ -777,13 +803,9 @@
       queueVolume(value);
     });
     dom.range?.addEventListener('change', () => {
-      clearTimeout(state.commandTimer);
-      state.pendingVolume = null;
       const value = clamp(dom.range.value, 0, 100);
       holdOptimisticState({ volume: value, muted: false });
-      void sendCommand('setVolume', value).then((ok) => {
-        if (!ok) { clearOptimisticState(); render(); }
-      });
+      queueVolume(value, { immediate: true });
     });
 
     dom.mute?.addEventListener('click', async () => {
@@ -802,9 +824,7 @@
       if (dom.value) dom.value.textContent = `${Math.round(next)}%`;
       setFill(next);
       renderDial(next, false);
-      void sendCommand('setVolume', next).then((ok) => {
-        if (!ok) { clearOptimisticState(); render(); }
-      });
+      queueVolume(next);
     };
     dom.down?.addEventListener('click', () => stepVolume(-5));
     dom.up?.addEventListener('click', () => stepVolume(5));

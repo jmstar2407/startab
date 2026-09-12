@@ -13487,3 +13487,6 @@ body.windows-pc-control-open { overflow: hidden; overscroll-behavior: none; }
     margin: 0 !important;
   }
 }
+
+/* StarTab mobile: keep scrolling responsive while disabling page pinch/double-tap zoom. */
+@media (max-width:760px),(pointer:coarse){html.startab-mobile-no-zoom,html.startab-mobile-no-zoom body{touch-action:pan-x pan-y;-ms-touch-action:pan-x pan-y}.windows-volume-step,.windows-volume-dial-step{touch-action:manipulation;-webkit-tap-highlight-color:transparent}}
