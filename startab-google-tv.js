@@ -11,6 +11,7 @@
     motionDx: 0, motionDy: 0, motionTimer: 0, scrollDy: 0, scrollTimer: 0,
     volumeTimer: 0, pendingVolume: null, optimisticVolume: null,
     pointerId: null, lastX: 0, lastY: 0, moved: false, downAt: 0,
+    cameraStream: null, scannerActive: false, scanTimer: 0, scanBusy: false, barcodeDetector: null,
   };
   const dom = {};
   const $ = id => document.getElementById(id);
@@ -40,43 +41,84 @@
         <div class="startab-tv-backdrop" id="startab-tv-backdrop"></div>
         <section class="startab-tv-card" role="dialog" aria-modal="true" aria-labelledby="startab-tv-title">
           <header class="startab-tv-head">
-            <div><span>STARTAB · GOOGLE TV</span><h3 id="startab-tv-title">Control remoto del TV</h3><p>LAN directo cuando estás en casa · Firebase como respaldo remoto</p></div>
+            <div><span>STARTAB · GOOGLE TV</span><h3 id="startab-tv-title">Control remoto del TV</h3><p>LAN directo en la misma red · Firebase cuando estás fuera de casa</p></div>
             <button id="startab-tv-close" type="button" aria-label="Cerrar">×</button>
           </header>
-          <div class="startab-tv-device-row">
-            <div class="startab-tv-status"><i id="startab-tv-led"></i><div><b id="startab-tv-status-title">Sin TV</b><small id="startab-tv-status-note">Vincula tu Google TV para comenzar.</small></div></div>
-            <select id="startab-tv-device-select" aria-label="Google TV seleccionado"><option value="">Sin TVs vinculados</option></select>
-          </div>
-          <div class="startab-tv-pair" id="startab-tv-pair">
-            <div><strong>Vincular un Google TV</strong><span>Abre StarTab TV en el televisor y copia la IP y el PIN que muestra.</span></div>
-            <input id="startab-tv-ip" inputmode="decimal" placeholder="192.168.1.50" aria-label="IP del Google TV">
-            <input id="startab-tv-pin" inputmode="numeric" maxlength="6" placeholder="PIN 6 dígitos" aria-label="PIN del Google TV">
-            <button id="startab-tv-pair-btn" type="button">Vincular</button>
-          </div>
-          <div class="startab-tv-controls">
-            <div class="startab-tv-touch-wrap">
-              <div class="startab-tv-touch" id="startab-tv-touch" tabindex="0"><span>Desliza para mover el cursor</span></div>
-              <div class="startab-tv-scroll" id="startab-tv-scroll"><span>⌃</span><b>SCROLL</b><span>⌄</span></div>
+
+          <div class="startab-tv-body">
+            <div class="startab-tv-device-row">
+              <div class="startab-tv-status"><i id="startab-tv-led"></i><div><b id="startab-tv-status-title">Sin TV</b><small id="startab-tv-status-note">Escanea el QR del Google TV para comenzar.</small></div></div>
+              <select id="startab-tv-device-select" aria-label="Google TV seleccionado"><option value="">Sin TVs vinculados</option></select>
             </div>
-            <div class="startab-tv-actions">
-              <button id="startab-tv-left" type="button"><b>Clic</b><small>Seleccionar / abrir</small></button>
-              <button id="startab-tv-back" type="button"><b>Atrás</b><small>Volver en Google TV</small></button>
+
+            <div class="startab-tv-pair" id="startab-tv-pair">
+              <div class="startab-tv-pair-copy">
+                <strong>Vincular un Google TV</strong>
+                <span>En el TV abre StarTab TV. Luego escanea el código que aparece en pantalla.</span>
+              </div>
+              <button id="startab-tv-scan-btn" type="button">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 9h8v6H8z"></path></svg>
+                <span>Escanear código QR</span>
+              </button>
             </div>
-            <div class="startab-tv-volume">
-              <button id="startab-tv-vol-down" type="button">−</button>
-              <div><label for="startab-tv-volume">Volumen del TV <b id="startab-tv-volume-value">0%</b></label><input id="startab-tv-volume" type="range" min="0" max="100" step="1" value="0"></div>
-              <button id="startab-tv-vol-up" type="button">+</button>
+
+            <div class="startab-tv-controls">
+              <div class="startab-tv-touch-wrap">
+                <div class="startab-tv-touch" id="startab-tv-touch" tabindex="0"><span>Desliza para mover el cursor</span></div>
+                <div class="startab-tv-scroll" id="startab-tv-scroll"><span>⌃</span><b>SCROLL</b><span>⌄</span></div>
+              </div>
+              <div class="startab-tv-actions">
+                <button id="startab-tv-left" type="button"><b>Clic</b><small>Seleccionar / abrir</small></button>
+                <button id="startab-tv-back" type="button"><b>Atrás</b><small>Volver en Google TV</small></button>
+              </div>
+              <div class="startab-tv-volume">
+                <button id="startab-tv-vol-down" type="button">−</button>
+                <div><label for="startab-tv-volume">Volumen del TV <b id="startab-tv-volume-value">0%</b></label><input id="startab-tv-volume" type="range" min="0" max="100" step="1" value="0"></div>
+                <button id="startab-tv-vol-up" type="button">+</button>
+              </div>
             </div>
           </div>
+
+          <footer class="startab-tv-footer">
+            <div><b>StarTab TV</b><span>El QR usa un vínculo temporal y cifrado. No necesitas escribir IP ni PIN.</span></div>
+            <button id="startab-tv-footer-close" type="button">Cerrar</button>
+          </footer>
         </section>
+
+        <div class="startab-tv-scanner" id="startab-tv-scanner" aria-hidden="true">
+          <div class="startab-tv-scanner-backdrop"></div>
+          <section class="startab-tv-scanner-card" role="dialog" aria-modal="true" aria-labelledby="startab-tv-scanner-title">
+            <header class="startab-tv-scanner-head">
+              <div><span>EMPAREJAMIENTO</span><h3 id="startab-tv-scanner-title">Escanear código QR</h3></div>
+              <button id="startab-tv-scanner-close" type="button" aria-label="Cerrar escáner">×</button>
+            </header>
+            <div class="startab-tv-scanner-body">
+              <div class="startab-tv-camera-stage">
+                <video id="startab-tv-scanner-video" playsinline muted></video>
+                <div class="startab-tv-camera-shade"></div>
+                <div class="startab-tv-camera-frame"><i></i><i></i><i></i><i></i></div>
+              </div>
+              <p id="startab-tv-scanner-note">Apunta la cámara al QR que aparece en StarTab TV.</p>
+            </div>
+            <footer class="startab-tv-scanner-footer">
+              <span>La cámara solo se usa mientras este escáner está abierto.</span>
+              <button id="startab-tv-scanner-cancel" type="button">Cancelar</button>
+            </footer>
+          </section>
+        </div>
       </div>`;
     document.body.append(...wrap.childNodes);
     cacheDom(); bindUi();
   }
 
   function cacheDom() {
-    ['toggle','modal','backdrop','close','led','status-title','status-note','device-select','pair','ip','pin','pair-btn','touch','scroll','left','back','volume','volume-value','vol-down','vol-up'].forEach(k => {
-      const id = `startab-tv-${k}`; dom[k.replace(/-([a-z])/g, (_,c)=>c.toUpperCase())] = $(id);
+    [
+      'toggle','modal','backdrop','close','led','status-title','status-note','device-select','pair',
+      'scan-btn','touch','scroll','left','back','volume','volume-value','vol-down','vol-up','footer-close',
+      'scanner','scanner-video','scanner-note','scanner-close','scanner-cancel'
+    ].forEach(k => {
+      const id = `startab-tv-${k}`;
+      dom[k.replace(/-([a-z])/g, (_,c)=>c.toUpperCase())] = $(id);
     });
   }
 
@@ -196,11 +238,30 @@
     return { type:'pair-secure', clientPublicKey:bytesToBase64(clientPublic), iv:bytesToBase64(iv), payload:bytesToBase64(encrypted) };
   }
 
-  async function pairTv() {
-    const userId = uid(); const ip = String(dom.ip?.value || '').trim().replace(/^ws:\/\//,'').replace(/:\d+$/,'');
-    const pin = String(dom.pin?.value || '').replace(/\D/g,'').slice(0,6);
+  function parsePairQr(rawValue) {
+    try {
+      const url = new URL(String(rawValue || '').trim());
+      if (url.protocol !== 'startabtv:' || url.hostname !== 'pair') return null;
+      const ip = String(url.searchParams.get('ip') || '').trim();
+      const pin = String(url.searchParams.get('pin') || '').replace(/\D/g, '').slice(0, 6);
+      const port = Number(url.searchParams.get('port') || 8765);
+      const version = Number(url.searchParams.get('v') || 1);
+      if (version !== 1 || !/^\d{1,3}(\.\d{1,3}){3}$/.test(ip) || pin.length !== 6 || !Number.isInteger(port) || port < 1 || port > 65535) return null;
+      const octets = ip.split('.').map(Number);
+      if (octets.some(n => n < 0 || n > 255)) return null;
+      return { ip, pin, port, deviceId: String(url.searchParams.get('device') || '') };
+    } catch (_) { return null; }
+  }
+
+  async function pairTv(pairData) {
+    const userId = uid();
+    const ip = String(pairData?.ip || '').trim();
+    const pin = String(pairData?.pin || '').replace(/\D/g, '').slice(0,6);
+    const port = Number(pairData?.port || 8765);
     if (!userId) { setStatus('error','Sin sesión','Inicia sesión en StarTab primero.'); return; }
-    if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(ip) || pin.length !== 6) { setStatus('error','Datos incompletos','Escribe la IP local y el PIN de 6 dígitos que muestra el TV.'); return; }
+    if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(ip) || pin.length !== 6 || !Number.isInteger(port)) {
+      setStatus('error','QR no válido','Escanea únicamente el QR generado por StarTab TV.'); return;
+    }
     setStatus('warn','Vinculando…','Conectando directamente con el Google TV.');
     let credentials = readUser();
     if (!credentials?.refreshToken && state.auth?.currentUser?.refreshToken) {
@@ -212,8 +273,11 @@
     if (!credentials?.refreshToken) { setStatus('error','Falta credencial','Abre nuevamente el inicio de sesión de StarTab y vuelve a intentar.'); return; }
 
     let ws;
-    try { ws = new WebSocket(`ws://${ip}:8765`); } catch (_) { setStatus('error','No se pudo conectar','Verifica que ambos estén en la misma red Wi‑Fi.'); return; }
-    const timeout = setTimeout(() => { try { ws.close(); } catch (_) {} setStatus('error','TV no encontrado','Verifica IP, red y que StarTab TV esté abierto.'); }, 5000);
+    try { ws = new WebSocket(`ws://${ip}:${port}`); } catch (_) { setStatus('error','No se pudo conectar','Verifica que el móvil y el TV estén en la misma red Wi‑Fi.'); return; }
+    const timeout = setTimeout(() => {
+      try { ws.close(); } catch (_) {}
+      setStatus('error','TV no encontrado','El QR puede haber vencido o el móvil y el TV no están en la misma red.');
+    }, 5500);
     ws.onopen = () => ws.send(JSON.stringify({ type:'pair-init' }));
     ws.onmessage = async ev => {
       let data; try { data = JSON.parse(ev.data || '{}'); } catch (_) { return; }
@@ -228,18 +292,105 @@
         return;
       }
       if (data.type !== 'paired' || !data.ok) {
-        if (data.reason === 'pairing-rejected') setStatus('error','PIN incorrecto','Revisa el PIN mostrado en el Google TV.');
+        if (data.reason === 'pairing-rejected') setStatus('error','QR vencido','Genera un nuevo QR en el Google TV y vuelve a escanearlo.');
         return;
       }
       clearTimeout(timeout);
-      savePairing(data.deviceId, { secret:data.secret, ip:data.ip || ip, port:data.port || 8765, name:data.deviceName || 'Google TV' });
+      savePairing(data.deviceId, { secret:data.secret, ip:data.ip || ip, port:data.port || port, name:data.deviceName || 'Google TV' });
       state.selectedId = data.deviceId; localStorage.setItem(SELECTED_KEY, data.deviceId);
       try { ws.close(); } catch (_) {}
-      setStatus('direct','TV vinculado','Esperando la primera sincronización con Firebase…');
+      setStatus('direct','TV vinculado','Conexión segura completada.');
       setTimeout(() => { listenDevices(); connectSelectedLocal(); }, 700);
     };
     ws.onerror = () => {};
     ws.onclose = () => { clearTimeout(timeout); };
+  }
+
+  function setScannerNote(message, kind = '') {
+    if (!dom.scannerNote) return;
+    dom.scannerNote.textContent = message;
+    dom.scannerNote.dataset.state = kind;
+  }
+
+  function stopQrScanner() {
+    state.scannerActive = false;
+    state.scanBusy = false;
+    clearTimeout(state.scanTimer); state.scanTimer = 0;
+    if (state.cameraStream) {
+      try { state.cameraStream.getTracks().forEach(track => track.stop()); } catch (_) {}
+      state.cameraStream = null;
+    }
+    if (dom.scannerVideo) {
+      try { dom.scannerVideo.pause(); } catch (_) {}
+      dom.scannerVideo.srcObject = null;
+    }
+    dom.scanner?.classList.remove('is-open');
+    dom.scanner?.setAttribute('aria-hidden','true');
+  }
+
+  async function scanQrFrame() {
+    if (!state.scannerActive || !state.barcodeDetector || !dom.scannerVideo) return;
+    if (state.scanBusy || dom.scannerVideo.readyState < 2) {
+      state.scanTimer = setTimeout(scanQrFrame, 120);
+      return;
+    }
+    state.scanBusy = true;
+    try {
+      const results = await state.barcodeDetector.detect(dom.scannerVideo);
+      const raw = results?.[0]?.rawValue || '';
+      if (raw) {
+        const pair = parsePairQr(raw);
+        if (pair) {
+          globalThis.StartabHaptics?.success?.();
+          setScannerNote('QR detectado. Vinculando con el TV…', 'ok');
+          stopQrScanner();
+          await pairTv(pair);
+          return;
+        }
+        setScannerNote('Ese QR no pertenece a StarTab TV. Busca el QR que aparece en el televisor.', 'error');
+      }
+    } catch (_) {}
+    state.scanBusy = false;
+    state.scanTimer = setTimeout(scanQrFrame, 120);
+  }
+
+  async function openQrScanner() {
+    if (!uid()) { setStatus('error','Sin sesión','Inicia sesión en StarTab antes de escanear el TV.'); return; }
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setStatus('error','Cámara no disponible','Abre StarTab desde un navegador seguro compatible con cámara.');
+      return;
+    }
+    if (!('BarcodeDetector' in globalThis)) {
+      setStatus('error','Escáner no compatible','Actualiza Chrome/Edge en el móvil para usar el lector QR integrado.');
+      return;
+    }
+
+    dom.scanner?.classList.add('is-open');
+    dom.scanner?.setAttribute('aria-hidden','false');
+    setScannerNote('Solicitando acceso a la cámara…');
+
+    try {
+      const supported = await BarcodeDetector.getSupportedFormats?.();
+      if (Array.isArray(supported) && !supported.includes('qr_code')) throw new Error('qr-not-supported');
+      state.barcodeDetector = new BarcodeDetector({ formats:['qr_code'] });
+      state.cameraStream = await navigator.mediaDevices.getUserMedia({
+        audio:false,
+        video:{ facingMode:{ ideal:'environment' }, width:{ ideal:1280 }, height:{ ideal:720 } }
+      });
+      dom.scannerVideo.srcObject = state.cameraStream;
+      await dom.scannerVideo.play();
+      state.scannerActive = true;
+      setScannerNote('Apunta la cámara al QR que aparece en StarTab TV.');
+      scanQrFrame();
+    } catch (error) {
+      stopQrScanner();
+      const denied = error?.name === 'NotAllowedError' || error?.name === 'PermissionDeniedError';
+      setStatus(
+        'error',
+        denied ? 'Permiso de cámara bloqueado' : 'No se pudo abrir la cámara',
+        denied ? 'Permite la cámara para StarTab y vuelve a tocar “Escanear código QR”.' : 'Verifica que ninguna otra app esté usando la cámara.'
+      );
+    }
   }
 
   async function firebaseMerge(payload) {
@@ -292,15 +443,34 @@
 
   function bindUi() {
     dom.toggle = $('startab-tv-toggle');
-    dom.toggle?.addEventListener('click',()=>{dom.modal?.classList.add('is-open');dom.modal?.setAttribute('aria-hidden','false');connectSelectedLocal();render();});
-    const close=()=>{dom.modal?.classList.remove('is-open');dom.modal?.setAttribute('aria-hidden','true');};
-    dom.close?.addEventListener('click',close);dom.backdrop?.addEventListener('click',close);
-    dom.pairBtn?.addEventListener('click',pairTv);
+    dom.toggle?.addEventListener('click',()=>{
+      dom.modal?.classList.add('is-open');
+      dom.modal?.setAttribute('aria-hidden','false');
+      document.documentElement.classList.add('startab-tv-modal-open');
+      connectSelectedLocal(); render();
+    });
+    const close=()=>{
+      stopQrScanner();
+      dom.modal?.classList.remove('is-open');
+      dom.modal?.setAttribute('aria-hidden','true');
+      document.documentElement.classList.remove('startab-tv-modal-open');
+    };
+    dom.close?.addEventListener('click',close);
+    dom.footerClose?.addEventListener('click',close);
+    dom.backdrop?.addEventListener('click',close);
+    dom.scanBtn?.addEventListener('click',openQrScanner);
+    dom.scannerClose?.addEventListener('click',stopQrScanner);
+    dom.scannerCancel?.addEventListener('click',stopQrScanner);
+    dom.scanner?.querySelector('.startab-tv-scanner-backdrop')?.addEventListener('click',stopQrScanner);
     dom.deviceSelect?.addEventListener('change',()=>{state.selectedId=dom.deviceSelect.value||'';localStorage.setItem(SELECTED_KEY,state.selectedId);closeWs();connectSelectedLocal();render();});
     dom.left?.addEventListener('click',()=>sendClick('left')); dom.back?.addEventListener('click',sendBack);
     dom.volume?.addEventListener('input',()=>setVolume(dom.volume.value));
     dom.volDown?.addEventListener('click',()=>setVolume((state.optimisticVolume ?? Number(selectedDevice()?.volume||0))-1));
     dom.volUp?.addEventListener('click',()=>setVolume((state.optimisticVolume ?? Number(selectedDevice()?.volume||0))+1));
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && dom.scanner?.classList.contains('is-open')) { stopQrScanner(); e.preventDefault(); return; }
+      if (e.key === 'Escape' && dom.modal?.classList.contains('is-open')) { close(); e.preventDefault(); }
+    });
     bindTouch();
   }
 
