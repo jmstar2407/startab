@@ -330,6 +330,7 @@
     if (!uid()) setStatus('error','Sin sesión','Inicia sesión en StarTab.');
     else if (!d && state.selectedId) setStatus('warn','Buscando TV','Sincronizando con Firebase…');
     else if (!d) setStatus('idle','Sin TV','Toca + para agregar uno.');
+    else if (d.accessibility === false) setStatus('warn','Activar Accesibilidad','En el TV activa “StarTab TV · Cursor remoto”.');
     else if (state.wsReady) setStatus('direct','Directo',`${d.deviceName || 'Google TV'} · LAN de baja latencia`);
     else if (isOnline(d)) setStatus('firebase','Firebase',`${d.deviceName || 'Google TV'} · conexión remota`);
     else setStatus('error','Sin conexión',`${d.deviceName || 'Google TV'} no está disponible.`);
@@ -378,6 +379,26 @@
     return { ip, port, secret };
   }
 
+  function commandErrorMessage(reason = '') {
+    const map = {
+      'accessibility-disabled':'Activa “StarTab TV · Cursor remoto” en Accesibilidad del Google TV.',
+      'dpad-unavailable':'La cruceta no pudo mover el foco en esta pantalla del TV.',
+      'ok-unavailable':'No hay un elemento seleccionable para ejecutar OK.',
+      'home-unavailable':'Android TV no permitió ejecutar Home.',
+      'fixed-volume-policy':'Este Google TV delega el volumen por CEC/IR y Android no puede modificarlo directamente.',
+      'power-admin-required':'Mira el TV: StarTab abrió el permiso adicional para apagar/suspender de forma fiable.',
+      'wake-unavailable':'El fabricante no permitió despertar la pantalla desde la app.',
+      'power-unavailable':'El control de energía no está disponible en este modelo.',
+      'app-not-installed':'La aplicación ya no está instalada en el Google TV.'
+    };
+    return map[reason] || `El TV rechazó la orden (${reason || 'error'}).`;
+  }
+
+  function showCommandError(reason) {
+    setStatus('error','Orden no ejecutada',commandErrorMessage(reason));
+    setTimeout(() => render(), 2600);
+  }
+
   function connectSelectedLocal() {
     if (!state.modalOpen) return;
     const d = selectedDevice(); if (!d || state.wsConnecting || state.wsReady) return;
@@ -395,6 +416,7 @@
           state.wsReady = true; state.wsConnecting = false; applyRemoteState(data); startWsKeepAlive(); render();
         }
         if (data.type === 'ack') {
+          if (data.ok === false) { showCommandError(data.reason || 'error'); return; }
           if (Array.isArray(data.apps)) { state.availableApps = data.apps; renderAppsList(); }
           const hasState = Number.isFinite(Number(data.volume)) || Number.isFinite(Number(data.brightnessLevel)) || typeof data.muted === 'boolean' || typeof data.powerOn === 'boolean';
           if (hasState) { applyRemoteState(data); render(); }
@@ -551,7 +573,7 @@
 
   function sendAction(type, extra = {}) {
     globalThis.StartabHaptics?.click?.();
-    if (wsSend({ t:type, ...extra })) return;
+    if (wsSend({ id:unique(), t:type, ...extra })) return;
     firebaseMerge({ actionCommand:{ id:unique(), type, ...extra, clientAt:Date.now() } });
   }
 
@@ -575,12 +597,12 @@
     firebaseMerge({ clickRelay:{ id:unique(), button, clientAt:Date.now() } });
   }
 
-  function sendBack() { if (wsSend({t:'back'})) return; firebaseMerge({backCommand:{id:unique(),clientAt:Date.now()}}); }
+  function sendBack() { if (wsSend({id:unique(),t:'back'})) return; firebaseMerge({backCommand:{id:unique(),clientAt:Date.now()}}); }
 
   function setVolume(value) {
     value=Math.round(clamp(value,0,100)); state.optimisticVolume=value; state.lastVolumeInputAt=performance.now();
     if(dom.volume)dom.volume.value=String(value); if(dom.volumeValue)dom.volumeValue.textContent=`${value}%`; if(dom.volumeFill)dom.volumeFill.style.setProperty('--tv-volume',`${value}%`);
-    if (wsSend({t:'volume',value})) return;
+    if (wsSend({id:unique(),t:'volume',value})) return;
     state.pendingVolume=value;
     const now=performance.now(), elapsed=now-state.lastVolumeFirebaseAt;
     if (elapsed>=60) { state.lastVolumeFirebaseAt=now; const v=state.pendingVolume;state.pendingVolume=null;firebaseMerge({volumeCommand:{id:unique(),value:v,clientAt:Date.now()}}); return; }
@@ -589,13 +611,13 @@
 
   function toggleMute() {
     state.muted = !state.muted; render();
-    if (wsSend({t:'mute', muted:state.muted})) return;
+    if (wsSend({id:unique(),t:'mute', muted:state.muted})) return;
     firebaseMerge({ actionCommand:{ id:unique(), type:'mute', muted:state.muted, clientAt:Date.now() } });
   }
 
   function setBrightness(level) {
     level = Math.round(clamp(level,0,10)); state.optimisticBrightness = level; state.lastBrightnessInputAt=performance.now(); render();
-    if (wsSend({t:'brightness', level})) return;
+    if (wsSend({id:unique(),t:'brightness', level})) return;
     state.pendingBrightness=level; const now=performance.now(), elapsed=now-state.lastBrightnessFirebaseAt;
     if(elapsed>=70){state.lastBrightnessFirebaseAt=now;const v=state.pendingBrightness;state.pendingBrightness=null;firebaseMerge({actionCommand:{id:unique(),type:'brightness',level:v,clientAt:Date.now()}});return;}
     clearTimeout(state.brightnessTimer); state.brightnessTimer=setTimeout(()=>{state.lastBrightnessFirebaseAt=performance.now();const v=state.pendingBrightness;state.pendingBrightness=null;if(v!=null)firebaseMerge({actionCommand:{id:unique(),type:'brightness',level:v,clientAt:Date.now()}});},Math.max(0,70-elapsed));
@@ -628,8 +650,8 @@
   function stopFirebaseSessionLease() { clearInterval(state.firebaseSessionTimer); state.firebaseSessionTimer=0; }
   function startFirebaseSessionLease() {
     stopFirebaseSessionLease();
-    const tick=()=>{ if(state.modalOpen && !state.wsReady && selectedDevice()) firebaseMerge({},25000); };
-    setTimeout(tick,700); state.firebaseSessionTimer=setInterval(tick,20000);
+    const tick=()=>{ if(state.modalOpen && !state.wsReady && selectedDevice()) firebaseMerge({},30000); };
+    setTimeout(tick,120); state.firebaseSessionTimer=setInterval(tick,24000);
   }
 
   function bindUi() {
@@ -651,7 +673,12 @@
     dom.scannerClose?.addEventListener('click',stopQrScanner); dom.scannerCancel?.addEventListener('click',stopQrScanner); dom.scanner?.querySelector('.startab-tv-scanner-backdrop')?.addEventListener('click',stopQrScanner);
     dom.deviceSelect?.addEventListener('change',()=>{state.selectedId=dom.deviceSelect.value||'';localStorage.setItem(SELECTED_KEY,state.selectedId);state.optimisticVolume=null;state.optimisticBrightness=null;state.availableApps=[];closeWs();connectSelectedLocal();startFirebaseSessionLease();render();});
 
-    dom.power?.addEventListener('click',()=>{ state.powerOn = state.powerOn == null ? false : !state.powerOn; render(); sendAction('power',{action:'toggle'}); });
+    dom.power?.addEventListener('click',()=>{
+      const action = state.powerOn === false ? 'on' : 'off';
+      state.powerOn = action === 'on';
+      render();
+      sendAction('power',{action});
+    });
     dom.settings?.addEventListener('click',()=>sendAction('settings'));
     dom.dpadUp?.addEventListener('click',()=>sendAction('dpad',{direction:'up'}));
     dom.dpadDown?.addEventListener('click',()=>sendAction('dpad',{direction:'down'}));

@@ -13613,3 +13613,109 @@ html.startab-tv-modal-open{overflow:hidden!important}
 
 @media(max-width:700px){.startab-tv-navigation-stage{min-height:224px!important;padding:4px 44px 2px!important}.startab-tv-pad-v2{width:204px!important;height:204px!important}.startab-tv-pad-key{width:61px!important;height:53px!important;border-radius:17px!important}.startab-tv-pad-key.is-up{top:17px!important}.startab-tv-pad-key.is-down{bottom:17px!important}.startab-tv-pad-key.is-left{left:17px!important}.startab-tv-pad-key.is-right{right:17px!important}.startab-tv-pad-ok{width:68px!important;height:68px!important}.startab-tv-quick-app{flex-basis:96px!important;min-width:96px!important;height:45px!important}.startab-tv-apps-card{width:100vw!important;max-height:88dvh!important;border-radius:24px 24px 0 0!important}.startab-tv-apps-list{max-height:58dvh!important}}
 @media(max-width:380px){.startab-tv-navigation-stage{min-height:208px!important;padding-left:40px!important;padding-right:40px!important}.startab-tv-pad-v2{width:188px!important;height:188px!important}.startab-tv-pad-key{width:56px!important;height:49px!important;border-radius:16px!important}.startab-tv-pad-key.is-up{top:15px!important}.startab-tv-pad-key.is-down{bottom:15px!important}.startab-tv-pad-key.is-left{left:15px!important}.startab-tv-pad-key.is-right{right:15px!important}.startab-tv-pad-ok{width:62px!important;height:62px!important}.startab-tv-quick-app{flex-basis:91px!important;min-width:91px!important}}
+
+/* StarTab Google TV v1.4.16 · cruceta estable + refinamiento móvil */
+.startab-tv-navigation-stage{
+  --tv-pad-size:214px!important;
+  position:relative!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  width:100%!important;
+  min-height:232px!important;
+  padding:7px 48px 2px!important;
+  box-sizing:border-box!important;
+}
+.startab-tv-pad-v2{
+  position:relative!important;
+  flex:0 0 var(--tv-pad-size)!important;
+  width:var(--tv-pad-size)!important;
+  height:var(--tv-pad-size)!important;
+  min-width:var(--tv-pad-size)!important;
+  min-height:var(--tv-pad-size)!important;
+  max-width:var(--tv-pad-size)!important;
+  max-height:var(--tv-pad-size)!important;
+  aspect-ratio:1/1!important;
+  border:0!important;
+  border-radius:0!important;
+  background:transparent!important;
+  box-shadow:none!important;
+  overflow:visible!important;
+  transform:none!important;
+}
+.startab-tv-pad-v2:before{
+  content:""!important;
+  position:absolute!important;
+  inset:29%!important;
+  border-radius:28px!important;
+  background:rgba(167,105,241,.055)!important;
+  border:1px solid rgba(190,148,248,.07)!important;
+  box-shadow:none!important;
+  pointer-events:none!important;
+}
+.startab-tv-pad-key,.startab-tv-pad-ok{
+  position:absolute!important;
+  box-sizing:border-box!important;
+  margin:0!important;
+  padding:0!important;
+  display:grid!important;
+  place-items:center!important;
+  border:1px solid rgba(208,181,244,.10)!important;
+  outline:0!important;
+  -webkit-appearance:none!important;
+  appearance:none!important;
+  -webkit-tap-highlight-color:transparent!important;
+  transition:transform .08s ease,background .12s ease,border-color .12s ease,color .12s ease!important;
+}
+.startab-tv-pad-key{
+  width:58px!important;
+  height:58px!important;
+  min-width:58px!important;
+  min-height:58px!important;
+  max-width:58px!important;
+  max-height:58px!important;
+  border-radius:19px!important;
+  background:#17151d!important;
+  color:#b9afc2!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.035),0 7px 18px rgba(0,0,0,.17)!important;
+}
+.startab-tv-pad-key svg{width:23px!important;height:23px!important;fill:none!important;stroke:currentColor!important;stroke-width:1.85!important;stroke-linecap:round!important;stroke-linejoin:round!important}
+.startab-tv-pad-key.is-up{top:0!important;left:50%!important;right:auto!important;bottom:auto!important;transform:translateX(-50%)!important}
+.startab-tv-pad-key.is-down{bottom:0!important;left:50%!important;right:auto!important;top:auto!important;transform:translateX(-50%)!important}
+.startab-tv-pad-key.is-left{left:0!important;top:50%!important;right:auto!important;bottom:auto!important;transform:translateY(-50%)!important}
+.startab-tv-pad-key.is-right{right:0!important;top:50%!important;left:auto!important;bottom:auto!important;transform:translateY(-50%)!important}
+.startab-tv-pad-ok{
+  left:50%!important;
+  top:50%!important;
+  width:68px!important;
+  height:68px!important;
+  min-width:68px!important;
+  min-height:68px!important;
+  max-width:68px!important;
+  max-height:68px!important;
+  border-radius:50%!important;
+  transform:translate(-50%,-50%)!important;
+  background:linear-gradient(145deg,#a66bf0,#7d46c9)!important;
+  border-color:rgba(227,208,255,.18)!important;
+  color:#fff!important;
+  font-size:12px!important;
+  font-weight:800!important;
+  letter-spacing:.04em!important;
+  box-shadow:0 10px 24px rgba(98,48,168,.24),inset 0 1px 0 rgba(255,255,255,.18)!important;
+}
+.startab-tv-pad-key.is-up:active{transform:translateX(-50%) scale(.93)!important}
+.startab-tv-pad-key.is-down:active{transform:translateX(-50%) scale(.93)!important}
+.startab-tv-pad-key.is-left:active{transform:translateY(-50%) scale(.93)!important}
+.startab-tv-pad-key.is-right:active{transform:translateY(-50%) scale(.93)!important}
+.startab-tv-pad-ok:active{transform:translate(-50%,-50%) scale(.93)!important}
+.startab-tv-pad-key:active{background:rgba(166,107,240,.14)!important;color:#f3eaff!important;border-color:rgba(190,143,255,.17)!important}
+@media(max-width:700px){
+  .startab-tv-navigation-stage{--tv-pad-size:min(55vw,204px)!important;min-height:220px!important;padding:4px 42px 2px!important}
+  .startab-tv-pad-key{width:54px!important;height:54px!important;min-width:54px!important;min-height:54px!important;max-width:54px!important;max-height:54px!important;border-radius:18px!important}
+  .startab-tv-pad-ok{width:64px!important;height:64px!important;min-width:64px!important;min-height:64px!important;max-width:64px!important;max-height:64px!important}
+}
+@media(max-width:380px){
+  .startab-tv-navigation-stage{--tv-pad-size:min(56vw,190px)!important;min-height:204px!important;padding-left:38px!important;padding-right:38px!important}
+  .startab-tv-pad-key{width:50px!important;height:50px!important;min-width:50px!important;min-height:50px!important;max-width:50px!important;max-height:50px!important;border-radius:17px!important}
+  .startab-tv-pad-ok{width:60px!important;height:60px!important;min-width:60px!important;min-height:60px!important;max-width:60px!important;max-height:60px!important}
+}
