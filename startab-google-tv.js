@@ -13,8 +13,9 @@
     volumeTimer: 0, pendingVolume: null, optimisticVolume: null, lastVolumeInputAt: 0, lastVolumeFirebaseAt: 0,
     brightnessTimer: 0, pendingBrightness: null, optimisticBrightness: null, lastBrightnessInputAt: 0, lastBrightnessFirebaseAt: 0,
     muted: false, powerOn: null,
-    pointerId: null, lastX: 0, lastY: 0, moved: false, downAt: 0,
+    pointerId: null, startX: 0, startY: 0, lastX: 0, lastY: 0, moved: false, downAt: 0,
     longPressTimer: 0, longPressSent: false,
+    editingAppPackage: '', editingBackground: '', contextAppPackage: '', appEditHoldTimer: 0,
     cameraStream: null, scannerActive: false, scanTimer: 0, scanBusy: false, barcodeDetector: null,
     availableApps: [], appSearch: '', wsKeepAlive: 0, firebaseSessionTimer: 0, modalOpen: false,
   };
@@ -41,7 +42,11 @@
   function saveQuickApps(apps, deviceId = state.selectedId) {
     if (!deviceId) return;
     let all = {}; try { all = JSON.parse(localStorage.getItem(QUICK_APPS_KEY) || '{}') || {}; } catch (_) {}
-    all[deviceId] = apps.slice(0, 12).map(a => ({ name:String(a.name||a.packageName||'App'), packageName:String(a.packageName||'') })).filter(a => a.packageName);
+    all[deviceId] = apps.slice(0, 12).map(a => ({
+      name:String(a.name||a.packageName||'App'),
+      packageName:String(a.packageName||''),
+      background: typeof a.background === 'string' ? a.background : ''
+    })).filter(a => a.packageName);
     localStorage.setItem(QUICK_APPS_KEY, JSON.stringify(all));
   }
 
@@ -51,6 +56,9 @@
     settings: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V21h-4v-.09A1.7 1.7 0 0 0 9 19.36a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.63 15a1.7 1.7 0 0 0-1.56-1.03H3v-4h.09A1.7 1.7 0 0 0 4.64 9a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.63a1.7 1.7 0 0 0 1.03-1.56V3h4v.09A1.7 1.7 0 0 0 15 4.64a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.37 9a1.7 1.7 0 0 0 1.56 1.03H21v4h-.09A1.7 1.7 0 0 0 19.4 15Z"></path></svg>',
     back: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6-6 6 6 6"></path><path d="M3 12h10a7 7 0 0 1 7 7"></path></svg>',
     home: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 11 9-8 9 8"></path><path d="M5 10v10h14V10"></path><path d="M9 20v-6h6v6"></path></svg>',
+    menu: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h14"></path></svg>',
+    assistant: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="8" r="3"></circle><circle cx="16.5" cy="7.5" r="2.2"></circle><circle cx="15.5" cy="16" r="3.2"></circle><circle cx="7" cy="16.5" r="1.7"></circle></svg>',
+    input: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M8 12h8m-3-3 3 3-3 3"></path></svg>',
     cursor: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3 19 13l-6 1 3 6-3 1-3-6-5 4Z"></path></svg>',
     mute: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6.5 9H3v6h3.5L11 19Z"></path><path class="tv-volume-wave" d="M15 9.5a4 4 0 0 1 0 5"></path><path class="tv-volume-wave" d="M17.8 6.8a8 8 0 0 1 0 10.4"></path><path class="tv-muted-mark" d="m16 9 5 5m0-5-5 5"></path></svg>',
     plus: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>',
@@ -90,24 +98,27 @@
             </div>
 
             <div class="startab-tv-remote-content" id="startab-tv-remote-content">
-              <div class="startab-tv-navigation-stage">
-                <button class="startab-tv-round-action startab-tv-power" id="startab-tv-power" type="button" data-tv-control aria-label="Encender o apagar TV">${ICONS.power}<span>Power</span></button>
+              <div class="startab-tv-navigation-stage startab-tv-gesture-stage">
+                <button class="startab-tv-round-action startab-tv-power" id="startab-tv-power" type="button" data-tv-control aria-label="Encender o apagar TV" title="Power">${ICONS.power}<span>Power</span></button>
 
-                <div class="startab-tv-pad-v2" aria-label="Cruceta de navegación">
-                  <button class="startab-tv-pad-key is-up" id="startab-tv-dpad-up" type="button" data-tv-control aria-label="Arriba"><svg viewBox="0 0 24 24"><path d="m6 14 6-6 6 6"></path></svg></button>
-                  <button class="startab-tv-pad-key is-left" id="startab-tv-dpad-left" type="button" data-tv-control aria-label="Izquierda"><svg viewBox="0 0 24 24"><path d="m14 6-6 6 6 6"></path></svg></button>
-                  <button class="startab-tv-pad-ok" id="startab-tv-ok" type="button" data-tv-control>OK</button>
-                  <button class="startab-tv-pad-key is-right" id="startab-tv-dpad-right" type="button" data-tv-control aria-label="Derecha"><svg viewBox="0 0 24 24"><path d="m10 6 6 6-6 6"></path></svg></button>
-                  <button class="startab-tv-pad-key is-down" id="startab-tv-dpad-down" type="button" data-tv-control aria-label="Abajo"><svg viewBox="0 0 24 24"><path d="m6 10 6 6 6-6"></path></svg></button>
+                <div class="startab-tv-nav-touch" id="startab-tv-nav-touch" tabindex="0" role="application" aria-label="Touchpad de navegación del Google TV" data-tv-control>
+                  <div class="startab-tv-nav-touch-glow" aria-hidden="true"></div>
+                  <div class="startab-tv-nav-touch-center" aria-hidden="true"><span>OK</span><small>desliza para navegar</small></div>
+                  <i class="startab-tv-nav-touch-arrow is-up" aria-hidden="true"></i>
+                  <i class="startab-tv-nav-touch-arrow is-right" aria-hidden="true"></i>
+                  <i class="startab-tv-nav-touch-arrow is-down" aria-hidden="true"></i>
+                  <i class="startab-tv-nav-touch-arrow is-left" aria-hidden="true"></i>
                 </div>
 
-                <button class="startab-tv-round-action startab-tv-settings" id="startab-tv-settings" type="button" data-tv-control aria-label="Abrir configuración del TV">${ICONS.settings}<span>Ajustes</span></button>
+                <button class="startab-tv-round-action startab-tv-input" id="startab-tv-input" type="button" data-tv-control aria-label="Cambiar entrada o fuente" title="Input">${ICONS.input}<span>Input</span></button>
               </div>
 
-              <div class="startab-tv-nav-row">
-                <button id="startab-tv-back" type="button" data-tv-control>${ICONS.back}<span>Atrás</span></button>
-                <button id="startab-tv-home" type="button" data-tv-control>${ICONS.home}<span>Home</span></button>
-                <button id="startab-tv-cursor" type="button" data-tv-control>${ICONS.cursor}<span>Cursor</span></button>
+              <div class="startab-tv-nav-row startab-tv-nav-row-five">
+                <button id="startab-tv-back" type="button" data-tv-control aria-label="Atrás" title="Atrás">${ICONS.back}</button>
+                <button id="startab-tv-menu" type="button" data-tv-control aria-label="Menú" title="Menú">${ICONS.menu}</button>
+                <button id="startab-tv-home" type="button" data-tv-control aria-label="Home" title="Home">${ICONS.home}</button>
+                <button id="startab-tv-assistant" type="button" data-tv-control aria-label="Google Assistant" title="Google Assistant">${ICONS.assistant}</button>
+                <button id="startab-tv-settings" type="button" data-tv-control aria-label="Configuración" title="Configuración">${ICONS.settings}</button>
               </div>
 
               <div class="startab-tv-app-row startab-tv-quick-apps" id="startab-tv-quick-apps"></div>
@@ -154,19 +165,6 @@
           </section>
         </div>
 
-        <div class="startab-tv-layer startab-tv-touchpad-layer" id="startab-tv-touchpad-layer" aria-hidden="true">
-          <div class="startab-tv-layer-backdrop"></div>
-          <section class="startab-tv-submodal startab-tv-touchpad-card" role="dialog" aria-modal="true" aria-labelledby="startab-tv-touchpad-title">
-            <header><div><span>CONTROL DE CURSOR</span><h3 id="startab-tv-touchpad-title">Touchpad del TV</h3></div><button id="startab-tv-touchpad-close" type="button" aria-label="Cerrar">×</button></header>
-            <div class="startab-tv-submodal-body startab-tv-touchpad-body">
-              <div class="startab-tv-touch-wrap">
-                <div class="startab-tv-touch" id="startab-tv-touch" tabindex="0"><div class="startab-tv-touch-grid"></div><span>Desliza para mover · toca o mantén para OK</span></div>
-              </div>
-            </div>
-            <footer class="startab-tv-touchpad-footer"><span>Toque = OK · Mantener = OK · Deslizar = mover cursor</span></footer>
-          </section>
-        </div>
-
         <div class="startab-tv-layer startab-tv-apps-layer" id="startab-tv-apps-layer" aria-hidden="true">
           <div class="startab-tv-layer-backdrop"></div>
           <section class="startab-tv-submodal startab-tv-apps-card" role="dialog" aria-modal="true" aria-labelledby="startab-tv-apps-title">
@@ -178,6 +176,24 @@
             <footer class="startab-tv-apps-footer">Toca una app para agregarla o quitarla de los accesos rápidos.</footer>
           </section>
         </div>
+
+        <div class="startab-tv-layer startab-tv-app-edit-layer" id="startab-tv-app-edit-layer" aria-hidden="true">
+          <div class="startab-tv-layer-backdrop"></div>
+          <section class="startab-tv-submodal startab-tv-app-edit-card" role="dialog" aria-modal="true" aria-labelledby="startab-tv-app-edit-title">
+            <header><div><span>PERSONALIZAR ACCESO</span><h3 id="startab-tv-app-edit-title">Editar acceso rápido</h3></div><button id="startab-tv-app-edit-close" type="button" aria-label="Cerrar">×</button></header>
+            <div class="startab-tv-submodal-body startab-tv-app-edit-body">
+              <div class="startab-tv-app-edit-preview" id="startab-tv-app-edit-preview"><span>Vista previa</span></div>
+              <label class="startab-tv-app-edit-upload">
+                <input id="startab-tv-app-edit-file" type="file" accept="image/*">
+                <span>Subir imagen de fondo</span>
+              </label>
+              <small>La imagen se optimiza y se guarda como Base64. Cuando hay imagen, el botón no muestra texto.</small>
+            </div>
+            <footer class="startab-tv-app-edit-footer"><button id="startab-tv-app-edit-reset" type="button">Quitar imagen</button><button id="startab-tv-app-edit-save" type="button">Guardar</button></footer>
+          </section>
+        </div>
+
+        <div class="startab-tv-app-context" id="startab-tv-app-context" aria-hidden="true"><button id="startab-tv-app-context-edit" type="button">Editar</button></div>
 
         <div class="startab-tv-scanner" id="startab-tv-scanner" aria-hidden="true">
           <div class="startab-tv-scanner-backdrop"></div>
@@ -196,11 +212,11 @@
   function cacheDom() {
     const ids = [
       'toggle','modal','backdrop','close','led','status-title','status-note','device-select','empty','remote-content',
-      'power','settings','dpad-up','dpad-down','dpad-left','dpad-right','ok','back','home','cursor','quick-apps',
+      'power','input','back','menu','home','assistant','settings','nav-touch','quick-apps',
       'mute','volume','volume-value','volume-fill','vol-down','vol-up','brightness','brightness-value',
       'add','add-layer','add-close','scan-btn','pair-ip','pair-pin','pair-btn',
-      'touchpad-layer','touchpad-close','touch',
       'apps-layer','apps-close','app-search','apps-list',
+      'app-edit-layer','app-edit-close','app-edit-file','app-edit-preview','app-edit-save','app-edit-reset','app-context','app-context-edit',
       'scanner','scanner-video','scanner-note','scanner-close','scanner-cancel'
     ];
     ids.forEach(k => {
@@ -228,7 +244,7 @@
 
   function quickApps() {
     const remote = selectedDevice()?.quickApps;
-    if (Array.isArray(remote)) return remote.filter(a=>a?.packageName).map(a=>({name:String(a.name||a.packageName),packageName:String(a.packageName)}));
+    if (Array.isArray(remote)) return remote.filter(a=>a?.packageName).map(a=>({name:String(a.name||a.packageName),packageName:String(a.packageName),background:typeof a.background==='string'?a.background:''}));
     return readQuickApps(state.selectedId);
   }
   function appMark(name = '') {
@@ -237,18 +253,124 @@
     if (/netflix/i.test(n)) return 'N';
     return (n[0] || 'A').toUpperCase();
   }
+  function quickAppsPayload(list = quickApps()) {
+    return list.map(x => ({
+      name:String(x.name || x.packageName || 'App'),
+      packageName:String(x.packageName || ''),
+      background:typeof x.background === 'string' ? x.background : ''
+    })).filter(x => x.packageName);
+  }
+
+  function persistQuickApps(list) {
+    const payload = quickAppsPayload(list);
+    saveQuickApps(payload);
+    const d = selectedDevice(); if (d) d.quickApps = payload;
+    firebaseMerge({ quickApps: payload }, 12000);
+    if (dom.quickApps) dom.quickApps.dataset.signature = '';
+    renderQuickApps();
+  }
+
+  function closeAppContext() {
+    if (!dom.appContext) return;
+    dom.appContext.classList.remove('is-open');
+    dom.appContext.setAttribute('aria-hidden','true');
+    state.contextAppPackage = '';
+  }
+
+  function openAppContext(app, x, y) {
+    if (!dom.appContext || !app?.packageName) return;
+    state.contextAppPackage = app.packageName;
+    dom.appContext.classList.add('is-open');
+    dom.appContext.setAttribute('aria-hidden','false');
+    const pad = 8, w = 132, h = 46;
+    dom.appContext.style.left = `${Math.max(pad, Math.min(window.innerWidth - w - pad, x || window.innerWidth / 2))}px`;
+    dom.appContext.style.top = `${Math.max(pad, Math.min(window.innerHeight - h - pad, y || window.innerHeight / 2))}px`;
+  }
+
+  function closeAppEditor() {
+    dom.appEditLayer?.classList.remove('is-open');
+    dom.appEditLayer?.setAttribute('aria-hidden','true');
+    state.editingAppPackage = '';
+    state.editingBackground = '';
+    if (dom.appEditFile) dom.appEditFile.value = '';
+  }
+
+  function updateAppEditPreview() {
+    if (!dom.appEditPreview) return;
+    const bg = state.editingBackground || '';
+    dom.appEditPreview.classList.toggle('has-image', !!bg);
+    dom.appEditPreview.style.backgroundImage = bg ? `url("${bg.replace(/"/g,'%22')}")` : '';
+    dom.appEditPreview.innerHTML = bg ? '' : '<span>Vista previa</span>';
+  }
+
+  function openAppEditor(packageName) {
+    closeAppContext();
+    const app = quickApps().find(x => x.packageName === packageName);
+    if (!app) return;
+    state.editingAppPackage = packageName;
+    state.editingBackground = typeof app.background === 'string' ? app.background : '';
+    updateAppEditPreview();
+    dom.appEditLayer?.classList.add('is-open');
+    dom.appEditLayer?.setAttribute('aria-hidden','false');
+  }
+
+  async function imageFileToBase64(file) {
+    if (!file || !String(file.type || '').startsWith('image/')) throw new Error('invalid-image');
+    const raw = await new Promise((resolve, reject) => {
+      const reader = new FileReader(); reader.onload = () => resolve(String(reader.result || '')); reader.onerror = reject; reader.readAsDataURL(file);
+    });
+    const img = await new Promise((resolve, reject) => {
+      const el = new Image(); el.onload = () => resolve(el); el.onerror = reject; el.src = raw;
+    });
+    const maxW = 512, maxH = 320;
+    const scale = Math.min(1, maxW / Math.max(1,img.naturalWidth), maxH / Math.max(1,img.naturalHeight));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+    const ctx = canvas.getContext('2d', { alpha:false });
+    ctx.drawImage(img,0,0,canvas.width,canvas.height);
+    let out = canvas.toDataURL('image/webp', .80);
+    if (!out.startsWith('data:image/webp')) out = canvas.toDataURL('image/jpeg', .80);
+    if (out.length > 230000) {
+      const small = document.createElement('canvas');
+      const s = Math.min(1, 384 / canvas.width, 240 / canvas.height);
+      small.width = Math.max(1, Math.round(canvas.width*s)); small.height = Math.max(1, Math.round(canvas.height*s));
+      small.getContext('2d',{alpha:false}).drawImage(canvas,0,0,small.width,small.height);
+      out = small.toDataURL('image/jpeg', .68);
+    }
+    return out;
+  }
+
   function renderQuickApps() {
     if (!dom.quickApps) return;
     const apps = quickApps();
-    const signature = `${state.selectedId}|${apps.map(a=>a.packageName).join('|')}`;
+    const signature = `${state.selectedId}|${apps.map(a=>`${a.packageName}:${(a.background||'').length}:${String(a.background||'').slice(-16)}`).join('|')}`;
     if (dom.quickApps.dataset.signature === signature) return;
     dom.quickApps.dataset.signature = signature;
     dom.quickApps.innerHTML = '';
     apps.forEach(app => {
       const b = document.createElement('button');
-      b.type = 'button'; b.className = 'startab-tv-quick-app'; b.dataset.tvControl = '';
-      b.innerHTML = `<span class="app-mark">${appMark(app.name)}</span><b>${escapeHtml(app.name || 'App')}</b>`;
-      b.addEventListener('click', () => sendAction('launchApp', { packageName: app.packageName }));
+      b.type = 'button'; b.className = 'startab-tv-quick-app'; b.dataset.tvControl = ''; b.dataset.packageName = app.packageName;
+      b.setAttribute('aria-label', app.name || 'App'); b.title = `${app.name || 'App'} · clic derecho para editar`;
+      if (app.background) {
+        b.classList.add('has-background');
+        b.style.backgroundImage = `url("${String(app.background).replace(/"/g,'%22')}")`;
+        b.innerHTML = '';
+      } else {
+        b.innerHTML = `<span class="app-mark">${appMark(app.name)}</span><b>${escapeHtml(app.name || 'App')}</b>`;
+      }
+      let hold = 0, suppressLaunch = false;
+      b.addEventListener('click', e => {
+        if (suppressLaunch) { suppressLaunch=false; e.preventDefault(); e.stopPropagation(); return; }
+        sendAction('launchApp', { packageName: app.packageName });
+      });
+      b.addEventListener('contextmenu', e => { e.preventDefault(); e.stopPropagation(); openAppContext(app,e.clientX,e.clientY); });
+      b.addEventListener('pointerdown', e => {
+        if (e.pointerType === 'mouse') return;
+        suppressLaunch=false; clearTimeout(hold);
+        hold=setTimeout(()=>{ suppressLaunch=true; openAppContext(app,e.clientX,e.clientY); },560);
+      });
+      ['pointerup','pointercancel','pointerleave'].forEach(ev=>b.addEventListener(ev,()=>clearTimeout(hold)));
       dom.quickApps.appendChild(b);
     });
     const add = document.createElement('button');
@@ -278,10 +400,8 @@
       b.addEventListener('click', () => {
         let list = quickApps(); const exists = list.some(x => x.packageName === app.packageName);
         list = exists ? list.filter(x => x.packageName !== app.packageName) : [...list, app];
-        saveQuickApps(list);
-        firebaseMerge({ quickApps:list.map(x=>({name:x.name,packageName:x.packageName})) }, 12000);
-        if (dom.quickApps) dom.quickApps.dataset.signature='';
-        renderQuickApps(); renderAppsList();
+        persistQuickApps(list);
+        renderAppsList();
       });
       dom.appsList.appendChild(b);
     });
@@ -389,7 +509,10 @@
       'power-admin-required':'Mira el TV: StarTab abrió el permiso adicional para apagar/suspender de forma fiable.',
       'wake-unavailable':'El fabricante no permitió despertar la pantalla desde la app.',
       'power-unavailable':'El control de energía no está disponible en este modelo.',
-      'app-not-installed':'La aplicación ya no está instalada en el Google TV.'
+      'app-not-installed':'La aplicación ya no está instalada en el Google TV.',
+      'input-unavailable':'Este Google TV no expuso el selector de entradas a aplicaciones. Prueba el botón Input físico una vez y vuelve a intentar.',
+      'assistant-unavailable':'Google Assistant no está disponible o está deshabilitado en este TV.',
+      'menu-unavailable':'La app actual no expuso una acción de menú compatible.'
     };
     return map[reason] || `El TV rechazó la orden (${reason || 'error'}).`;
   }
@@ -472,8 +595,6 @@
 
   function closeAddModal() { dom.addLayer?.classList.remove('is-open'); dom.addLayer?.setAttribute('aria-hidden','true'); }
   function openAddModal() { dom.addLayer?.classList.add('is-open'); dom.addLayer?.setAttribute('aria-hidden','false'); setTimeout(()=>dom.pairIp?.focus(),120); }
-  function closeTouchpad() { dom.touchpadLayer?.classList.remove('is-open'); dom.touchpadLayer?.setAttribute('aria-hidden','true'); }
-  function openTouchpad() { if (!selectedDevice()) return; dom.touchpadLayer?.classList.add('is-open'); dom.touchpadLayer?.setAttribute('aria-hidden','false'); }
   function closeAppsModal() { dom.appsLayer?.classList.remove('is-open'); dom.appsLayer?.setAttribute('aria-hidden','true'); }
   function openAppsModal() {
     if (!selectedDevice()) return;
@@ -571,8 +692,8 @@
     try { await state.db.collection('users').doc(uid()).collection('tvDevices').doc(d.deviceId).set({ ...payload, controlLease: lease }, { merge:true }); return true; } catch (_) { return false; }
   }
 
-  function sendAction(type, extra = {}) {
-    globalThis.StartabHaptics?.click?.();
+  function sendAction(type, extra = {}, haptic = true) {
+    if (haptic) globalThis.StartabHaptics?.click?.();
     if (wsSend({ id:unique(), t:type, ...extra })) return;
     firebaseMerge({ actionCommand:{ id:unique(), type, ...extra, clientAt:Date.now() } });
   }
@@ -623,28 +744,62 @@
     clearTimeout(state.brightnessTimer); state.brightnessTimer=setTimeout(()=>{state.lastBrightnessFirebaseAt=performance.now();const v=state.pendingBrightness;state.pendingBrightness=null;if(v!=null)firebaseMerge({actionCommand:{id:unique(),type:'brightness',level:v,clientAt:Date.now()}});},Math.max(0,70-elapsed));
   }
 
-  function bindTouch() {
-    dom.touch?.addEventListener('pointerdown', e => {
-      if(state.pointerId!==null)return;
-      state.pointerId=e.pointerId; state.lastX=e.clientX; state.lastY=e.clientY; state.moved=false; state.longPressSent=false; state.downAt=performance.now();
+  function hapticNav() {
+    try { globalThis.StartabHaptics?.click?.(); } catch (_) {}
+    try { navigator.vibrate?.(13); } catch (_) {}
+  }
+
+  function flashNav(direction) {
+    if (!dom.navTouch) return;
+    dom.navTouch.dataset.gesture = direction || 'ok';
+    clearTimeout(dom.navTouch._gestureTimer);
+    dom.navTouch._gestureTimer = setTimeout(() => { if (dom.navTouch) delete dom.navTouch.dataset.gesture; }, 170);
+  }
+
+  function sendNavDirection(direction) {
+    hapticNav(); flashNav(direction); sendAction('dpad',{direction},false);
+  }
+
+  function sendNavOk() {
+    hapticNav(); flashNav('ok'); sendAction('ok',{},false);
+  }
+
+  function bindNavTouch() {
+    const el = dom.navTouch; if (!el) return;
+    el.addEventListener('pointerdown', e => {
+      if (state.pointerId !== null) return;
+      state.pointerId=e.pointerId; state.startX=state.lastX=e.clientX; state.startY=state.lastY=e.clientY;
+      state.moved=false; state.longPressSent=false; state.downAt=performance.now();
       clearTimeout(state.longPressTimer);
-      state.longPressTimer=setTimeout(()=>{ if(state.pointerId===e.pointerId && !state.moved){ state.longPressSent=true; sendAction('ok'); } }, 620);
-      dom.touch.setPointerCapture?.(e.pointerId); e.preventDefault();
+      state.longPressTimer=setTimeout(()=>{
+        if(state.pointerId===e.pointerId && !state.moved){ state.longPressSent=true; sendNavOk(); }
+      },560);
+      el.classList.add('is-pressed'); el.setPointerCapture?.(e.pointerId); e.preventDefault();
     });
-    dom.touch?.addEventListener('pointermove', e => {
+    el.addEventListener('pointermove', e => {
       if(e.pointerId!==state.pointerId)return;
-      const dx=e.clientX-state.lastX,dy=e.clientY-state.lastY; state.lastX=e.clientX; state.lastY=e.clientY;
-      if(Math.abs(dx)+Math.abs(dy)>.8){ state.moved=true; clearTimeout(state.longPressTimer); }
-      sendMove(dx*1.45,dy*1.45); e.preventDefault();
+      const dx=e.clientX-state.startX, dy=e.clientY-state.startY;
+      if(Math.hypot(dx,dy)>12){ state.moved=true; clearTimeout(state.longPressTimer); }
+      state.lastX=e.clientX; state.lastY=e.clientY; e.preventDefault();
     });
     const finish=e=>{
       if(e.pointerId!==state.pointerId)return;
-      clearTimeout(state.longPressTimer);
-      try{dom.touch.releasePointerCapture?.(e.pointerId)}catch(_){}
-      const tap=!state.moved&&!state.longPressSent&&performance.now()-state.downAt<620;
-      state.pointerId=null; if(tap)sendAction('ok'); e.preventDefault();
+      clearTimeout(state.longPressTimer); el.classList.remove('is-pressed');
+      try{el.releasePointerCapture?.(e.pointerId)}catch(_){}
+      const dx=e.clientX-state.startX, dy=e.clientY-state.startY, dist=Math.hypot(dx,dy), elapsed=performance.now()-state.downAt;
+      const wasLong=state.longPressSent; state.pointerId=null;
+      if (!wasLong) {
+        if(dist<26 && elapsed<700) sendNavOk();
+        else if(dist>=26) sendNavDirection(Math.abs(dx)>=Math.abs(dy) ? (dx>0?'right':'left') : (dy>0?'down':'up'));
+      }
+      e.preventDefault();
     };
-    dom.touch?.addEventListener('pointerup',finish); dom.touch?.addEventListener('pointercancel',finish);
+    el.addEventListener('pointerup',finish); el.addEventListener('pointercancel',finish);
+    el.addEventListener('keydown', e => {
+      const map={ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right'};
+      if(map[e.key]){sendNavDirection(map[e.key]);e.preventDefault();}
+      else if(e.key==='Enter'||e.key===' '){sendNavOk();e.preventDefault();}
+    });
   }
 
   function stopFirebaseSessionLease() { clearInterval(state.firebaseSessionTimer); state.firebaseSessionTimer=0; }
@@ -657,7 +812,7 @@
   function bindUi() {
     dom.toggle = $('startab-tv-toggle');
     dom.toggle?.addEventListener('click',()=>{ state.modalOpen=true; dom.modal?.classList.add('is-open'); dom.modal?.setAttribute('aria-hidden','false'); document.documentElement.classList.add('startab-tv-modal-open'); connectSelectedLocal(); startFirebaseSessionLease(); render(); });
-    const close=()=>{ state.modalOpen=false; stopFirebaseSessionLease(); closeWs(); stopQrScanner(); closeAddModal(); closeTouchpad(); closeAppsModal(); dom.modal?.classList.remove('is-open'); dom.modal?.setAttribute('aria-hidden','true'); document.documentElement.classList.remove('startab-tv-modal-open'); };
+    const close=()=>{ state.modalOpen=false; stopFirebaseSessionLease(); closeWs(); stopQrScanner(); closeAddModal(); closeAppsModal(); closeAppEditor(); closeAppContext(); dom.modal?.classList.remove('is-open'); dom.modal?.setAttribute('aria-hidden','true'); document.documentElement.classList.remove('startab-tv-modal-open'); };
     dom.close?.addEventListener('click',close); dom.backdrop?.addEventListener('click',close);
 
     dom.add?.addEventListener('click',openAddModal); dom.addClose?.addEventListener('click',closeAddModal); dom.addLayer?.querySelector('.startab-tv-layer-backdrop')?.addEventListener('click',closeAddModal);
@@ -665,10 +820,22 @@
     dom.pairBtn?.addEventListener('click',()=>pairTv({ip:dom.pairIp?.value||'',pin:dom.pairPin?.value||'',port:8765}));
     dom.pairPin?.addEventListener('keydown',e=>{if(e.key==='Enter')dom.pairBtn?.click();});
 
-    dom.touchpadClose?.addEventListener('click',closeTouchpad); dom.touchpadLayer?.querySelector('.startab-tv-layer-backdrop')?.addEventListener('click',closeTouchpad);
-    dom.cursor?.addEventListener('click',openTouchpad);
     dom.appsClose?.addEventListener('click',closeAppsModal); dom.appsLayer?.querySelector('.startab-tv-layer-backdrop')?.addEventListener('click',closeAppsModal);
     dom.appSearch?.addEventListener('input',()=>{state.appSearch=dom.appSearch.value||'';renderAppsList();});
+    dom.appContextEdit?.addEventListener('click',()=>{ if(state.contextAppPackage) openAppEditor(state.contextAppPackage); });
+    dom.appEditClose?.addEventListener('click',closeAppEditor); dom.appEditLayer?.querySelector('.startab-tv-layer-backdrop')?.addEventListener('click',closeAppEditor);
+    dom.appEditFile?.addEventListener('change', async ()=>{
+      const file=dom.appEditFile.files?.[0]; if(!file)return;
+      try{ state.editingBackground=await imageFileToBase64(file); updateAppEditPreview(); }
+      catch(_){ setStatus('error','Imagen no válida','Selecciona una imagen JPG, PNG o WebP.'); setTimeout(render,2200); }
+    });
+    dom.appEditReset?.addEventListener('click',()=>{state.editingBackground='';updateAppEditPreview();});
+    dom.appEditSave?.addEventListener('click',()=>{
+      const list=quickApps().map(a=>a.packageName===state.editingAppPackage?{...a,background:state.editingBackground||''}:a);
+      persistQuickApps(list); closeAppEditor();
+    });
+    document.addEventListener('pointerdown',e=>{if(dom.appContext?.classList.contains('is-open')&&!dom.appContext.contains(e.target))closeAppContext();});
+    window.addEventListener('resize',closeAppContext); window.addEventListener('scroll',closeAppContext,true);
 
     dom.scannerClose?.addEventListener('click',stopQrScanner); dom.scannerCancel?.addEventListener('click',stopQrScanner); dom.scanner?.querySelector('.startab-tv-scanner-backdrop')?.addEventListener('click',stopQrScanner);
     dom.deviceSelect?.addEventListener('change',()=>{state.selectedId=dom.deviceSelect.value||'';localStorage.setItem(SELECTED_KEY,state.selectedId);state.optimisticVolume=null;state.optimisticBrightness=null;state.availableApps=[];closeWs();connectSelectedLocal();startFirebaseSessionLease();render();});
@@ -679,14 +846,12 @@
       render();
       sendAction('power',{action});
     });
-    dom.settings?.addEventListener('click',()=>sendAction('settings'));
-    dom.dpadUp?.addEventListener('click',()=>sendAction('dpad',{direction:'up'}));
-    dom.dpadDown?.addEventListener('click',()=>sendAction('dpad',{direction:'down'}));
-    dom.dpadLeft?.addEventListener('click',()=>sendAction('dpad',{direction:'left'}));
-    dom.dpadRight?.addEventListener('click',()=>sendAction('dpad',{direction:'right'}));
-    dom.ok?.addEventListener('click',()=>sendAction('ok'));
+    dom.input?.addEventListener('click',()=>sendAction('input'));
     dom.back?.addEventListener('click',sendBack);
+    dom.menu?.addEventListener('click',()=>sendAction('menu'));
     dom.home?.addEventListener('click',()=>sendAction('home'));
+    dom.assistant?.addEventListener('click',()=>sendAction('assistant'));
+    dom.settings?.addEventListener('click',()=>sendAction('settings'));
     dom.mute?.addEventListener('click',toggleMute);
     dom.volume?.addEventListener('input',()=>setVolume(dom.volume.value));
     dom.volDown?.addEventListener('click',()=>setVolume((state.optimisticVolume ?? Number(selectedDevice()?.volume||0))-1));
@@ -696,12 +861,13 @@
     document.addEventListener('keydown', e => {
       if (e.key !== 'Escape') return;
       if (dom.scanner?.classList.contains('is-open')) { stopQrScanner(); e.preventDefault(); return; }
-      if (dom.touchpadLayer?.classList.contains('is-open')) { closeTouchpad(); e.preventDefault(); return; }
+      if (dom.appEditLayer?.classList.contains('is-open')) { closeAppEditor(); e.preventDefault(); return; }
       if (dom.appsLayer?.classList.contains('is-open')) { closeAppsModal(); e.preventDefault(); return; }
+      if (dom.appContext?.classList.contains('is-open')) { closeAppContext(); e.preventDefault(); return; }
       if (dom.addLayer?.classList.contains('is-open')) { closeAddModal(); e.preventDefault(); return; }
       if (dom.modal?.classList.contains('is-open')) { close(); e.preventDefault(); }
     });
-    bindTouch();
+    bindNavTouch();
   }
 
   function boot() {

@@ -13719,3 +13719,113 @@ html.startab-tv-modal-open{overflow:hidden!important}
   .startab-tv-pad-key{width:50px!important;height:50px!important;min-width:50px!important;min-height:50px!important;max-width:50px!important;max-height:50px!important;border-radius:17px!important}
   .startab-tv-pad-ok{width:60px!important;height:60px!important;min-width:60px!important;min-height:60px!important;max-width:60px!important;max-height:60px!important}
 }
+
+/* ==============================================================
+   StarTab Google TV v1.4.17 — Gesture Navigation + Quick App Art
+   ============================================================== */
+.startab-tv-gesture-stage{
+  position:relative!important;
+  width:100%!important;
+  min-height:244px!important;
+  padding:8px 50px 4px!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  box-sizing:border-box!important;
+}
+.startab-tv-round-action.startab-tv-input{right:0!important;color:#c7a5ef!important}
+.startab-tv-nav-touch{
+  position:relative!important;
+  width:min(100%,300px)!important;
+  height:218px!important;
+  min-height:218px!important;
+  border-radius:30px!important;
+  overflow:hidden!important;
+  touch-action:none!important;
+  user-select:none!important;
+  -webkit-user-select:none!important;
+  -webkit-tap-highlight-color:transparent!important;
+  outline:0!important;
+  cursor:default!important;
+  border:1px solid rgba(202,174,240,.10)!important;
+  background:
+    radial-gradient(circle at 50% 44%,rgba(163,100,235,.095),transparent 42%),
+    linear-gradient(150deg,#17151d,#0f0e13 72%)!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.035),0 14px 34px rgba(0,0,0,.25)!important;
+  transition:transform .10s ease,border-color .15s ease,background .15s ease!important;
+}
+.startab-tv-nav-touch.is-pressed{transform:scale(.992)!important;border-color:rgba(177,119,246,.18)!important}
+.startab-tv-nav-touch-glow{position:absolute!important;inset:0!important;pointer-events:none!important;background:radial-gradient(circle at 50% 50%,rgba(168,105,244,.10),transparent 55%)!important;opacity:.42!important;transition:.14s ease!important}
+.startab-tv-nav-touch-center{position:absolute!important;left:50%!important;top:50%!important;transform:translate(-50%,-50%)!important;display:flex!important;flex-direction:column!important;align-items:center!important;gap:4px!important;pointer-events:none!important;color:#c8b8d7!important}
+.startab-tv-nav-touch-center span{font-size:14px!important;font-weight:800!important;letter-spacing:.08em!important;color:#e6d9f1!important}
+.startab-tv-nav-touch-center small{font-size:8px!important;color:#776d80!important;letter-spacing:.035em!important}
+.startab-tv-nav-touch-arrow{position:absolute!important;width:8px!important;height:8px!important;border-top:1.5px solid #776d80!important;border-right:1.5px solid #776d80!important;opacity:.75!important;transition:.12s ease!important;pointer-events:none!important}
+.startab-tv-nav-touch-arrow.is-up{left:50%!important;top:20px!important;transform:translateX(-50%) rotate(-45deg)!important}
+.startab-tv-nav-touch-arrow.is-right{right:20px!important;top:50%!important;transform:translateY(-50%) rotate(45deg)!important}
+.startab-tv-nav-touch-arrow.is-down{left:50%!important;bottom:20px!important;transform:translateX(-50%) rotate(135deg)!important}
+.startab-tv-nav-touch-arrow.is-left{left:20px!important;top:50%!important;transform:translateY(-50%) rotate(-135deg)!important}
+.startab-tv-nav-touch[data-gesture="up"] .is-up,
+.startab-tv-nav-touch[data-gesture="right"] .is-right,
+.startab-tv-nav-touch[data-gesture="down"] .is-down,
+.startab-tv-nav-touch[data-gesture="left"] .is-left{border-color:#d9b7ff!important;filter:drop-shadow(0 0 7px rgba(166,99,240,.7))!important;opacity:1!important}
+.startab-tv-nav-touch[data-gesture="ok"] .startab-tv-nav-touch-center span{color:#fff!important;text-shadow:0 0 14px rgba(176,110,255,.72)!important}
+.startab-tv-nav-touch[data-gesture="ok"] .startab-tv-nav-touch-glow{opacity:1!important;background:radial-gradient(circle at 50% 50%,rgba(168,105,244,.18),transparent 57%)!important}
+
+.startab-tv-nav-row.startab-tv-nav-row-five{grid-template-columns:repeat(5,minmax(0,1fr))!important;gap:7px!important;margin:8px 0 10px!important}
+.startab-tv-nav-row.startab-tv-nav-row-five button{height:46px!important;min-width:0!important;padding:0!important;border-radius:14px!important;display:grid!important;place-items:center!important}
+.startab-tv-nav-row.startab-tv-nav-row-five button svg{width:19px!important;height:19px!important;display:block!important;fill:none!important;stroke:currentColor!important;stroke-width:1.75!important;stroke-linecap:round!important;stroke-linejoin:round!important}
+.startab-tv-nav-row.startab-tv-nav-row-five #startab-tv-assistant svg{fill:none!important;stroke:currentColor!important}
+.startab-tv-nav-row.startab-tv-nav-row-five button:hover{color:#dfc7fb!important;border-color:rgba(177,112,247,.18)!important;background:#1a1720!important}
+
+.startab-tv-quick-app.has-background{
+  background-position:center!important;
+  background-size:cover!important;
+  background-repeat:no-repeat!important;
+  border-color:rgba(255,255,255,.10)!important;
+  position:relative!important;
+  overflow:hidden!important;
+}
+.startab-tv-quick-app.has-background:after{content:""!important;position:absolute!important;inset:0!important;background:linear-gradient(180deg,rgba(0,0,0,.02),rgba(0,0,0,.13))!important;pointer-events:none!important}
+.startab-tv-quick-app.has-background:hover{border-color:rgba(201,165,245,.24)!important}
+
+.startab-tv-app-context{
+  position:fixed!important;
+  z-index:2147483647!important;
+  display:none!important;
+  width:124px!important;
+  padding:5px!important;
+  border-radius:12px!important;
+  background:#19171f!important;
+  border:1px solid rgba(218,191,250,.12)!important;
+  box-shadow:0 16px 40px rgba(0,0,0,.45)!important;
+}
+.startab-tv-app-context.is-open{display:block!important}
+.startab-tv-app-context button{width:100%!important;height:35px!important;border:0!important;border-radius:9px!important;background:transparent!important;color:#ded4e8!important;text-align:left!important;padding:0 11px!important;font-size:10px!important;font-weight:700!important}
+.startab-tv-app-context button:hover{background:rgba(166,101,238,.10)!important;color:#ecdfff!important}
+
+.startab-tv-app-edit-layer{z-index:2147483646!important}
+.startab-tv-app-edit-card{width:min(430px,calc(100vw - 24px))!important}
+.startab-tv-app-edit-body{display:flex!important;flex-direction:column!important;gap:12px!important}
+.startab-tv-app-edit-preview{height:142px!important;border-radius:18px!important;border:1px solid rgba(216,188,249,.09)!important;background:#111016!important;display:grid!important;place-items:center!important;background-position:center!important;background-size:cover!important;background-repeat:no-repeat!important;overflow:hidden!important;color:#756a7d!important;font-size:10px!important}
+.startab-tv-app-edit-preview.has-image{border-color:rgba(190,139,249,.18)!important}
+.startab-tv-app-edit-upload{height:43px!important;border:1px dashed rgba(190,145,245,.20)!important;border-radius:13px!important;background:rgba(162,99,235,.045)!important;color:#c9addf!important;display:grid!important;place-items:center!important;cursor:pointer!important;font-size:10px!important;font-weight:750!important}
+.startab-tv-app-edit-upload input{display:none!important}
+.startab-tv-app-edit-body>small{font-size:8px!important;line-height:1.45!important;color:#746a7c!important}
+.startab-tv-app-edit-footer{display:flex!important;justify-content:flex-end!important;gap:8px!important;padding:11px 14px!important;border-top:1px solid rgba(255,255,255,.055)!important}
+.startab-tv-app-edit-footer button{height:36px!important;border-radius:11px!important;border:1px solid rgba(255,255,255,.07)!important;background:#15131a!important;color:#a99daf!important;padding:0 13px!important;font-size:9px!important;font-weight:700!important}
+.startab-tv-app-edit-footer #startab-tv-app-edit-save{background:#8a4fd0!important;border-color:#8a4fd0!important;color:#fff!important}
+
+@media(max-width:700px){
+  .startab-tv-gesture-stage{min-height:224px!important;padding:4px 44px 2px!important}
+  .startab-tv-nav-touch{width:min(100%,280px)!important;height:204px!important;min-height:204px!important;border-radius:26px!important}
+  .startab-tv-nav-row.startab-tv-nav-row-five{gap:6px!important}
+  .startab-tv-nav-row.startab-tv-nav-row-five button{height:43px!important;border-radius:13px!important}
+  .startab-tv-nav-row.startab-tv-nav-row-five button svg{width:18px!important;height:18px!important}
+  .startab-tv-app-edit-card{width:100vw!important;border-radius:24px 24px 0 0!important}
+}
+@media(max-width:380px){
+  .startab-tv-gesture-stage{min-height:208px!important;padding-left:40px!important;padding-right:40px!important}
+  .startab-tv-nav-touch{height:190px!important;min-height:190px!important;border-radius:24px!important}
+  .startab-tv-nav-row.startab-tv-nav-row-five button{height:40px!important}
+  .startab-tv-nav-row.startab-tv-nav-row-five button svg{width:17px!important;height:17px!important}
+}
