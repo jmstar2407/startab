@@ -17,7 +17,7 @@
     longPressTimer: 0, longPressSent: false,
     editingAppPackage: '', editingBackground: '', contextAppPackage: '', appEditHoldTimer: 0,
     cameraStream: null, scannerActive: false, scanTimer: 0, scanBusy: false, barcodeDetector: null,
-    availableApps: [], appSearch: '', wsKeepAlive: 0, firebaseSessionTimer: 0, modalOpen: false,
+    availableApps: [], appSearch: '', wsKeepAlive: 0, firebaseSessionTimer: 0, modalOpen: false, keyboardBuffer: '', keyboardTimer: 0,
   };
   const dom = {};
   const $ = id => document.getElementById(id);
@@ -62,7 +62,8 @@
     cursor: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3 19 13l-6 1 3 6-3 1-3-6-5 4Z"></path></svg>',
     mute: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6.5 9H3v6h3.5L11 19Z"></path><path class="tv-volume-wave" d="M15 9.5a4 4 0 0 1 0 5"></path><path class="tv-volume-wave" d="M17.8 6.8a8 8 0 0 1 0 10.4"></path><path class="tv-muted-mark" d="m16 9 5 5m0-5-5 5"></path></svg>',
     plus: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>',
-    scan: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 9h8v6H8z"></path></svg>'
+    scan: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 9h8v6H8z"></path></svg>',
+    keyboard: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="3"></rect><path d="M7 10h.01M10 10h.01M13 10h.01M16 10h.01M7 13h.01M10 13h.01M13 13h.01M16 13h.01M8 16h8"></path></svg>'
   };
 
   function injectUi() {
@@ -89,12 +90,15 @@
                 <div class="startab-tv-head-status"><i id="startab-tv-led"></i><b id="startab-tv-status-title">Sin TV</b><span id="startab-tv-status-note">Selecciona o agrega un televisor.</span></div>
               </div>
             </div>
-            <button id="startab-tv-close" class="startab-tv-close" type="button" aria-label="Cerrar">×</button>
+            <div class="startab-tv-head-actions">
+              <div class="startab-tv-device-select-wrap startab-tv-device-select-head"><select id="startab-tv-device-select" aria-label="Google TV seleccionado"><option value="">Sin TVs vinculados</option></select></div>
+              <button id="startab-tv-close" class="startab-tv-close" type="button" aria-label="Cerrar">×</button>
+            </div>
           </header>
 
           <div class="startab-tv-body startab-tv-remote-body">
             <div class="startab-tv-empty" id="startab-tv-empty">
-              <span>${ICONS.remote}</span><b>Agrega un Google TV</b><small>Usa el botón + de abajo para vincular por QR o por IP y PIN.</small>
+              <span>${ICONS.remote}</span><b>Agrega un Google TV</b><small>Abre el selector superior y elige “Añadir otro TV…” para vincular por QR o por IP y PIN.</small>
             </div>
 
             <div class="startab-tv-remote-content" id="startab-tv-remote-content">
@@ -110,7 +114,10 @@
                   <i class="startab-tv-nav-touch-arrow is-left" aria-hidden="true"></i>
                 </div>
 
-                <button class="startab-tv-round-action startab-tv-input" id="startab-tv-input" type="button" data-tv-control aria-label="Cambiar entrada o fuente" title="Input">${ICONS.input}<span>Input</span></button>
+                <div class="startab-tv-side-actions is-right">
+                  <button class="startab-tv-round-action startab-tv-input" id="startab-tv-input" type="button" data-tv-control aria-label="Cambiar entrada o fuente" title="Input">${ICONS.input}<span>Input</span></button>
+                  <button class="startab-tv-round-action startab-tv-keyboard" id="startab-tv-keyboard" type="button" data-tv-control aria-label="Teclado remoto" title="Teclado remoto">${ICONS.keyboard}<span>Teclado</span></button>
+                </div>
               </div>
 
               <div class="startab-tv-nav-row startab-tv-nav-row-five">
@@ -143,10 +150,6 @@
             </div>
           </div>
 
-          <footer class="startab-tv-footer startab-tv-footer-compact">
-            <button class="startab-tv-add" id="startab-tv-add" type="button" aria-label="Agregar TV">${ICONS.plus}</button>
-            <div class="startab-tv-device-select-wrap"><select id="startab-tv-device-select" aria-label="Google TV seleccionado"><option value="">Sin TVs vinculados</option></select></div>
-          </footer>
         </section>
 
         <div class="startab-tv-layer startab-tv-add-layer" id="startab-tv-add-layer" aria-hidden="true">
@@ -195,6 +198,24 @@
 
         <div class="startab-tv-app-context" id="startab-tv-app-context" aria-hidden="true"><button id="startab-tv-app-context-edit" type="button">Editar</button></div>
 
+        <div class="startab-tv-layer startab-tv-keyboard-layer" id="startab-tv-keyboard-layer" aria-hidden="true">
+          <div class="startab-tv-layer-backdrop"></div>
+          <section class="startab-tv-submodal startab-tv-keyboard-card" role="dialog" aria-modal="true" aria-labelledby="startab-tv-keyboard-title">
+            <header><div><span>TECLADO INALÁMBRICO</span><h3 id="startab-tv-keyboard-title">Escribir en Google TV</h3></div><button id="startab-tv-keyboard-close" type="button" aria-label="Cerrar">×</button></header>
+            <div class="startab-tv-submodal-body startab-tv-keyboard-body">
+              <label class="startab-tv-keyboard-field">
+                <span>Escribe aquí</span>
+                <textarea id="startab-tv-keyboard-input" rows="3" autocomplete="off" autocorrect="off" autocapitalize="sentences" spellcheck="false" placeholder="Toca aquí para abrir el teclado del móvil…"></textarea>
+              </label>
+              <div class="startab-tv-keyboard-actions">
+                <button id="startab-tv-keyboard-backspace" type="button">⌫</button>
+                <button id="startab-tv-keyboard-enter" type="button">Enter</button>
+              </div>
+              <small>El texto se envía al campo que tenga el foco en el Google TV. Mantén StarTab abierto mientras escribes.</small>
+            </div>
+          </section>
+        </div>
+
         <div class="startab-tv-scanner" id="startab-tv-scanner" aria-hidden="true">
           <div class="startab-tv-scanner-backdrop"></div>
           <section class="startab-tv-scanner-card" role="dialog" aria-modal="true" aria-labelledby="startab-tv-scanner-title">
@@ -212,11 +233,12 @@
   function cacheDom() {
     const ids = [
       'toggle','modal','backdrop','close','led','status-title','status-note','device-select','empty','remote-content',
-      'power','input','back','menu','home','assistant','settings','nav-touch','quick-apps',
+      'power','input','keyboard','back','menu','home','assistant','settings','nav-touch','quick-apps',
       'mute','volume','volume-value','volume-fill','vol-down','vol-up','brightness','brightness-value',
       'add','add-layer','add-close','scan-btn','pair-ip','pair-pin','pair-btn',
       'apps-layer','apps-close','app-search','apps-list',
       'app-edit-layer','app-edit-close','app-edit-file','app-edit-preview','app-edit-save','app-edit-reset','app-context','app-context-edit',
+      'keyboard-layer','keyboard-close','keyboard-input','keyboard-backspace','keyboard-enter',
       'scanner','scanner-video','scanner-note','scanner-close','scanner-cancel'
     ];
     ids.forEach(k => {
@@ -299,7 +321,7 @@
     if (!dom.appEditPreview) return;
     const bg = state.editingBackground || '';
     dom.appEditPreview.classList.toggle('has-image', !!bg);
-    dom.appEditPreview.style.backgroundImage = bg ? `url("${bg.replace(/"/g,'%22')}")` : '';
+    dom.appEditPreview.style.setProperty('--tv-app-bg', bg ? `url("${bg.replace(/"/g,'%22')}")` : 'none');
     dom.appEditPreview.innerHTML = bg ? '' : '<span>Vista previa</span>';
   }
 
@@ -322,21 +344,21 @@
     const img = await new Promise((resolve, reject) => {
       const el = new Image(); el.onload = () => resolve(el); el.onerror = reject; el.src = raw;
     });
-    const maxW = 512, maxH = 320;
+    const maxW = 420, maxH = 236;
     const scale = Math.min(1, maxW / Math.max(1,img.naturalWidth), maxH / Math.max(1,img.naturalHeight));
     const canvas = document.createElement('canvas');
     canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
     canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
     const ctx = canvas.getContext('2d', { alpha:false });
     ctx.drawImage(img,0,0,canvas.width,canvas.height);
-    let out = canvas.toDataURL('image/webp', .80);
-    if (!out.startsWith('data:image/webp')) out = canvas.toDataURL('image/jpeg', .80);
-    if (out.length > 230000) {
+    let out = canvas.toDataURL('image/jpeg', .78);
+    if (out.length > 60000) {
       const small = document.createElement('canvas');
-      const s = Math.min(1, 384 / canvas.width, 240 / canvas.height);
+      const s = Math.min(1, 320 / canvas.width, 180 / canvas.height);
       small.width = Math.max(1, Math.round(canvas.width*s)); small.height = Math.max(1, Math.round(canvas.height*s));
       small.getContext('2d',{alpha:false}).drawImage(canvas,0,0,small.width,small.height);
-      out = small.toDataURL('image/jpeg', .68);
+      out = small.toDataURL('image/jpeg', .64);
+      if (out.length > 60000) out = small.toDataURL('image/jpeg', .48);
     }
     return out;
   }
@@ -354,7 +376,7 @@
       b.setAttribute('aria-label', app.name || 'App'); b.title = `${app.name || 'App'} · clic derecho para editar`;
       if (app.background) {
         b.classList.add('has-background');
-        b.style.backgroundImage = `url("${String(app.background).replace(/"/g,'%22')}")`;
+        b.style.setProperty('--tv-app-bg', `url("${String(app.background).replace(/"/g,'%22')}")`);
         b.innerHTML = '';
       } else {
         b.innerHTML = `<span class="app-mark">${appMark(app.name)}</span><b>${escapeHtml(app.name || 'App')}</b>`;
@@ -426,7 +448,8 @@
         const suffix = isOnline(item) ? '' : ' · sin conexión';
         dom.deviceSelect.add(new Option(`${item.deviceName || 'Google TV'}${suffix}`, item.deviceId));
       });
-      dom.deviceSelect.value = state.devices.has(current) ? current : '';
+      dom.deviceSelect.add(new Option('＋ Añadir otro TV…', '__add_tv__'));
+      dom.deviceSelect.value = state.devices.has(current) ? current : (state.devices.size ? [...state.devices.keys()][0] : '');
     }
 
     const volume = state.optimisticVolume ?? Number(d?.volume ?? 0);
@@ -512,7 +535,8 @@
       'app-not-installed':'La aplicación ya no está instalada en el Google TV.',
       'input-unavailable':'Este Google TV no expuso el selector de entradas a aplicaciones. Prueba el botón Input físico una vez y vuelve a intentar.',
       'assistant-unavailable':'Google Assistant no está disponible o está deshabilitado en este TV.',
-      'menu-unavailable':'La app actual no expuso una acción de menú compatible.'
+      'menu-unavailable':'La app actual no expuso una acción de menú compatible.',
+      'text-field-unavailable':'Selecciona primero un campo de texto en el Google TV y vuelve a escribir.'
     };
     return map[reason] || `El TV rechazó la orden (${reason || 'error'}).`;
   }
@@ -802,6 +826,42 @@
     });
   }
 
+  function openKeyboard() {
+    if (!selectedDevice()) return;
+    dom.keyboardLayer?.classList.add('is-open'); dom.keyboardLayer?.setAttribute('aria-hidden','false');
+    if (dom.keyboardInput) { dom.keyboardInput.value=''; dom.keyboardInput.dataset.prev=''; }
+    setTimeout(()=>{ try { dom.keyboardInput?.focus({preventScroll:true}); } catch (_) { dom.keyboardInput?.focus(); } }, 90);
+  }
+  function closeKeyboard() {
+    dom.keyboardLayer?.classList.remove('is-open'); dom.keyboardLayer?.setAttribute('aria-hidden','true');
+    try { dom.keyboardInput?.blur(); } catch (_) {}
+  }
+  function sendKeyboardText(text) {
+    const value=String(text||''); if(!value)return;
+    if (wsSend({id:unique(),t:'text',text:value})) return;
+    state.keyboardBuffer += value;
+    clearTimeout(state.keyboardTimer);
+    state.keyboardTimer=setTimeout(()=>{const chunk=state.keyboardBuffer;state.keyboardBuffer='';if(chunk)firebaseMerge({actionCommand:{id:unique(),type:'text',text:chunk,clientAt:Date.now()}},15000);},55);
+  }
+  function sendKeyboardKey(key, count=1) {
+    const safeKey=String(key||''), safeCount=Math.max(1,Math.min(20,Number(count)||1));
+    if (wsSend({id:unique(),t:'key',key:safeKey,count:safeCount})) return;
+    clearTimeout(state.keyboardTimer);
+    const pending=state.keyboardBuffer; state.keyboardBuffer='';
+    const sendKey=()=>firebaseMerge({actionCommand:{id:unique(),type:'key',key:safeKey,count:safeCount,clientAt:Date.now()}},15000);
+    if(pending) firebaseMerge({actionCommand:{id:unique(),type:'text',text:pending,clientAt:Date.now()}},15000).finally(sendKey); else sendKey();
+  }
+  function handleKeyboardInput() {
+    const el=dom.keyboardInput;if(!el)return;
+    const prev=String(el.dataset.prev||''), next=String(el.value||'');
+    if(next===prev)return;
+    if(next.startsWith(prev)) sendKeyboardText(next.slice(prev.length));
+    else if(prev.startsWith(next)) sendKeyboardKey('backspace',prev.length-next.length);
+    else { const common=[...prev].findIndex((c,i)=>next[i]!==c); const i=common<0?Math.min(prev.length,next.length):common; if(prev.length>i)sendKeyboardKey('backspace',prev.length-i); if(next.length>i)sendKeyboardText(next.slice(i)); }
+    el.dataset.prev=next;
+    if(next.length>700){el.value=next.slice(-350);el.dataset.prev=el.value;}
+  }
+
   function stopFirebaseSessionLease() { clearInterval(state.firebaseSessionTimer); state.firebaseSessionTimer=0; }
   function startFirebaseSessionLease() {
     stopFirebaseSessionLease();
@@ -812,7 +872,7 @@
   function bindUi() {
     dom.toggle = $('startab-tv-toggle');
     dom.toggle?.addEventListener('click',()=>{ state.modalOpen=true; dom.modal?.classList.add('is-open'); dom.modal?.setAttribute('aria-hidden','false'); document.documentElement.classList.add('startab-tv-modal-open'); connectSelectedLocal(); startFirebaseSessionLease(); render(); });
-    const close=()=>{ state.modalOpen=false; stopFirebaseSessionLease(); closeWs(); stopQrScanner(); closeAddModal(); closeAppsModal(); closeAppEditor(); closeAppContext(); dom.modal?.classList.remove('is-open'); dom.modal?.setAttribute('aria-hidden','true'); document.documentElement.classList.remove('startab-tv-modal-open'); };
+    const close=()=>{ state.modalOpen=false; stopFirebaseSessionLease(); closeWs(); stopQrScanner(); closeAddModal(); closeAppsModal(); closeAppEditor(); closeAppContext(); closeKeyboard(); dom.modal?.classList.remove('is-open'); dom.modal?.setAttribute('aria-hidden','true'); document.documentElement.classList.remove('startab-tv-modal-open'); };
     dom.close?.addEventListener('click',close); dom.backdrop?.addEventListener('click',close);
 
     dom.add?.addEventListener('click',openAddModal); dom.addClose?.addEventListener('click',closeAddModal); dom.addLayer?.querySelector('.startab-tv-layer-backdrop')?.addEventListener('click',closeAddModal);
@@ -838,7 +898,7 @@
     window.addEventListener('resize',closeAppContext); window.addEventListener('scroll',closeAppContext,true);
 
     dom.scannerClose?.addEventListener('click',stopQrScanner); dom.scannerCancel?.addEventListener('click',stopQrScanner); dom.scanner?.querySelector('.startab-tv-scanner-backdrop')?.addEventListener('click',stopQrScanner);
-    dom.deviceSelect?.addEventListener('change',()=>{state.selectedId=dom.deviceSelect.value||'';localStorage.setItem(SELECTED_KEY,state.selectedId);state.optimisticVolume=null;state.optimisticBrightness=null;state.availableApps=[];closeWs();connectSelectedLocal();startFirebaseSessionLease();render();});
+    dom.deviceSelect?.addEventListener('change',()=>{const next=dom.deviceSelect.value||'';if(next==='__add_tv__'){openAddModal();dom.deviceSelect.value=state.selectedId||'';return;}state.selectedId=next;localStorage.setItem(SELECTED_KEY,state.selectedId);state.optimisticVolume=null;state.optimisticBrightness=null;state.availableApps=[];closeWs();connectSelectedLocal();startFirebaseSessionLease();render();});
 
     dom.power?.addEventListener('click',()=>{
       const action = state.powerOn === false ? 'on' : 'off';
@@ -847,6 +907,13 @@
       sendAction('power',{action});
     });
     dom.input?.addEventListener('click',()=>sendAction('input'));
+    dom.keyboard?.addEventListener('click',openKeyboard);
+    dom.keyboardClose?.addEventListener('click',closeKeyboard);
+    dom.keyboardLayer?.querySelector('.startab-tv-layer-backdrop')?.addEventListener('click',closeKeyboard);
+    dom.keyboardInput?.addEventListener('input',handleKeyboardInput);
+    dom.keyboardInput?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();sendKeyboardKey('enter');} });
+    dom.keyboardBackspace?.addEventListener('click',()=>sendKeyboardKey('backspace'));
+    dom.keyboardEnter?.addEventListener('click',()=>sendKeyboardKey('enter'));
     dom.back?.addEventListener('click',sendBack);
     dom.menu?.addEventListener('click',()=>sendAction('menu'));
     dom.home?.addEventListener('click',()=>sendAction('home'));
@@ -861,6 +928,7 @@
     document.addEventListener('keydown', e => {
       if (e.key !== 'Escape') return;
       if (dom.scanner?.classList.contains('is-open')) { stopQrScanner(); e.preventDefault(); return; }
+      if (dom.keyboardLayer?.classList.contains('is-open')) { closeKeyboard(); e.preventDefault(); return; }
       if (dom.appEditLayer?.classList.contains('is-open')) { closeAppEditor(); e.preventDefault(); return; }
       if (dom.appsLayer?.classList.contains('is-open')) { closeAppsModal(); e.preventDefault(); return; }
       if (dom.appContext?.classList.contains('is-open')) { closeAppContext(); e.preventDefault(); return; }

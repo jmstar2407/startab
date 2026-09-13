@@ -13829,3 +13829,112 @@ html.startab-tv-modal-open{overflow:hidden!important}
   .startab-tv-nav-row.startab-tv-nav-row-five button{height:40px!important}
   .startab-tv-nav-row.startab-tv-nav-row-five button svg{width:17px!important;height:17px!important}
 }
+
+/* ==============================================================
+   StarTab Google TV v1.4.18 — Header selector + wireless keyboard
+   ============================================================== */
+.startab-tv-head.startab-tv-head-compact{gap:9px!important}
+.startab-tv-head-brand{flex:1 1 auto!important;min-width:0!important}
+.startab-tv-head-actions{display:flex!important;align-items:center!important;gap:7px!important;min-width:0!important;flex:0 1 48%!important}
+.startab-tv-device-select-head{flex:1 1 auto!important;min-width:112px!important;max-width:196px!important}
+.startab-tv-device-select-head select{width:100%!important;height:34px!important;border-radius:10px!important;padding:0 27px 0 10px!important;background:#15131a!important;border:1px solid rgba(199,166,237,.11)!important;color:#cfc4d8!important;font-size:9px!important;font-weight:670!important;outline:0!important;text-overflow:ellipsis!important;white-space:nowrap!important;overflow:hidden!important}
+.startab-tv-device-select-head:after{right:9px!important;font-size:11px!important}
+.startab-tv-footer.startab-tv-footer-compact{display:none!important}
+.startab-tv-navigation-stage.startab-tv-gesture-stage{padding-right:52px!important;padding-left:52px!important}
+.startab-tv-side-actions{position:absolute!important;top:12px!important;display:flex!important;flex-direction:column!important;align-items:center!important;gap:8px!important;z-index:4!important}
+.startab-tv-side-actions.is-right{right:0!important}
+.startab-tv-side-actions .startab-tv-round-action{position:static!important;right:auto!important;left:auto!important;top:auto!important;margin:0!important}
+.startab-tv-round-action.startab-tv-input{right:auto!important}
+.startab-tv-round-action.startab-tv-keyboard{color:#c9aaf0!important}
+.startab-tv-round-action.startab-tv-keyboard svg{width:18px!important;height:18px!important}
+
+/* La imagen Base64 usa una variable con !important para no ser anulada por el
+   background shorthand heredado de los botones. */
+.startab-tv-quick-app.has-background{background-color:#131218!important;background-image:var(--tv-app-bg)!important;background-position:center!important;background-size:cover!important;background-repeat:no-repeat!important}
+.startab-tv-app-edit-preview.has-image{background-color:#111016!important;background-image:var(--tv-app-bg)!important;background-position:center!important;background-size:cover!important;background-repeat:no-repeat!important}
+
+.startab-tv-keyboard-layer{z-index:2147483646!important;align-items:flex-end!important}
+.startab-tv-keyboard-card{width:min(470px,calc(100vw - 24px))!important;border-radius:24px 24px 0 0!important;overflow:hidden!important}
+.startab-tv-keyboard-body{display:flex!important;flex-direction:column!important;gap:10px!important;padding-bottom:max(16px,env(safe-area-inset-bottom))!important}
+.startab-tv-keyboard-field{display:flex!important;flex-direction:column!important;gap:7px!important}
+.startab-tv-keyboard-field>span{font-size:9px!important;font-weight:750!important;letter-spacing:.06em!important;color:#8f8299!important;text-transform:uppercase!important}
+.startab-tv-keyboard-field textarea{width:100%!important;min-height:84px!important;max-height:150px!important;resize:none!important;border:1px solid rgba(198,159,240,.13)!important;border-radius:15px!important;background:#111016!important;color:#f2ebf7!important;padding:12px 13px!important;font:500 16px/1.35 inherit!important;outline:0!important;box-sizing:border-box!important;caret-color:#b87cff!important}
+.startab-tv-keyboard-field textarea:focus{border-color:rgba(184,124,255,.42)!important;box-shadow:0 0 0 3px rgba(160,89,237,.08)!important}
+.startab-tv-keyboard-actions{display:grid!important;grid-template-columns:64px minmax(0,1fr)!important;gap:8px!important}
+.startab-tv-keyboard-actions button{height:40px!important;border-radius:12px!important;border:1px solid rgba(196,159,238,.10)!important;background:#17141c!important;color:#d8c8e5!important;font-weight:750!important}
+.startab-tv-keyboard-actions #startab-tv-keyboard-enter{background:rgba(153,87,226,.14)!important;color:#e7d2ff!important;border-color:rgba(181,119,247,.18)!important}
+.startab-tv-keyboard-body>small{font-size:8px!important;line-height:1.45!important;color:#776d7f!important}
+
+@media(max-width:700px){
+  .startab-tv-head.startab-tv-head-compact{min-height:62px!important;padding-right:8px!important}
+  .startab-tv-head-icon{display:none!important}
+  .startab-tv-head-brand{gap:0!important;max-width:42%!important}
+  .startab-tv-head-copy h3{font-size:12.5px!important}
+  .startab-tv-head-actions{flex:1 1 auto!important;max-width:58%!important}
+  .startab-tv-device-select-head{max-width:none!important}
+  .startab-tv-device-select-head select{height:33px!important;font-size:8.6px!important;padding-left:8px!important}
+  .startab-tv-navigation-stage.startab-tv-gesture-stage{padding-left:43px!important;padding-right:43px!important}
+  .startab-tv-side-actions{top:8px!important;gap:7px!important}
+  .startab-tv-side-actions .startab-tv-round-action{width:39px!important;height:39px!important;border-radius:13px!important}
+  .startab-tv-side-actions .startab-tv-round-action span{display:none!important}
+  .startab-tv-keyboard-card{width:100vw!important;max-width:none!important;border-left:0!important;border-right:0!important;border-bottom:0!important}
+}
+
+/* ==============================================================
+   StarTab Multimedia v1.4.18 — draggable system-volume bottom sheet
+   ============================================================== */
+@media (max-width:760px){
+  .multimedia-system-footer{
+    position:relative!important;
+    border-radius:22px 22px 0 0!important;
+    border-top:1px solid rgba(214,184,250,.10)!important;
+    background:linear-gradient(180deg,rgba(22,19,28,.995),rgba(10,10,15,.998))!important;
+    box-shadow:0 -18px 45px rgba(0,0,0,.28)!important;
+    overflow:hidden!important;
+  }
+  .multimedia-system-sheet-handle{
+    height:19px!important;
+    display:flex!important;
+    align-items:center!important;
+    justify-content:center!important;
+    touch-action:none!important;
+    user-select:none!important;
+    -webkit-user-select:none!important;
+    cursor:ns-resize!important;
+    outline:0!important;
+    -webkit-tap-highlight-color:transparent!important;
+  }
+  .multimedia-system-sheet-handle i{
+    display:block!important;
+    width:38px!important;
+    height:4px!important;
+    border-radius:999px!important;
+    background:rgba(222,202,244,.28)!important;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.08)!important;
+    transition:background .14s ease,transform .14s ease!important;
+  }
+  .multimedia-system-sheet-handle:active i{background:rgba(205,162,255,.58)!important;transform:scaleX(1.08)!important}
+  .multimedia-system-volume-toggle{
+    min-height:43px!important;
+    padding-top:2px!important;
+    cursor:default!important;
+  }
+  .multimedia-system-volume-chevron{display:none!important}
+  .multimedia-system-footer .windows-system-volume{
+    max-height:var(--system-sheet-card-height,0px)!important;
+    padding-top:5px!important;
+    padding-bottom:calc(15px + env(safe-area-inset-bottom))!important;
+    opacity:0!important;
+    pointer-events:none!important;
+    transform:translateY(7px)!important;
+    transition:none!important;
+    will-change:max-height,opacity,transform!important;
+  }
+  .multimedia-system-footer.is-expanded .windows-system-volume{
+    max-height:var(--system-sheet-card-height,0px)!important;
+    padding-top:5px!important;
+    padding-bottom:calc(15px + env(safe-area-inset-bottom))!important;
+    transition:none!important;
+  }
+}
+@media (min-width:761px){.multimedia-system-sheet-handle{display:none!important}}

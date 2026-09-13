@@ -25,7 +25,7 @@
     dialDragging: false,
     dialValue: 0,
     dialHapticBucket: null,
-    footerGesture: { pointerId: null, startY: 0, lastY: 0, startAt: 0, initialExpanded: false, dragged: false, suppressClick: false },
+    footerGesture: { pointerId: null, startY: 0, lastY: 0, startHeight: 0, currentHeight: 0, maxHeight: 0 },
     mobileLayoutMql: null,
     optimisticVolume: null,
     optimisticMuted: null,
@@ -82,6 +82,7 @@
     dom.icon = $('windows-volume-icon');
     dom.footer = $('multimedia-system-footer');
     dom.footerToggle = $('multimedia-system-volume-toggle');
+    dom.footerHandle = $('multimedia-system-sheet-handle');
     dom.dialPanel = $('windows-volume-dial-panel');
     dom.dial = $('windows-volume-dial');
     dom.dialSegments = $('windows-volume-dial-segments');
@@ -693,88 +694,60 @@
   }
 
   function bindEvents() {
-    const clearFooterGestureStyles = () => {
-      dom.footer?.classList.remove('is-gesture');
-      dom.footerToggle?.classList.remove('is-dragging');
-      if (dom.footerToggle) dom.footerToggle.style.transform = '';
-      if (dom.card) {
-        dom.card.style.maxHeight = '';
-        dom.card.style.opacity = '';
-        dom.card.style.transform = '';
-        dom.card.style.pointerEvents = '';
-      }
+    const mobileSheetMaxHeight = () => Math.min(510, Math.max(280, window.innerHeight * .68));
+    const setSheetHeight = (height, vibrate = false) => {
+      if (!dom.card || !dom.footer) return;
+      const max = mobileSheetMaxHeight();
+      const h = clamp(height, 0, max);
+      state.footerGesture.currentHeight = h;
+      state.footerGesture.maxHeight = max;
+      dom.footer.style.setProperty('--system-sheet-card-height', `${Math.round(h)}px`);
+      dom.card.style.setProperty('max-height', `${Math.round(h)}px`, 'important');
+      dom.card.style.setProperty('opacity', String(clamp(h / 80, 0, 1)), 'important');
+      dom.card.style.setProperty('transform', `translateY(${Math.round(7 * (1 - clamp(h / Math.max(1,max),0,1)))}px)`, 'important');
+      dom.card.style.setProperty('pointer-events', h > 42 ? 'auto' : 'none', 'important');
+      dom.footer.classList.toggle('is-expanded', h > 42);
+      dom.footerToggle?.setAttribute('aria-expanded', h > 42 ? 'true' : 'false');
+      dom.footerHandle?.setAttribute('aria-valuenow', String(Math.round((h / max) * 100)));
+      if (vibrate) globalThis.StartabHaptics?.pulse?.('windows-volume-sheet', 7, 55);
+      window.dispatchEvent(new Event('resize'));
     };
-    const updateFooterGesture = (event) => {
+    const updateSheetDrag = (event) => {
       const g = state.footerGesture;
       if (g.pointerId === null || event.pointerId !== g.pointerId) return;
       g.lastY = event.clientY;
-      const dy = event.clientY - g.startY;
-      if (Math.abs(dy) > 4) g.dragged = true;
-      if (!g.dragged) return;
+      const next = g.startHeight - (event.clientY - g.startY);
+      setSheetHeight(next, false);
       event.preventDefault();
-      const openingDistance = 118;
-      const progress = g.initialExpanded
-        ? clamp(1 - (Math.max(0, dy) / openingDistance), 0, 1)
-        : clamp(Math.max(0, -dy) / openingDistance, 0, 1);
-      dom.footer?.classList.add('is-gesture');
-      dom.footerToggle?.classList.add('is-dragging');
-      if (dom.footerToggle) dom.footerToggle.style.transform = `translateY(${clamp(dy * .08, -5, 5)}px)`;
-      if (dom.card) {
-        const maxPx = Math.min(510, Math.max(330, window.innerHeight * .70));
-        dom.card.style.maxHeight = `${Math.round(maxPx * progress)}px`;
-        dom.card.style.opacity = String(.08 + (.92 * progress));
-        dom.card.style.transform = `translateY(${Math.round(9 * (1 - progress))}px)`;
-        dom.card.style.pointerEvents = progress > .82 ? 'auto' : 'none';
-      }
-      const path = dom.footerToggle?.querySelector('.multimedia-system-volume-chevron path');
-      if (path) path.setAttribute('d', progress >= .5 ? 'm7 9 5 5 5-5' : 'm7 15 5-5 5 5');
     };
-    const finishFooterGesture = (event) => {
+    const finishSheetDrag = (event) => {
       const g = state.footerGesture;
       if (g.pointerId === null || event.pointerId !== g.pointerId) return;
-      const dy = event.clientY - g.startY;
-      const elapsed = Math.max(1, performance.now() - g.startAt);
-      const velocity = dy / elapsed;
-      let nextExpanded = g.initialExpanded;
-      if (g.dragged) {
-        if (!g.initialExpanded) nextExpanded = dy < -38 || velocity < -.34;
-        else nextExpanded = !(dy > 38 || velocity > .34);
-        g.suppressClick = true;
-        globalThis.StartabHaptics?.pulse?.('windows-volume-footer', 8, 70);
-      }
-      try { dom.footerToggle?.releasePointerCapture?.(event.pointerId); } catch (_) {}
+      try { dom.footerHandle?.releasePointerCapture?.(event.pointerId); } catch (_) {}
       g.pointerId = null;
-      clearFooterGestureStyles();
-      setFooterExpanded(nextExpanded);
+      setSheetHeight(g.currentHeight, true);
     };
-    dom.footerToggle?.addEventListener('pointerdown', (event) => {
+    dom.footerHandle?.addEventListener('pointerdown', (event) => {
       if (!(state.mobileLayoutMql?.matches ?? window.matchMedia(MOBILE_MEDIA_QUERY).matches)) return;
       if (event.button !== undefined && event.button !== 0) return;
       const g = state.footerGesture;
       g.pointerId = event.pointerId;
       g.startY = g.lastY = event.clientY;
-      g.startAt = performance.now();
-      g.initialExpanded = !!dom.footer?.classList.contains('is-expanded');
-      g.dragged = false;
-      try { dom.footerToggle.setPointerCapture(event.pointerId); } catch (_) {}
-    }, { passive: true });
-    dom.footerToggle?.addEventListener('pointermove', updateFooterGesture, { passive: false });
-    dom.footerToggle?.addEventListener('pointerup', finishFooterGesture);
-    dom.footerToggle?.addEventListener('pointercancel', finishFooterGesture);
-    dom.footerToggle?.addEventListener('click', (event) => {
-      const g = state.footerGesture;
-      if (g.suppressClick) {
-        g.suppressClick = false;
-        event.preventDefault();
-        return;
-      }
-      setFooterExpanded(!dom.footer?.classList.contains('is-expanded'));
+      g.startHeight = g.currentHeight || parseFloat(getComputedStyle(dom.card).maxHeight) || 0;
+      g.maxHeight = mobileSheetMaxHeight();
+      try { dom.footerHandle.setPointerCapture(event.pointerId); } catch (_) {}
+      event.preventDefault();
+    }, { passive:false });
+    dom.footerHandle?.addEventListener('pointermove', updateSheetDrag, { passive:false });
+    dom.footerHandle?.addEventListener('pointerup', finishSheetDrag);
+    dom.footerHandle?.addEventListener('pointercancel', finishSheetDrag);
+    dom.footerHandle?.addEventListener('keydown', (event) => {
+      if (event.key === 'ArrowUp') { setSheetHeight(state.footerGesture.currentHeight + 36, true); event.preventDefault(); }
+      if (event.key === 'ArrowDown') { setSheetHeight(state.footerGesture.currentHeight - 36, true); event.preventDefault(); }
     });
-    document.addEventListener('pointerdown', (event) => {
-      if (!dom.footer?.classList.contains('is-expanded')) return;
-      if (dom.footer.contains(event.target)) return;
-      setFooterExpanded(false);
-    }, true);
+    // La fila de “Volumen del sistema” ya no abre/cierra por toque. La barra superior
+    // es el único control de altura, como un bottom-sheet moderno.
+    dom.footerToggle?.addEventListener('click', event => event.preventDefault());
 
     dom.dial?.addEventListener('pointerdown', (event) => {
       if (event.button !== undefined && event.button !== 0) return;
