@@ -1,4 +1,4 @@
-# StarTab v1.4.13 · Google TV Remote
+# StarTab v1.4.14 · Google TV Remote
 
 - Rediseño completo del modal **StarTab - Google TV** para móvil.
 - Header compacto con icono, estado Directo/Firebase y cierre.

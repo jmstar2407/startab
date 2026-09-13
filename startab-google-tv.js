@@ -3,7 +3,7 @@
 
   const SELECTED_KEY = 'startab_google_tv_selected_v1';
   const PAIRINGS_KEY = 'startab_google_tv_pairings_v1';
-  const DEVICE_STALE_MS = 75_000;
+  const DEVICE_STALE_MS = 390_000;
   const FIREBASE_MOTION_MS = 95;
   const state = {
     db: null, auth: null, user: null, devices: new Map(), unsubscribe: null,
@@ -428,7 +428,7 @@
 
   async function firebaseMerge(payload) {
     const d = selectedDevice(); if (!d || !state.db || !uid()) return false;
-    const lease = { id: unique(), clientAt: Date.now(), expiresAtClient: Date.now() + 5000 };
+    const lease = { id: unique(), clientAt: Date.now(), expiresAtClient: Date.now() + 12000 };
     try { await state.db.collection('users').doc(uid()).collection('tvDevices').doc(d.deviceId).set({ ...payload, controlLease: lease }, { merge:true }); return true; } catch (_) { return false; }
   }
 
@@ -555,7 +555,6 @@
   function boot() {
     injectUi(); state.selectedId=localStorage.getItem(SELECTED_KEY)||''; initFirebase();
     setInterval(()=>{if(state.selectedId&&!state.wsReady)connectSelectedLocal();render();},3500);
-    setInterval(()=>{if(dom.modal?.classList.contains('is-open') && state.selectedId && !state.wsReady) firebaseMerge({});},1400);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, {once:true}); else boot();
 })();
