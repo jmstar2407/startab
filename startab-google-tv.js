@@ -14,7 +14,8 @@
     brightnessTimer: 0, pendingBrightness: null, optimisticBrightness: null, lastBrightnessInputAt: 0, lastBrightnessFirebaseAt: 0,
     muted: false, powerOn: null,
     pointerId: null, startX: 0, startY: 0, lastX: 0, lastY: 0, moved: false, downAt: 0,
-    longPressTimer: 0, longPressSent: false,
+    longPressTimer: 0, longPressSent: false, navDirection: '', navStrength: 0, navRepeatTimer: 0, navLastSentAt: 0,
+    captureSlot: '', captureMessage: '', captureMessageKind: 'idle', captureTimer: 0, lastCaptureAt: 0,
     editingAppPackage: '', editingBackground: '', contextAppPackage: '', appEditHoldTimer: 0,
     cameraStream: null, scannerActive: false, scanTimer: 0, scanBusy: false, barcodeDetector: null,
     availableApps: [], appSearch: '', wsKeepAlive: 0, firebaseSessionTimer: 0, modalOpen: false, keyboardBuffer: '', keyboardTimer: 0,
@@ -105,9 +106,11 @@
               <div class="startab-tv-navigation-stage startab-tv-gesture-stage">
                 <button class="startab-tv-round-action startab-tv-power" id="startab-tv-power" type="button" data-tv-control aria-label="Encender o apagar TV" title="Power">${ICONS.power}<span>Power</span></button>
 
-                <div class="startab-tv-nav-touch" id="startab-tv-nav-touch" tabindex="0" role="application" aria-label="Touchpad de navegación del Google TV" data-tv-control>
+                <div class="startab-tv-nav-touch" id="startab-tv-nav-touch" tabindex="0" role="application" aria-label="Control circular de navegación del Google TV" data-tv-control>
                   <div class="startab-tv-nav-touch-glow" aria-hidden="true"></div>
-                  <div class="startab-tv-nav-touch-center" aria-hidden="true"><span>OK</span><small>desliza para navegar</small></div>
+                  <div class="startab-tv-nav-touch-ring" aria-hidden="true"></div>
+                  <div class="startab-tv-nav-touch-knob" id="startab-tv-nav-knob" aria-hidden="true"><span>OK</span></div>
+                  <small class="startab-tv-nav-touch-hint" id="startab-tv-nav-hint" aria-hidden="true">desliza desde cualquier punto</small>
                   <i class="startab-tv-nav-touch-arrow is-up" aria-hidden="true"></i>
                   <i class="startab-tv-nav-touch-arrow is-right" aria-hidden="true"></i>
                   <i class="startab-tv-nav-touch-arrow is-down" aria-hidden="true"></i>
@@ -127,6 +130,22 @@
                 <button id="startab-tv-assistant" type="button" data-tv-control aria-label="Google Assistant" title="Google Assistant">${ICONS.assistant}</button>
                 <button id="startab-tv-settings" type="button" data-tv-control aria-label="Configuración" title="Configuración">${ICONS.settings}</button>
               </div>
+
+              <section class="startab-tv-native-tests startab-tv-learnable-keys" aria-label="Botones aprendibles del control físico">
+                <div class="startab-tv-native-tests-head"><b>Botones aprendibles</b><span>Mantén pulsado uno y luego pulsa la tecla física del control.</span></div>
+                <div class="startab-tv-native-tests-row">
+                  <button type="button" data-tv-control data-capture-slot="M1" data-native-command="menuVariant" data-native-variant="quick" title="M1 · Mantén pulsado para aprender"><b>M1</b><small>Quick</small></button>
+                  <button type="button" data-tv-control data-capture-slot="M2" data-native-command="menuVariant" data-native-variant="notifications" title="M2 · Mantén pulsado para aprender"><b>M2</b><small>Panel</small></button>
+                  <button type="button" data-tv-control data-capture-slot="M3" data-native-command="menuVariant" data-native-variant="menu36" title="M3 · Mantén pulsado para aprender"><b>M3</b><small>Menu</small></button>
+                  <button type="button" data-tv-control data-capture-slot="M4" data-native-command="menuVariant" data-native-variant="oem" title="M4 · Mantén pulsado para aprender"><b>M4</b><small>OEM</small></button>
+                  <button type="button" data-tv-control data-capture-slot="M5" data-native-command="menuVariant" data-native-variant="settings" title="M5 · Mantén pulsado para aprender"><b>M5</b><small>Ajustes</small></button>
+                  <button type="button" data-tv-control data-capture-slot="I1" data-native-command="inputVariant" data-native-variant="aosp" title="I1 · Mantén pulsado para aprender"><b>I1</b><small>AOSP</small></button>
+                  <button type="button" data-tv-control data-capture-slot="I2" data-native-command="inputVariant" data-native-variant="sony" title="I2 · Mantén pulsado para aprender"><b>I2</b><small>Sony</small></button>
+                  <button type="button" data-tv-control data-capture-slot="I3" data-native-command="inputVariant" data-native-variant="launcher" title="I3 · Mantén pulsado para aprender"><b>I3</b><small>Launcher</small></button>
+                  <button type="button" data-tv-control data-capture-slot="I4" data-native-command="inputVariant" data-native-variant="discover" title="I4 · Mantén pulsado para aprender"><b>I4</b><small>Detectar</small></button>
+                </div>
+                <div class="startab-tv-capture-status" id="startab-tv-capture-status" data-state="idle">Mantén pulsado un botón para aprender una tecla del control físico.</div>
+              </section>
 
               <div class="startab-tv-app-row startab-tv-quick-apps" id="startab-tv-quick-apps"></div>
 
@@ -198,24 +217,7 @@
 
         <div class="startab-tv-app-context" id="startab-tv-app-context" aria-hidden="true"><button id="startab-tv-app-context-edit" type="button">Editar</button></div>
 
-        <div class="startab-tv-layer startab-tv-keyboard-layer" id="startab-tv-keyboard-layer" aria-hidden="true">
-          <div class="startab-tv-layer-backdrop"></div>
-          <section class="startab-tv-submodal startab-tv-keyboard-card" role="dialog" aria-modal="true" aria-labelledby="startab-tv-keyboard-title">
-            <header><div><span>TECLADO INALÁMBRICO</span><h3 id="startab-tv-keyboard-title">Escribir en Google TV</h3></div><button id="startab-tv-keyboard-close" type="button" aria-label="Cerrar">×</button></header>
-            <div class="startab-tv-submodal-body startab-tv-keyboard-body">
-              <label class="startab-tv-keyboard-field">
-                <span>Escribe aquí</span>
-                <textarea id="startab-tv-keyboard-input" rows="3" autocomplete="off" autocorrect="off" autocapitalize="sentences" spellcheck="false" placeholder="Toca aquí para abrir el teclado del móvil…"></textarea>
-              </label>
-              <div class="startab-tv-keyboard-actions">
-                <button id="startab-tv-keyboard-backspace" type="button">⌫</button>
-                <button id="startab-tv-keyboard-enter" type="button">Enter</button>
-              </div>
-              <small>El texto se envía al campo que tenga el foco en el Google TV. Mantén StarTab abierto mientras escribes.</small>
-            </div>
-          </section>
-        </div>
-
+        <textarea id="startab-tv-keyboard-input" class="startab-tv-native-keyboard-capture" rows="1" inputmode="text" enterkeyhint="enter" autocomplete="off" autocorrect="off" autocapitalize="sentences" spellcheck="false" aria-label="Teclado remoto de Google TV"></textarea>
         <div class="startab-tv-scanner" id="startab-tv-scanner" aria-hidden="true">
           <div class="startab-tv-scanner-backdrop"></div>
           <section class="startab-tv-scanner-card" role="dialog" aria-modal="true" aria-labelledby="startab-tv-scanner-title">
@@ -233,7 +235,7 @@
   function cacheDom() {
     const ids = [
       'toggle','modal','backdrop','close','led','status-title','status-note','device-select','empty','remote-content',
-      'power','input','keyboard','back','menu','home','assistant','settings','nav-touch','quick-apps',
+      'power','input','keyboard','back','menu','home','assistant','settings','nav-touch','nav-knob','nav-hint','capture-status','quick-apps',
       'mute','volume','volume-value','volume-fill','vol-down','vol-up','brightness','brightness-value',
       'add','add-layer','add-close','scan-btn','pair-ip','pair-pin','pair-btn',
       'apps-layer','apps-close','app-search','apps-list',
@@ -262,6 +264,9 @@
     if (typeof data.muted === 'boolean') state.muted = data.muted;
     if (typeof data.powerOn === 'boolean') state.powerOn = data.powerOn;
     if (Number.isFinite(Number(data.brightnessLevel)) && (force || now - state.lastBrightnessInputAt > 260)) state.optimisticBrightness = clamp(Math.round(Number(data.brightnessLevel)), 0, 10);
+    if (data.remoteKeyBindings && typeof data.remoteKeyBindings === 'object') {
+      const d = selectedDevice(); if (d) d.remoteKeyBindings = data.remoteKeyBindings;
+    }
   }
 
   function quickApps() {
@@ -429,6 +434,144 @@
     });
   }
 
+  function captureBindingFor(slot) {
+    const bindings = selectedDevice()?.remoteKeyBindings;
+    return bindings && typeof bindings === 'object' ? bindings[slot] || null : null;
+  }
+
+  function setCaptureMessage(text, kind = 'idle') {
+    state.captureMessage = String(text || '');
+    state.captureMessageKind = kind;
+    if (dom.captureStatus) {
+      dom.captureStatus.textContent = state.captureMessage || 'Mantén pulsado un botón para aprender una tecla del control físico.';
+      dom.captureStatus.dataset.state = kind;
+    }
+  }
+
+  function renderCaptureButtons() {
+    const buttons = document.querySelectorAll('.startab-tv-learnable-keys [data-capture-slot]');
+    buttons.forEach(btn => {
+      const slot = String(btn.dataset.captureSlot || '').toUpperCase();
+      const binding = captureBindingFor(slot);
+      const label = btn.querySelector('small');
+      if (!btn.dataset.defaultLabel && label) btn.dataset.defaultLabel = label.textContent || 'Prueba';
+      const capturing = state.captureSlot === slot;
+      btn.classList.toggle('is-capturing', capturing);
+      btn.classList.toggle('is-bound', !!binding && !capturing);
+      if (capturing) {
+        if (label) label.textContent = 'Pulsa en TV…';
+        btn.title = `${slot} · esperando una tecla física del control`;
+      } else if (binding) {
+        const friendly = String(binding.friendlyName || binding.keyName || `Tecla ${binding.keyCode || ''}`).trim();
+        if (label) label.textContent = friendly;
+        btn.title = `${slot} · ${friendly} · ${binding.keyName || ''} (${binding.keyCode ?? '?'}) · mantén pulsado para volver a aprender`;
+      } else {
+        if (label) label.textContent = btn.dataset.defaultLabel || 'Prueba';
+        btn.title = `${slot} · toque: prueba actual · mantén pulsado: aprender del control físico`;
+      }
+    });
+    if (dom.captureStatus) {
+      const fallback = state.captureSlot
+        ? `${state.captureSlot}: pulsa ahora el botón físico del control del TV.`
+        : 'Mantén pulsado un botón para aprender una tecla del control físico.';
+      dom.captureStatus.textContent = state.captureMessage || fallback;
+      dom.captureStatus.dataset.state = state.captureMessageKind || (state.captureSlot ? 'capture' : 'idle');
+    }
+  }
+
+  function handleKeyCaptureEvent(data = {}) {
+    const d = selectedDevice();
+    if (d && data.remoteKeyBindings && typeof data.remoteKeyBindings === 'object') d.remoteKeyBindings = data.remoteKeyBindings;
+    if (d && data.binding && data.slot) {
+      if (!d.remoteKeyBindings || typeof d.remoteKeyBindings !== 'object') d.remoteKeyBindings = {};
+      d.remoteKeyBindings[data.slot] = data.binding;
+    }
+    const event = String(data.event || data.keyCaptureEvent || '');
+    const slot = String(data.slot || data.keyCaptureSlot || state.captureSlot || '');
+    if (event === 'captured') {
+      state.captureSlot = '';
+      clearTimeout(state.captureTimer); state.captureTimer = 0;
+      const b = data.binding || d?.lastCapturedKey || captureBindingFor(slot);
+      const friendly = b?.friendlyName || b?.keyName || `Tecla ${b?.keyCode ?? ''}`;
+      setCaptureMessage(`${slot} aprendido: ${friendly}${b?.keyName ? ` · ${b.keyName} (${b.keyCode})` : ''}`, 'success');
+      try { navigator.vibrate?.([22,35,45]); } catch (_) {}
+    } else if (event === 'timeout') {
+      state.captureSlot = '';
+      clearTimeout(state.captureTimer); state.captureTimer = 0;
+      setCaptureMessage(`${slot || 'Captura'}: no se detectó ninguna tecla. Mantén pulsado e inténtalo de nuevo.`, 'warn');
+    } else if (event === 'cancelled') {
+      state.captureSlot = '';
+      clearTimeout(state.captureTimer); state.captureTimer = 0;
+      setCaptureMessage('Captura cancelada.', 'idle');
+    } else if (event === 'started' && slot) {
+      state.captureSlot = slot;
+      setCaptureMessage(`${slot}: pulsa ahora el botón físico del control del TV.`, 'capture');
+    }
+    renderCaptureButtons();
+  }
+
+  function syncCaptureFromDevice(d) {
+    if (!d) return;
+    const at = Number(d.keyCaptureAt || 0);
+    if (!at || at <= state.lastCaptureAt) return;
+    state.lastCaptureAt = at;
+    handleKeyCaptureEvent({
+      event: d.keyCaptureEvent,
+      slot: d.keyCaptureSlot,
+      binding: d.lastCapturedKey,
+      remoteKeyBindings: d.remoteKeyBindings
+    });
+  }
+
+  function beginLearnKey(slot) {
+    if (!selectedDevice() || !slot) return;
+    state.captureSlot = slot;
+    setCaptureMessage(`${slot}: pulsa ahora el botón físico del control del TV. StarTab guardará su código y nombre.`, 'capture');
+    renderCaptureButtons();
+    try { navigator.vibrate?.([18,28,18]); } catch (_) {}
+    sendAction('captureKeyStart', { slot }, false);
+    clearTimeout(state.captureTimer);
+    state.captureTimer = setTimeout(() => {
+      if (state.captureSlot !== slot) return;
+      state.captureSlot = '';
+      setCaptureMessage(`${slot}: tiempo agotado. Mantén pulsado para intentarlo otra vez.`, 'warn');
+      renderCaptureButtons();
+    }, 16_500);
+  }
+
+  function bindLearnableButtons() {
+    document.querySelectorAll('.startab-tv-learnable-keys [data-capture-slot]').forEach(btn => {
+      let holdTimer = 0;
+      let held = false;
+      const stop = () => { clearTimeout(holdTimer); holdTimer = 0; };
+      btn.addEventListener('pointerdown', e => {
+        if (btn.disabled) return;
+        held = false;
+        stop();
+        try { btn.setPointerCapture?.(e.pointerId); } catch (_) {}
+        holdTimer = setTimeout(() => {
+          held = true;
+          btn.dataset.suppressClick = '1';
+          beginLearnKey(String(btn.dataset.captureSlot || '').toUpperCase());
+        }, 620);
+      });
+      btn.addEventListener('pointerup', stop);
+      btn.addEventListener('pointercancel', stop);
+      btn.addEventListener('contextmenu', e => e.preventDefault());
+      btn.addEventListener('click', e => {
+        if (held || btn.dataset.suppressClick === '1') {
+          e.preventDefault(); e.stopPropagation();
+          held = false; delete btn.dataset.suppressClick;
+          return;
+        }
+        const slot = String(btn.dataset.captureSlot || '').toUpperCase();
+        const binding = captureBindingFor(slot);
+        if (binding) sendAction('runCapturedKey', { slot });
+        else sendAction(btn.dataset.nativeCommand, { variant: btn.dataset.nativeVariant || '' });
+      });
+    });
+  }
+
   function render() {
     const d = selectedDevice();
     if (d) {
@@ -468,7 +611,9 @@
     dom.empty?.classList.toggle('is-visible', !d);
     dom.remoteContent?.classList.toggle('is-hidden', !d);
     dom.modal?.querySelectorAll('[data-tv-control]').forEach(el => { el.disabled = !d; });
+    syncCaptureFromDevice(d);
     renderQuickApps();
+    renderCaptureButtons();
 
     if (!uid()) setStatus('error','Sin sesión','Inicia sesión en StarTab.');
     else if (!d && state.selectedId) setStatus('warn','Buscando TV','Sincronizando con Firebase…');
@@ -536,7 +681,10 @@
       'input-unavailable':'Este Google TV no expuso el selector de entradas a aplicaciones. Prueba el botón Input físico una vez y vuelve a intentar.',
       'assistant-unavailable':'Google Assistant no está disponible o está deshabilitado en este TV.',
       'menu-unavailable':'La app actual no expuso una acción de menú compatible.',
-      'text-field-unavailable':'Selecciona primero un campo de texto en el Google TV y vuelve a escribir.'
+      'text-field-unavailable':'Selecciona primero un campo de texto en el Google TV y vuelve a escribir.',
+      'capture-invalid-slot':'Ese botón no se puede usar para aprendizaje.',
+      'captured-key-missing':'Mantén pulsado este botón y aprende primero una tecla del control físico.',
+      'captured-key-replay-blocked':'La tecla quedó identificada y guardada, pero Android bloqueó reproducirla directamente. El nombre/código quedó visible para poder crear su acceso específico.'
     };
     return map[reason] || `El TV rechazó la orden (${reason || 'error'}).`;
   }
@@ -562,9 +710,14 @@
         if (data.type === 'state' && data.ok) {
           state.wsReady = true; state.wsConnecting = false; applyRemoteState(data); startWsKeepAlive(); render();
         }
+        if (data.type === 'keyCapture') {
+          handleKeyCaptureEvent(data);
+          return;
+        }
         if (data.type === 'ack') {
           if (data.ok === false) { showCommandError(data.reason || 'error'); return; }
           if (Array.isArray(data.apps)) { state.availableApps = data.apps; renderAppsList(); }
+          if (data.remoteKeyBindings && typeof data.remoteKeyBindings === 'object') applyRemoteState(data, true);
           const hasState = Number.isFinite(Number(data.volume)) || Number.isFinite(Number(data.brightnessLevel)) || typeof data.muted === 'boolean' || typeof data.powerOn === 'boolean';
           if (hasState) { applyRemoteState(data); render(); }
         }
@@ -790,50 +943,134 @@
 
   function bindNavTouch() {
     const el = dom.navTouch; if (!el) return;
+
+    const resetVisual = () => {
+      state.navDirection = ''; state.navStrength = 0;
+      clearTimeout(state.navRepeatTimer); state.navRepeatTimer = 0;
+      el.classList.remove('is-pressed','is-driving');
+      el.style.setProperty('--tv-stick-x','0px');
+      el.style.setProperty('--tv-stick-y','0px');
+      el.style.setProperty('--tv-stick-strength','0');
+      delete el.dataset.gesture;
+    };
+
+    const vectorFor = (clientX, clientY) => {
+      const dx = clientX - state.startX, dy = clientY - state.startY;
+      const maxTravel = Math.max(42, Math.min(el.clientWidth, el.clientHeight) * 0.28);
+      const rawDist = Math.hypot(dx, dy);
+      const scale = rawDist > maxTravel && rawDist > 0 ? maxTravel / rawDist : 1;
+      const x = dx * scale, y = dy * scale;
+      const dist = Math.min(maxTravel, rawDist);
+      const strength = clamp(dist / maxTravel, 0, 1);
+      let direction = '';
+      if (strength >= 0.16) direction = Math.abs(dx) >= Math.abs(dy) ? (dx >= 0 ? 'right' : 'left') : (dy >= 0 ? 'down' : 'up');
+      return { x, y, strength, direction, rawDist, maxTravel };
+    };
+
+    const updateVisual = v => {
+      el.style.setProperty('--tv-stick-x', `${v.x.toFixed(1)}px`);
+      el.style.setProperty('--tv-stick-y', `${v.y.toFixed(1)}px`);
+      el.style.setProperty('--tv-stick-strength', String(v.strength.toFixed(3)));
+      el.classList.toggle('is-driving', v.strength >= 0.16);
+      if (v.direction) el.dataset.gesture = v.direction; else delete el.dataset.gesture;
+    };
+
+    const repeatInterval = strength => {
+      const t = clamp((strength - 0.16) / 0.84, 0, 1);
+      // Cerca del centro: paso deliberado. Hacia el borde: repetición rápida.
+      return Math.round(360 - Math.pow(t, 0.72) * 285); // 360 ms -> 75 ms
+    };
+
+    const scheduleRepeat = () => {
+      clearTimeout(state.navRepeatTimer); state.navRepeatTimer = 0;
+      if (state.pointerId === null || !state.navDirection || state.navStrength < 0.16) return;
+      const interval = repeatInterval(state.navStrength);
+      const wait = Math.max(20, interval - (performance.now() - state.navLastSentAt));
+      state.navRepeatTimer = setTimeout(() => {
+        state.navRepeatTimer = 0;
+        if (state.pointerId === null || !state.navDirection || state.navStrength < 0.16) return;
+        state.navLastSentAt = performance.now();
+        flashNav(state.navDirection);
+        sendAction('dpad', { direction: state.navDirection }, false);
+        scheduleRepeat();
+      }, wait);
+    };
+
+    const updateDirection = v => {
+      const changed = v.direction !== state.navDirection;
+      state.navStrength = v.strength;
+      if (changed) {
+        state.navDirection = v.direction;
+        clearTimeout(state.navRepeatTimer); state.navRepeatTimer = 0;
+        if (v.direction) {
+          state.navLastSentAt = performance.now();
+          hapticNav();
+          flashNav(v.direction);
+          sendAction('dpad', { direction: v.direction }, false);
+        }
+      }
+      if (v.direction) scheduleRepeat();
+    };
+
     el.addEventListener('pointerdown', e => {
       if (state.pointerId !== null) return;
-      state.pointerId=e.pointerId; state.startX=state.lastX=e.clientX; state.startY=state.lastY=e.clientY;
-      state.moved=false; state.longPressSent=false; state.downAt=performance.now();
-      clearTimeout(state.longPressTimer);
-      state.longPressTimer=setTimeout(()=>{
-        if(state.pointerId===e.pointerId && !state.moved){ state.longPressSent=true; sendNavOk(); }
-      },560);
-      el.classList.add('is-pressed'); el.setPointerCapture?.(e.pointerId); e.preventDefault();
+      state.pointerId = e.pointerId;
+      state.startX = state.lastX = e.clientX;
+      state.startY = state.lastY = e.clientY;
+      state.downAt = performance.now(); state.moved = false;
+      state.navDirection = ''; state.navStrength = 0; state.navLastSentAt = 0;
+      el.classList.add('is-pressed');
+      try { el.setPointerCapture?.(e.pointerId); } catch (_) {}
+      updateVisual({x:0,y:0,strength:0,direction:''});
+      e.preventDefault();
     });
+
     el.addEventListener('pointermove', e => {
-      if(e.pointerId!==state.pointerId)return;
-      const dx=e.clientX-state.startX, dy=e.clientY-state.startY;
-      if(Math.hypot(dx,dy)>12){ state.moved=true; clearTimeout(state.longPressTimer); }
-      state.lastX=e.clientX; state.lastY=e.clientY; e.preventDefault();
+      if (e.pointerId !== state.pointerId) return;
+      state.lastX = e.clientX; state.lastY = e.clientY;
+      const v = vectorFor(e.clientX, e.clientY);
+      if (v.rawDist > 8) state.moved = true;
+      updateVisual(v); updateDirection(v);
+      e.preventDefault();
     });
-    const finish=e=>{
-      if(e.pointerId!==state.pointerId)return;
-      clearTimeout(state.longPressTimer); el.classList.remove('is-pressed');
-      try{el.releasePointerCapture?.(e.pointerId)}catch(_){}
-      const dx=e.clientX-state.startX, dy=e.clientY-state.startY, dist=Math.hypot(dx,dy), elapsed=performance.now()-state.downAt;
-      const wasLong=state.longPressSent; state.pointerId=null;
-      if (!wasLong) {
-        if(dist<26 && elapsed<700) sendNavOk();
-        else if(dist>=26) sendNavDirection(Math.abs(dx)>=Math.abs(dy) ? (dx>0?'right':'left') : (dy>0?'down':'up'));
-      }
+
+    const finish = (e, cancelled = false) => {
+      if (e.pointerId !== state.pointerId) return;
+      const v = vectorFor(e.clientX, e.clientY);
+      const elapsed = performance.now() - state.downAt;
+      const tap = !cancelled && v.rawDist < 13 && elapsed < 850;
+      state.pointerId = null;
+      clearTimeout(state.navRepeatTimer); state.navRepeatTimer = 0;
+      try { el.releasePointerCapture?.(e.pointerId); } catch (_) {}
+      if (tap) sendNavOk();
+      resetVisual();
       e.preventDefault();
     };
-    el.addEventListener('pointerup',finish); el.addEventListener('pointercancel',finish);
+    el.addEventListener('pointerup', e => finish(e, false));
+    el.addEventListener('pointercancel', e => finish(e, true));
+
     el.addEventListener('keydown', e => {
-      const map={ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right'};
-      if(map[e.key]){sendNavDirection(map[e.key]);e.preventDefault();}
-      else if(e.key==='Enter'||e.key===' '){sendNavOk();e.preventDefault();}
+      const map = {ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right'};
+      if (map[e.key]) { sendNavDirection(map[e.key]); e.preventDefault(); }
+      else if (e.key === 'Enter' || e.key === ' ') { sendNavOk(); e.preventDefault(); }
     });
   }
 
   function openKeyboard() {
-    if (!selectedDevice()) return;
-    dom.keyboardLayer?.classList.add('is-open'); dom.keyboardLayer?.setAttribute('aria-hidden','false');
-    if (dom.keyboardInput) { dom.keyboardInput.value=''; dom.keyboardInput.dataset.prev=''; }
-    setTimeout(()=>{ try { dom.keyboardInput?.focus({preventScroll:true}); } catch (_) { dom.keyboardInput?.focus(); } }, 90);
+    if (!selectedDevice() || !dom.keyboardInput) return;
+    const el=dom.keyboardInput;
+    el.value=''; el.dataset.prev='';
+    // Si el usuario cerró manualmente el teclado pero el campo conservó foco,
+    // blur + focus dentro del mismo gesto fuerza a reabrir el IME móvil.
+    try { el.blur(); } catch (_) {}
+    // El focus ocurre dentro del click del usuario: en móvil abre directamente
+    // el teclado nativo, sin mostrar ningún modal/campo de StarTab.
+    try { el.focus({preventScroll:true}); } catch (_) { try { el.focus(); } catch (_) {} }
+    try { el.setSelectionRange(0,0); } catch (_) {}
+    // Respaldo para navegadores móviles que necesitan un segundo focus breve.
+    setTimeout(()=>{ if(document.activeElement!==el){try{el.focus({preventScroll:true});}catch(_){try{el.focus();}catch(__){}}} },35);
   }
   function closeKeyboard() {
-    dom.keyboardLayer?.classList.remove('is-open'); dom.keyboardLayer?.setAttribute('aria-hidden','true');
     try { dom.keyboardInput?.blur(); } catch (_) {}
   }
   function sendKeyboardText(text) {
@@ -908,14 +1145,13 @@
     });
     dom.input?.addEventListener('click',()=>sendAction('input'));
     dom.keyboard?.addEventListener('click',openKeyboard);
-    dom.keyboardClose?.addEventListener('click',closeKeyboard);
-    dom.keyboardLayer?.querySelector('.startab-tv-layer-backdrop')?.addEventListener('click',closeKeyboard);
+    const sendKeyboardEnter=()=>{const now=Date.now();if(now-(state.lastKeyboardEnterAt||0)<120)return;state.lastKeyboardEnterAt=now;sendKeyboardKey('enter');};
+    dom.keyboardInput?.addEventListener('beforeinput',e=>{if(e.inputType==='insertLineBreak'||e.inputType==='insertParagraph'){e.preventDefault();sendKeyboardEnter();}});
     dom.keyboardInput?.addEventListener('input',handleKeyboardInput);
-    dom.keyboardInput?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();sendKeyboardKey('enter');} });
-    dom.keyboardBackspace?.addEventListener('click',()=>sendKeyboardKey('backspace'));
-    dom.keyboardEnter?.addEventListener('click',()=>sendKeyboardKey('enter'));
+    dom.keyboardInput?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();sendKeyboardEnter();} });
     dom.back?.addEventListener('click',sendBack);
     dom.menu?.addEventListener('click',()=>sendAction('menu'));
+    bindLearnableButtons();
     dom.home?.addEventListener('click',()=>sendAction('home'));
     dom.assistant?.addEventListener('click',()=>sendAction('assistant'));
     dom.settings?.addEventListener('click',()=>sendAction('settings'));
@@ -928,7 +1164,6 @@
     document.addEventListener('keydown', e => {
       if (e.key !== 'Escape') return;
       if (dom.scanner?.classList.contains('is-open')) { stopQrScanner(); e.preventDefault(); return; }
-      if (dom.keyboardLayer?.classList.contains('is-open')) { closeKeyboard(); e.preventDefault(); return; }
       if (dom.appEditLayer?.classList.contains('is-open')) { closeAppEditor(); e.preventDefault(); return; }
       if (dom.appsLayer?.classList.contains('is-open')) { closeAppsModal(); e.preventDefault(); return; }
       if (dom.appContext?.classList.contains('is-open')) { closeAppContext(); e.preventDefault(); return; }

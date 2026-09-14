@@ -694,60 +694,11 @@
   }
 
   function bindEvents() {
-    const mobileSheetMaxHeight = () => Math.min(510, Math.max(280, window.innerHeight * .68));
-    const setSheetHeight = (height, vibrate = false) => {
-      if (!dom.card || !dom.footer) return;
-      const max = mobileSheetMaxHeight();
-      const h = clamp(height, 0, max);
-      state.footerGesture.currentHeight = h;
-      state.footerGesture.maxHeight = max;
-      dom.footer.style.setProperty('--system-sheet-card-height', `${Math.round(h)}px`);
-      dom.card.style.setProperty('max-height', `${Math.round(h)}px`, 'important');
-      dom.card.style.setProperty('opacity', String(clamp(h / 80, 0, 1)), 'important');
-      dom.card.style.setProperty('transform', `translateY(${Math.round(7 * (1 - clamp(h / Math.max(1,max),0,1)))}px)`, 'important');
-      dom.card.style.setProperty('pointer-events', h > 42 ? 'auto' : 'none', 'important');
-      dom.footer.classList.toggle('is-expanded', h > 42);
-      dom.footerToggle?.setAttribute('aria-expanded', h > 42 ? 'true' : 'false');
-      dom.footerHandle?.setAttribute('aria-valuenow', String(Math.round((h / max) * 100)));
-      if (vibrate) globalThis.StartabHaptics?.pulse?.('windows-volume-sheet', 7, 55);
-      window.dispatchEvent(new Event('resize'));
-    };
-    const updateSheetDrag = (event) => {
-      const g = state.footerGesture;
-      if (g.pointerId === null || event.pointerId !== g.pointerId) return;
-      g.lastY = event.clientY;
-      const next = g.startHeight - (event.clientY - g.startY);
-      setSheetHeight(next, false);
-      event.preventDefault();
-    };
-    const finishSheetDrag = (event) => {
-      const g = state.footerGesture;
-      if (g.pointerId === null || event.pointerId !== g.pointerId) return;
-      try { dom.footerHandle?.releasePointerCapture?.(event.pointerId); } catch (_) {}
-      g.pointerId = null;
-      setSheetHeight(g.currentHeight, true);
-    };
-    dom.footerHandle?.addEventListener('pointerdown', (event) => {
-      if (!(state.mobileLayoutMql?.matches ?? window.matchMedia(MOBILE_MEDIA_QUERY).matches)) return;
-      if (event.button !== undefined && event.button !== 0) return;
-      const g = state.footerGesture;
-      g.pointerId = event.pointerId;
-      g.startY = g.lastY = event.clientY;
-      g.startHeight = g.currentHeight || parseFloat(getComputedStyle(dom.card).maxHeight) || 0;
-      g.maxHeight = mobileSheetMaxHeight();
-      try { dom.footerHandle.setPointerCapture(event.pointerId); } catch (_) {}
-      event.preventDefault();
-    }, { passive:false });
-    dom.footerHandle?.addEventListener('pointermove', updateSheetDrag, { passive:false });
-    dom.footerHandle?.addEventListener('pointerup', finishSheetDrag);
-    dom.footerHandle?.addEventListener('pointercancel', finishSheetDrag);
-    dom.footerHandle?.addEventListener('keydown', (event) => {
-      if (event.key === 'ArrowUp') { setSheetHeight(state.footerGesture.currentHeight + 36, true); event.preventDefault(); }
-      if (event.key === 'ArrowDown') { setSheetHeight(state.footerGesture.currentHeight - 36, true); event.preventDefault(); }
+    dom.footerToggle?.addEventListener('click', () => {
+      const next = !dom.footer?.classList.contains('is-expanded');
+      setFooterExpanded(next);
+      globalThis.StartabHaptics?.pulse?.('windows-volume-sheet', 7, 55);
     });
-    // La fila de “Volumen del sistema” ya no abre/cierra por toque. La barra superior
-    // es el único control de altura, como un bottom-sheet moderno.
-    dom.footerToggle?.addEventListener('click', event => event.preventDefault());
 
     dom.dial?.addEventListener('pointerdown', (event) => {
       if (event.button !== undefined && event.button !== 0) return;
