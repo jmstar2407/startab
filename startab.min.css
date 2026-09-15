@@ -14039,3 +14039,76 @@ html.startab-tv-modal-open{overflow:hidden!important}
   .startab-tv-learnable-keys .startab-tv-native-tests-row button{flex-basis:70px!important;width:70px!important;height:43px!important}
   .startab-tv-learnable-keys .startab-tv-native-tests-head span{max-width:205px!important}
 }
+
+
+/* ==============================================================
+   StarTab v1.4.22 · interacción TV estable + joystick 60/120 Hz
+   ============================================================== */
+.startab-tv-nav-touch{
+  --tv-stick-glow-scale:.88;
+  --tv-stick-glow-opacity:.34;
+  contain:paint!important;
+  transform:translateZ(0)!important;
+  backface-visibility:hidden!important;
+  -webkit-backface-visibility:hidden!important;
+}
+.startab-tv-nav-touch.is-pressed{
+  transform:translateZ(0)!important;
+  border-color:rgba(177,119,246,.18)!important;
+}
+.startab-tv-nav-touch-glow{
+  inset:auto!important;
+  left:50%!important;
+  top:50%!important;
+  width:118px!important;
+  height:118px!important;
+  border-radius:50%!important;
+  background:radial-gradient(circle,rgba(177,111,255,.20),rgba(177,111,255,.075) 42%,transparent 72%)!important;
+  transform:translate3d(calc(-50% + var(--tv-stick-x)),calc(-50% + var(--tv-stick-y)),0) scale(var(--tv-stick-glow-scale))!important;
+  opacity:var(--tv-stick-glow-opacity)!important;
+  transition:none!important;
+  will-change:transform,opacity!important;
+  backface-visibility:hidden!important;
+}
+.startab-tv-nav-touch-knob{
+  transform:translate3d(calc(-50% + var(--tv-stick-x)),calc(-50% + var(--tv-stick-y)),0)!important;
+  transition:border-color .10s ease,box-shadow .10s ease!important;
+  will-change:transform!important;
+  backface-visibility:hidden!important;
+  -webkit-backface-visibility:hidden!important;
+}
+.startab-tv-nav-touch.is-pressed .startab-tv-nav-touch-knob{
+  transition:border-color .10s ease,box-shadow .10s ease!important;
+}
+.startab-tv-nav-touch-arrow{
+  transition:border-color .10s ease,filter .10s ease,opacity .10s ease!important;
+}
+
+/* Las barras conservan el estado local mientras llega la confirmación remota.
+   El volumen usa transform en vez de width para evitar relayout/parpadeos. */
+.startab-tv-control-card,
+.startab-tv-range-wrap,
+.startab-tv-brightness-wrap{
+  contain:paint!important;
+  backface-visibility:hidden!important;
+}
+.startab-tv-range-fill{
+  --tv-volume-scale:0;
+  width:100%!important;
+  transform-origin:left center!important;
+  transform:translateY(-50%) scaleX(var(--tv-volume-scale)) translateZ(0)!important;
+  transition:none!important;
+  will-change:transform!important;
+  backface-visibility:hidden!important;
+}
+.startab-tv-range-wrap input,
+.startab-tv-brightness-wrap input{
+  -webkit-tap-highlight-color:transparent!important;
+}
+.startab-tv-brightness-ticks i{
+  transition:none!important;
+}
+.startab-tv-volume-line input[type=range]::-webkit-slider-thumb,
+.startab-tv-brightness-wrap input[type=range]::-webkit-slider-thumb{
+  transform:translateZ(0)!important;
+}

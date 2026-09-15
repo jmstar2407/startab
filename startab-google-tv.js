@@ -6,15 +6,19 @@
   const QUICK_APPS_KEY = 'startab_google_tv_quick_apps_v1';
   const DEVICE_STALE_MS = 390_000;
   const FIREBASE_MOTION_MS = 95;
+  const CONTROL_LOCAL_HOLD_MS = 2400;
+  const NAV_REPEAT_SLOW_MS = 700;
+  const NAV_REPEAT_FAST_MS = 300;
   const state = {
     db: null, auth: null, user: null, devices: new Map(), unsubscribe: null,
     selectedId: '', ws: null, wsReady: false, wsConnecting: false,
     motionDx: 0, motionDy: 0, motionTimer: 0, scrollDy: 0, scrollTimer: 0,
-    volumeTimer: 0, pendingVolume: null, optimisticVolume: null, lastVolumeInputAt: 0, lastVolumeFirebaseAt: 0,
-    brightnessTimer: 0, pendingBrightness: null, optimisticBrightness: null, lastBrightnessInputAt: 0, lastBrightnessFirebaseAt: 0,
+    volumeTimer: 0, pendingVolume: null, optimisticVolume: null, lastVolumeInputAt: 0, lastVolumeFirebaseAt: 0, volumeHoldUntil: 0,
+    brightnessTimer: 0, pendingBrightness: null, optimisticBrightness: null, lastBrightnessInputAt: 0, lastBrightnessFirebaseAt: 0, brightnessHoldUntil: 0,
     muted: false, powerOn: null,
     pointerId: null, startX: 0, startY: 0, lastX: 0, lastY: 0, moved: false, downAt: 0,
     longPressTimer: 0, longPressSent: false, navDirection: '', navStrength: 0, navRepeatTimer: 0, navLastSentAt: 0,
+    navRaf: 0, navVisualX: 0, navVisualY: 0, navVisualStrength: 0, navTargetX: 0, navTargetY: 0, navTargetStrength: 0,
     captureSlot: '', captureMessage: '', captureMessageKind: 'idle', captureTimer: 0, lastCaptureAt: 0,
     editingAppPackage: '', editingBackground: '', contextAppPackage: '', appEditHoldTimer: 0,
     cameraStream: null, scannerActive: false, scanTimer: 0, scanBusy: false, barcodeDetector: null,
@@ -260,10 +264,18 @@
 
   function applyRemoteState(data = {}, force = false) {
     const now = performance.now();
-    if (Number.isFinite(Number(data.volume)) && (force || now - state.lastVolumeInputAt > 320)) state.optimisticVolume = clamp(Number(data.volume), 0, 100);
+    if (Number.isFinite(Number(data.volume))) {
+      const remoteVolume = Math.round(clamp(Number(data.volume), 0, 100));
+      const matchesLocal = state.optimisticVolume != null && remoteVolume === Math.round(state.optimisticVolume);
+      if (matchesLocal || state.optimisticVolume == null || now >= state.volumeHoldUntil) state.optimisticVolume = remoteVolume;
+    }
     if (typeof data.muted === 'boolean') state.muted = data.muted;
     if (typeof data.powerOn === 'boolean') state.powerOn = data.powerOn;
-    if (Number.isFinite(Number(data.brightnessLevel)) && (force || now - state.lastBrightnessInputAt > 260)) state.optimisticBrightness = clamp(Math.round(Number(data.brightnessLevel)), 0, 10);
+    if (Number.isFinite(Number(data.brightnessLevel))) {
+      const remoteBrightness = Math.round(clamp(Number(data.brightnessLevel), 0, 10));
+      const matchesLocal = state.optimisticBrightness != null && remoteBrightness === Math.round(state.optimisticBrightness);
+      if (matchesLocal || state.optimisticBrightness == null || now >= state.brightnessHoldUntil) state.optimisticBrightness = remoteBrightness;
+    }
     if (data.remoteKeyBindings && typeof data.remoteKeyBindings === 'object') {
       const d = selectedDevice(); if (d) d.remoteKeyBindings = data.remoteKeyBindings;
     }
@@ -572,12 +584,57 @@
     });
   }
 
+  const controlPaint = { volume: null, brightness: null, muted: null, powerOn: null };
+
+  function paintTvControls(force = false) {
+    const d = selectedDevice();
+    const volume = Math.round(clamp(state.optimisticVolume ?? Number(d?.volume ?? 0), 0, 100));
+    if (force || controlPaint.volume !== volume) {
+      const text = String(volume);
+      if (dom.volume && dom.volume.value !== text) dom.volume.value = text;
+      if (dom.volumeValue && dom.volumeValue.textContent !== `${volume}%`) dom.volumeValue.textContent = `${volume}%`;
+      if (dom.volumeFill) {
+        dom.volumeFill.style.setProperty('--tv-volume', `${volume}%`);
+        dom.volumeFill.style.setProperty('--tv-volume-scale', String(volume / 100));
+      }
+      controlPaint.volume = volume;
+    }
+
+    const brightness = Math.round(clamp(state.optimisticBrightness ?? Number(d?.brightnessLevel ?? 10), 0, 10));
+    if (force || controlPaint.brightness !== brightness) {
+      const text = String(brightness);
+      if (dom.brightness && dom.brightness.value !== text) dom.brightness.value = text;
+      if (dom.brightnessValue && dom.brightnessValue.textContent !== `${brightness * 10}%`) dom.brightnessValue.textContent = `${brightness * 10}%`;
+      dom.brightness?.style.setProperty('--tv-brightness', `${brightness * 10}%`);
+      document.querySelectorAll('.startab-tv-brightness-ticks i').forEach((el, i) => {
+        const active = i <= brightness;
+        if (el.classList.contains('is-active') !== active) el.classList.toggle('is-active', active);
+      });
+      controlPaint.brightness = brightness;
+    }
+
+    if (force || controlPaint.muted !== !!state.muted) {
+      dom.mute?.classList.toggle('is-muted', !!state.muted);
+      controlPaint.muted = !!state.muted;
+    }
+    if (force || controlPaint.powerOn !== state.powerOn) {
+      dom.power?.classList.toggle('is-on', state.powerOn === true);
+      controlPaint.powerOn = state.powerOn;
+    }
+  }
+
   function render() {
     const d = selectedDevice();
     if (d) {
       const now = performance.now();
-      if (Number.isFinite(Number(d.volume)) && (state.optimisticVolume == null || now - state.lastVolumeInputAt > 650)) state.optimisticVolume = clamp(Number(d.volume), 0, 100);
-      if (Number.isFinite(Number(d.brightnessLevel)) && (state.optimisticBrightness == null || now - state.lastBrightnessInputAt > 650)) state.optimisticBrightness = clamp(Math.round(Number(d.brightnessLevel)), 0, 10);
+      if (Number.isFinite(Number(d.volume))) {
+        const remoteVolume = Math.round(clamp(Number(d.volume), 0, 100));
+        if (state.optimisticVolume == null || remoteVolume === Math.round(state.optimisticVolume) || now >= state.volumeHoldUntil) state.optimisticVolume = remoteVolume;
+      }
+      if (Number.isFinite(Number(d.brightnessLevel))) {
+        const remoteBrightness = Math.round(clamp(Number(d.brightnessLevel), 0, 10));
+        if (state.optimisticBrightness == null || remoteBrightness === Math.round(state.optimisticBrightness) || now >= state.brightnessHoldUntil) state.optimisticBrightness = remoteBrightness;
+      }
       if (typeof d.muted === 'boolean') state.muted = d.muted;
       if (typeof d.powerOn === 'boolean') state.powerOn = d.powerOn;
       if (Array.isArray(d.appCatalog) && d.appCatalog.length && !state.availableApps.length) state.availableApps = d.appCatalog;
@@ -595,18 +652,7 @@
       dom.deviceSelect.value = state.devices.has(current) ? current : (state.devices.size ? [...state.devices.keys()][0] : '');
     }
 
-    const volume = state.optimisticVolume ?? Number(d?.volume ?? 0);
-    if (dom.volume) dom.volume.value = String(Math.round(clamp(volume,0,100)));
-    if (dom.volumeValue) dom.volumeValue.textContent = `${Math.round(clamp(volume,0,100))}%`;
-    if (dom.volumeFill) dom.volumeFill.style.setProperty('--tv-volume', `${clamp(volume,0,100)}%`);
-    dom.mute?.classList.toggle('is-muted', !!state.muted);
-    dom.power?.classList.toggle('is-on', state.powerOn === true);
-
-    const brightness = state.optimisticBrightness ?? Number(d?.brightnessLevel ?? 10);
-    if (dom.brightness) dom.brightness.value = String(Math.round(clamp(brightness,0,10)));
-    if (dom.brightnessValue) dom.brightnessValue.textContent = `${Math.round(clamp(brightness,0,10)) * 10}%`;
-    dom.brightness?.style.setProperty('--tv-brightness', `${clamp(brightness,0,10) * 10}%`);
-    document.querySelectorAll('.startab-tv-brightness-ticks i').forEach((el, i) => el.classList.toggle('is-active', i <= brightness));
+    paintTvControls();
 
     dom.empty?.classList.toggle('is-visible', !d);
     dom.remoteContent?.classList.toggle('is-hidden', !d);
@@ -898,39 +944,47 @@
   function sendBack() { if (wsSend({id:unique(),t:'back'})) return; firebaseMerge({backCommand:{id:unique(),clientAt:Date.now()}}); }
 
   function setVolume(value) {
-    value=Math.round(clamp(value,0,100)); state.optimisticVolume=value; state.lastVolumeInputAt=performance.now();
-    if(dom.volume)dom.volume.value=String(value); if(dom.volumeValue)dom.volumeValue.textContent=`${value}%`; if(dom.volumeFill)dom.volumeFill.style.setProperty('--tv-volume',`${value}%`);
+    value = Math.round(clamp(value,0,100));
+    const now = performance.now();
+    state.optimisticVolume = value; state.lastVolumeInputAt = now; state.volumeHoldUntil = now + CONTROL_LOCAL_HOLD_MS;
+    paintTvControls();
     if (wsSend({id:unique(),t:'volume',value})) return;
     state.pendingVolume=value;
-    const now=performance.now(), elapsed=now-state.lastVolumeFirebaseAt;
+    const elapsed=now-state.lastVolumeFirebaseAt;
     if (elapsed>=60) { state.lastVolumeFirebaseAt=now; const v=state.pendingVolume;state.pendingVolume=null;firebaseMerge({volumeCommand:{id:unique(),value:v,clientAt:Date.now()}}); return; }
     clearTimeout(state.volumeTimer); state.volumeTimer=setTimeout(()=>{state.lastVolumeFirebaseAt=performance.now();const v=state.pendingVolume;state.pendingVolume=null;if(v!=null)firebaseMerge({volumeCommand:{id:unique(),value:v,clientAt:Date.now()}});},Math.max(0,60-elapsed));
   }
 
   function toggleMute() {
-    state.muted = !state.muted; render();
+    state.muted = !state.muted; paintTvControls();
     if (wsSend({id:unique(),t:'mute', muted:state.muted})) return;
     firebaseMerge({ actionCommand:{ id:unique(), type:'mute', muted:state.muted, clientAt:Date.now() } });
   }
 
   function setBrightness(level) {
-    level = Math.round(clamp(level,0,10)); state.optimisticBrightness = level; state.lastBrightnessInputAt=performance.now(); render();
+    level = Math.round(clamp(level,0,10));
+    const now = performance.now();
+    state.optimisticBrightness = level; state.lastBrightnessInputAt = now; state.brightnessHoldUntil = now + CONTROL_LOCAL_HOLD_MS;
+    paintTvControls();
     if (wsSend({id:unique(),t:'brightness', level})) return;
-    state.pendingBrightness=level; const now=performance.now(), elapsed=now-state.lastBrightnessFirebaseAt;
+    state.pendingBrightness=level; const elapsed=now-state.lastBrightnessFirebaseAt;
     if(elapsed>=70){state.lastBrightnessFirebaseAt=now;const v=state.pendingBrightness;state.pendingBrightness=null;firebaseMerge({actionCommand:{id:unique(),type:'brightness',level:v,clientAt:Date.now()}});return;}
     clearTimeout(state.brightnessTimer); state.brightnessTimer=setTimeout(()=>{state.lastBrightnessFirebaseAt=performance.now();const v=state.pendingBrightness;state.pendingBrightness=null;if(v!=null)firebaseMerge({actionCommand:{id:unique(),type:'brightness',level:v,clientAt:Date.now()}});},Math.max(0,70-elapsed));
   }
 
   function hapticNav() {
-    try { globalThis.StartabHaptics?.click?.(); } catch (_) {}
-    try { navigator.vibrate?.(13); } catch (_) {}
+    try {
+      const h = globalThis.StartabHaptics;
+      if (h?.pulse?.('tv-nav-repeat', 11, 80)) return;
+    } catch (_) {}
+    try { navigator.vibrate?.(11); } catch (_) {}
   }
 
   function flashNav(direction) {
     if (!dom.navTouch) return;
     dom.navTouch.dataset.gesture = direction || 'ok';
     clearTimeout(dom.navTouch._gestureTimer);
-    dom.navTouch._gestureTimer = setTimeout(() => { if (dom.navTouch) delete dom.navTouch.dataset.gesture; }, 170);
+    dom.navTouch._gestureTimer = setTimeout(() => { if (dom.navTouch && state.pointerId === null) delete dom.navTouch.dataset.gesture; }, 170);
   }
 
   function sendNavDirection(direction) {
@@ -944,13 +998,41 @@
   function bindNavTouch() {
     const el = dom.navTouch; if (!el) return;
 
+    const paintStickFrame = () => {
+      state.navRaf = 0;
+      const active = state.pointerId !== null;
+      const easing = active ? 0.46 : 0.24;
+      state.navVisualX += (state.navTargetX - state.navVisualX) * easing;
+      state.navVisualY += (state.navTargetY - state.navVisualY) * easing;
+      state.navVisualStrength += (state.navTargetStrength - state.navVisualStrength) * easing;
+
+      if (Math.abs(state.navTargetX - state.navVisualX) < 0.08) state.navVisualX = state.navTargetX;
+      if (Math.abs(state.navTargetY - state.navVisualY) < 0.08) state.navVisualY = state.navTargetY;
+      if (Math.abs(state.navTargetStrength - state.navVisualStrength) < 0.003) state.navVisualStrength = state.navTargetStrength;
+
+      el.style.setProperty('--tv-stick-x', `${state.navVisualX.toFixed(2)}px`);
+      el.style.setProperty('--tv-stick-y', `${state.navVisualY.toFixed(2)}px`);
+      el.style.setProperty('--tv-stick-strength', state.navVisualStrength.toFixed(3));
+      el.style.setProperty('--tv-stick-glow-scale', (0.88 + state.navVisualStrength * 0.18).toFixed(3));
+      el.style.setProperty('--tv-stick-glow-opacity', (0.34 + state.navVisualStrength * 0.42).toFixed(3));
+
+      const unsettled = Math.abs(state.navTargetX - state.navVisualX) > 0.08 ||
+        Math.abs(state.navTargetY - state.navVisualY) > 0.08 ||
+        Math.abs(state.navTargetStrength - state.navVisualStrength) > 0.003;
+      if (unsettled) state.navRaf = requestAnimationFrame(paintStickFrame);
+    };
+
+    const queueVisual = v => {
+      state.navTargetX = v.x; state.navTargetY = v.y; state.navTargetStrength = v.strength;
+      if (!state.navRaf) state.navRaf = requestAnimationFrame(paintStickFrame);
+    };
+
     const resetVisual = () => {
       state.navDirection = ''; state.navStrength = 0;
       clearTimeout(state.navRepeatTimer); state.navRepeatTimer = 0;
       el.classList.remove('is-pressed','is-driving');
-      el.style.setProperty('--tv-stick-x','0px');
-      el.style.setProperty('--tv-stick-y','0px');
-      el.style.setProperty('--tv-stick-strength','0');
+      state.navTargetX = 0; state.navTargetY = 0; state.navTargetStrength = 0;
+      queueVisual({x:0,y:0,strength:0});
       delete el.dataset.gesture;
     };
 
@@ -967,30 +1049,22 @@
       return { x, y, strength, direction, rawDist, maxTravel };
     };
 
-    const updateVisual = v => {
-      el.style.setProperty('--tv-stick-x', `${v.x.toFixed(1)}px`);
-      el.style.setProperty('--tv-stick-y', `${v.y.toFixed(1)}px`);
-      el.style.setProperty('--tv-stick-strength', String(v.strength.toFixed(3)));
-      el.classList.toggle('is-driving', v.strength >= 0.16);
-      if (v.direction) el.dataset.gesture = v.direction; else delete el.dataset.gesture;
-    };
-
     const repeatInterval = strength => {
       const t = clamp((strength - 0.16) / 0.84, 0, 1);
-      // Cerca del centro: paso deliberado. Hacia el borde: repetición rápida.
-      return Math.round(360 - Math.pow(t, 0.72) * 285); // 360 ms -> 75 ms
+      // Desplazamiento corto: ~0.7 s. Cerca del borde: ~0.3 s.
+      return Math.round(NAV_REPEAT_SLOW_MS - Math.pow(t, 0.92) * (NAV_REPEAT_SLOW_MS - NAV_REPEAT_FAST_MS));
     };
 
     const scheduleRepeat = () => {
       clearTimeout(state.navRepeatTimer); state.navRepeatTimer = 0;
       if (state.pointerId === null || !state.navDirection || state.navStrength < 0.16) return;
       const interval = repeatInterval(state.navStrength);
-      const wait = Math.max(20, interval - (performance.now() - state.navLastSentAt));
+      const wait = Math.max(40, interval - (performance.now() - state.navLastSentAt));
       state.navRepeatTimer = setTimeout(() => {
         state.navRepeatTimer = 0;
         if (state.pointerId === null || !state.navDirection || state.navStrength < 0.16) return;
         state.navLastSentAt = performance.now();
-        flashNav(state.navDirection);
+        hapticNav(); // una vibración por cada repetición real enviada al TV
         sendAction('dpad', { direction: state.navDirection }, false);
         scheduleRepeat();
       }, wait);
@@ -999,13 +1073,15 @@
     const updateDirection = v => {
       const changed = v.direction !== state.navDirection;
       state.navStrength = v.strength;
+      el.classList.toggle('is-driving', v.strength >= 0.16);
+      if (v.direction) el.dataset.gesture = v.direction; else delete el.dataset.gesture;
+
       if (changed) {
         state.navDirection = v.direction;
         clearTimeout(state.navRepeatTimer); state.navRepeatTimer = 0;
         if (v.direction) {
           state.navLastSentAt = performance.now();
           hapticNav();
-          flashNav(v.direction);
           sendAction('dpad', { direction: v.direction }, false);
         }
       }
@@ -1019,20 +1095,26 @@
       state.startY = state.lastY = e.clientY;
       state.downAt = performance.now(); state.moved = false;
       state.navDirection = ''; state.navStrength = 0; state.navLastSentAt = 0;
+      state.navVisualX = state.navTargetX = 0;
+      state.navVisualY = state.navTargetY = 0;
+      state.navVisualStrength = state.navTargetStrength = 0;
       el.classList.add('is-pressed');
       try { el.setPointerCapture?.(e.pointerId); } catch (_) {}
-      updateVisual({x:0,y:0,strength:0,direction:''});
+      queueVisual({x:0,y:0,strength:0});
       e.preventDefault();
-    });
+    }, { passive:false });
 
     el.addEventListener('pointermove', e => {
       if (e.pointerId !== state.pointerId) return;
-      state.lastX = e.clientX; state.lastY = e.clientY;
-      const v = vectorFor(e.clientX, e.clientY);
+      const events = typeof e.getCoalescedEvents === 'function' ? e.getCoalescedEvents() : null;
+      const point = events?.length ? events[events.length - 1] : e;
+      state.lastX = point.clientX; state.lastY = point.clientY;
+      const v = vectorFor(point.clientX, point.clientY);
       if (v.rawDist > 8) state.moved = true;
-      updateVisual(v); updateDirection(v);
+      queueVisual(v);
+      updateDirection(v);
       e.preventDefault();
-    });
+    }, { passive:false });
 
     const finish = (e, cancelled = false) => {
       if (e.pointerId !== state.pointerId) return;
@@ -1042,12 +1124,12 @@
       state.pointerId = null;
       clearTimeout(state.navRepeatTimer); state.navRepeatTimer = 0;
       try { el.releasePointerCapture?.(e.pointerId); } catch (_) {}
-      if (tap) sendNavOk();
       resetVisual();
+      if (tap) sendNavOk();
       e.preventDefault();
     };
-    el.addEventListener('pointerup', e => finish(e, false));
-    el.addEventListener('pointercancel', e => finish(e, true));
+    el.addEventListener('pointerup', e => finish(e, false), { passive:false });
+    el.addEventListener('pointercancel', e => finish(e, true), { passive:false });
 
     el.addEventListener('keydown', e => {
       const map = {ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right'};
@@ -1135,7 +1217,7 @@
     window.addEventListener('resize',closeAppContext); window.addEventListener('scroll',closeAppContext,true);
 
     dom.scannerClose?.addEventListener('click',stopQrScanner); dom.scannerCancel?.addEventListener('click',stopQrScanner); dom.scanner?.querySelector('.startab-tv-scanner-backdrop')?.addEventListener('click',stopQrScanner);
-    dom.deviceSelect?.addEventListener('change',()=>{const next=dom.deviceSelect.value||'';if(next==='__add_tv__'){openAddModal();dom.deviceSelect.value=state.selectedId||'';return;}state.selectedId=next;localStorage.setItem(SELECTED_KEY,state.selectedId);state.optimisticVolume=null;state.optimisticBrightness=null;state.availableApps=[];closeWs();connectSelectedLocal();startFirebaseSessionLease();render();});
+    dom.deviceSelect?.addEventListener('change',()=>{const next=dom.deviceSelect.value||'';if(next==='__add_tv__'){openAddModal();dom.deviceSelect.value=state.selectedId||'';return;}state.selectedId=next;localStorage.setItem(SELECTED_KEY,state.selectedId);state.optimisticVolume=null;state.optimisticBrightness=null;state.volumeHoldUntil=0;state.brightnessHoldUntil=0;controlPaint.volume=null;controlPaint.brightness=null;state.availableApps=[];closeWs();connectSelectedLocal();startFirebaseSessionLease();render();});
 
     dom.power?.addEventListener('click',()=>{
       const action = state.powerOn === false ? 'on' : 'off';
