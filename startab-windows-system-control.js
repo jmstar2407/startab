@@ -9,6 +9,7 @@
   const REFRESH_INTERVAL_MS = 15_000;
   const REQUIRED_AGENT = [2, 4, 0];
   const RGB_REQUIRED_AGENT = [2, 6, 1];
+  const ECO_REQUIRED_AGENT = [2, 9, 0];
 
   const state = {
     db: null,
@@ -26,6 +27,8 @@
     rgbBusy: false,
     rgbOptimistic: null,
     rgbOptimisticTimer: 0,
+    ecoOptimistic: null,
+    ecoOptimisticTimer: 0,
   };
 
   const dom = {};
@@ -52,6 +55,8 @@
     dom.onlineText = dom.online?.querySelector('span');
     dom.device = $('windows-pc-control-device');
     dom.grid = $('windows-pc-control-grid');
+    dom.eco = $('windows-pc-eco-mode');
+    dom.ecoNote = $('windows-pc-eco-note');
     dom.hotspot = $('windows-pc-hotspot');
     dom.hotspotState = $('windows-pc-hotspot-state');
     dom.hotspotNote = $('windows-pc-hotspot-note');
@@ -185,9 +190,31 @@
       button.disabled = !supported;
     });
 
+    const ecoVersionOk = online && versionAtLeast(device?.agentVersion, ECO_REQUIRED_AGENT);
+    const reportedEcoActive = !!device?.ecoModeActive;
+    let ecoOptimistic = state.ecoOptimistic && Date.now() < state.ecoOptimistic.until ? state.ecoOptimistic : null;
+    if (ecoOptimistic && reportedEcoActive === ecoOptimistic.enabled) {
+      state.ecoOptimistic = null;
+      clearTimeout(state.ecoOptimisticTimer);
+      ecoOptimistic = null;
+    }
+    const ecoActive = ecoOptimistic ? ecoOptimistic.enabled : reportedEcoActive;
+    if (dom.eco) {
+      dom.eco.disabled = !ecoVersionOk;
+      dom.eco.classList.toggle('is-active', ecoActive);
+      dom.eco.setAttribute('aria-pressed', ecoActive ? 'true' : 'false');
+    }
+    if (dom.ecoNote) {
+      dom.ecoNote.textContent = !ecoVersionOk
+        ? `Requiere agente Windows v${ECO_REQUIRED_AGENT.join('.')} o superior`
+        : ecoActive
+          ? (device?.ecoModeMessage || 'Monitor y RGB apagados · hotspot activo · mueve mouse/teclado físico para salir')
+          : 'Monitor y RGB OFF · hotspot activo · consumo mínimo sin suspender la red';
+    }
+
     const hotspotState = normalizeHotspotState(device?.hotspotState);
     if (dom.hotspot) {
-      dom.hotspot.disabled = !supported || hotspotState === 'unavailable' || hotspotState === 'error';
+      dom.hotspot.disabled = ecoActive || !supported || hotspotState === 'unavailable' || hotspotState === 'error';
       dom.hotspot.classList.toggle('is-on', hotspotState === 'on');
       dom.hotspot.classList.toggle('is-off', hotspotState === 'off');
       dom.hotspot.classList.toggle('is-unknown', hotspotState === 'unknown');
@@ -229,7 +256,7 @@
       dom.rgb.style.setProperty('--active-rgb', rgbColor);
     }
     if (dom.rgbPower) {
-      dom.rgbPower.disabled = !rgbAvailable || state.rgbBusy;
+      dom.rgbPower.disabled = ecoActive || !rgbAvailable || state.rgbBusy;
       dom.rgbPower.setAttribute('aria-pressed', rgbState === 'on' ? 'true' : 'false');
     }
     if (dom.rgbState) dom.rgbState.textContent = rgbState === 'on' ? 'ON' : rgbState === 'off' ? 'OFF' : '--';
@@ -257,6 +284,7 @@
       else if (!device) dom.note.textContent = 'Selecciona primero un PC en “Volumen del sistema”.';
       else if (!online) dom.note.textContent = 'El PC seleccionado está desconectado.';
       else if (!supported) dom.note.textContent = `Estas acciones requieren StartabWindowsVolume.exe v2.4.0 o superior. Tu PC usa ${device.agentVersion || 'una versión anterior'}.`;
+      else if (ecoActive) dom.note.textContent = 'Modo ahorro activo: monitor y RGB apagados, hotspot mantenido y PC en perfil de bajo consumo. Un mouse/teclado físico o el mismo botón lo desactiva.';
       else dom.note.textContent = 'Los comandos se envían únicamente al PC Windows seleccionado en StarTab.';
     }
   }
@@ -401,6 +429,40 @@
     }
   }
 
+  async function toggleEcoMode(button) {
+    if (!button || button.disabled || !versionAtLeast(state.lastDevice?.agentVersion, ECO_REQUIRED_AGENT)) return;
+    const enabled = !button.classList.contains('is-active');
+    clearConfirmation();
+    state.ecoOptimistic = { enabled, until: Date.now() + 18_000 };
+    clearTimeout(state.ecoOptimisticTimer);
+    state.ecoOptimisticTimer = window.setTimeout(() => {
+      state.ecoOptimistic = null;
+      if (state.open) render(state.lastDevice);
+    }, 18_100);
+    button.classList.toggle('is-active', enabled);
+    button.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+    button.classList.add('is-sending');
+    if (dom.ecoNote) dom.ecoNote.textContent = enabled
+      ? 'Activando bajo consumo, apagando monitor/RGB y asegurando el hotspot…'
+      : 'Restaurando energía, monitor, RGB y estado previo del hotspot…';
+    globalThis.StartabHaptics?.pulse?.('pc-eco-toggle', enabled ? 16 : 10, 70);
+    const ok = await sendCommand('setEcoMode', { enabled });
+    button.classList.remove('is-sending');
+    if (!ok) {
+      state.ecoOptimistic = null;
+      clearTimeout(state.ecoOptimisticTimer);
+      render(state.lastDevice);
+      if (dom.note) dom.note.textContent = 'No se pudo cambiar el Modo ahorro en el PC seleccionado.';
+      return;
+    }
+    if (dom.note) dom.note.textContent = enabled
+      ? 'Modo ahorro enviado. El PC mantendrá red/hotspot activos y saldrá con mouse/teclado físico o con este botón.'
+      : 'Desactivando Modo ahorro y restaurando el estado anterior del PC…';
+    window.setTimeout(() => {
+      if (state.open) void sendCommand('getSystemState');
+    }, enabled ? 1500 : 900);
+  }
+
   async function toggleHotspot() {
     const device = state.lastDevice;
     const current = normalizeHotspotState(device?.hotspotState);
@@ -508,6 +570,10 @@
     dom.grid?.addEventListener('click', (event) => {
       const button = event.target.closest?.('.windows-pc-action');
       if (!button || button.disabled) return;
+      if (button.dataset.systemAction === 'ecoMode') {
+        void toggleEcoMode(button);
+        return;
+      }
       void runSystemAction(button);
     });
     dom.hotspot?.addEventListener('click', () => void toggleHotspot());

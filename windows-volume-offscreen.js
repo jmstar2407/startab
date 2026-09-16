@@ -90,6 +90,13 @@
     return data?.standalone === true && data?.cloudLinked === true && data?.online === true && at > 0 && Date.now() - at < 70_000;
   }
 
+  function supportsStandaloneAgent(version) {
+    const parts = String(version || '').split('.').map((part) => Number.parseInt(part, 10) || 0);
+    const major = parts[0] || 0;
+    const minor = parts[1] || 0;
+    return major > 2 || (major === 2 && minor >= 8);
+  }
+
   async function startDeviceBridge() {
     if (!state.db || !state.user?.uid || !state.nativeState?.deviceId) return;
     const deviceId = state.nativeState.deviceId;
@@ -458,7 +465,7 @@
       deviceId: native.deviceId,
       deviceName: native.deviceName || 'PC Windows',
       platform: 'windows',
-      bridge: String(native.agentVersion || '').startsWith('2.8.') ? 'standaloneNative' : 'nativeMessaging',
+      bridge: supportsStandaloneAgent(native.agentVersion) ? 'standaloneNative' : 'nativeMessaging',
       agentVersion: native.agentVersion || '2.0.0',
       online: !!state.nativeConnected,
       clientAt: Date.now(),
@@ -468,15 +475,20 @@
     if (typeof native.muted === 'boolean') payload.muted = native.muted;
     if (typeof native.audioActive === 'boolean') payload.audioActive = native.audioActive;
     if (typeof native.systemControl === 'boolean') payload.systemControl = native.systemControl;
-    if (typeof native.hotspotState === 'string') payload.hotspotState = native.hotspotState;
-    if (Number.isFinite(Number(native.hotspotClients))) payload.hotspotClients = Math.max(0, Number(native.hotspotClients));
-    if (typeof native.hotspotMessage === 'string') payload.hotspotMessage = native.hotspotMessage.slice(0, 500);
-    if (typeof native.rgbControl === 'boolean') payload.rgbControl = native.rgbControl;
-    if (typeof native.rgbAvailable === 'boolean') payload.rgbAvailable = native.rgbAvailable;
-    if (typeof native.rgbState === 'string') payload.rgbState = native.rgbState;
-    if (typeof native.rgbColor === 'string') payload.rgbColor = native.rgbColor.slice(0, 16);
-    if (typeof native.rgbTransport === 'string') payload.rgbTransport = native.rgbTransport.slice(0, 40);
-    if (typeof native.rgbMessage === 'string') payload.rgbMessage = native.rgbMessage.slice(0, 500);
+    // Con el daemon standalone activo, él es la autoridad de hotspot/RGB/Modo ahorro.
+    // Esto evita que un Native Messaging abierto en Chrome publique un estado RGB
+    // cacheado y pise el estado real mientras el PC está en Modo ahorro.
+    if (!state.standaloneCloudOnline) {
+      if (typeof native.hotspotState === 'string') payload.hotspotState = native.hotspotState;
+      if (Number.isFinite(Number(native.hotspotClients))) payload.hotspotClients = Math.max(0, Number(native.hotspotClients));
+      if (typeof native.hotspotMessage === 'string') payload.hotspotMessage = native.hotspotMessage.slice(0, 500);
+      if (typeof native.rgbControl === 'boolean') payload.rgbControl = native.rgbControl;
+      if (typeof native.rgbAvailable === 'boolean') payload.rgbAvailable = native.rgbAvailable;
+      if (typeof native.rgbState === 'string') payload.rgbState = native.rgbState;
+      if (typeof native.rgbColor === 'string') payload.rgbColor = native.rgbColor.slice(0, 16);
+      if (typeof native.rgbTransport === 'string') payload.rgbTransport = native.rgbTransport.slice(0, 40);
+      if (typeof native.rgbMessage === 'string') payload.rgbMessage = native.rgbMessage.slice(0, 500);
+    }
     if (force) payload.connectedAt = firebase.firestore.FieldValue.serverTimestamp();
 
     try {
@@ -495,7 +507,7 @@
       // v2.8+ tiene un daemon cloud independiente. Que Chrome pierda Native
       // Messaging no significa que el PC esté offline, por lo que no debemos
       // pisar el heartbeat del agente standalone con online=false.
-      if (!String(state.nativeState?.agentVersion || '').startsWith('2.8.')) {
+      if (!supportsStandaloneAgent(state.nativeState?.agentVersion)) {
         await publishNativeState(false);
       }
       return;
