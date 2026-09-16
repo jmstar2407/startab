@@ -14,6 +14,7 @@
     user: null,
     devices: new Map(),
     unsubscribeDevices: null,
+    unsubscribePresence: null,
     selectedDeviceId: null,
     firebaseRetry: 0,
     commandTimer: 0,
@@ -135,11 +136,20 @@
     return state.selectedDeviceId ? state.devices.get(state.selectedDeviceId) || null : null;
   }
 
-  function isDeviceOnline(device) {
-    if (!device?.online) return false;
+  function devicePresenceStatus(device) {
+    if (!device) return { state:'offline', online:false, source:'none' };
+    const localConnected = !!(state.native.connected && state.native.deviceId && state.native.deviceId === device.deviceId);
+    const adaptive = globalThis.StarTabPresence?.status?.(state.user?.uid || '', 'windows', device.deviceId, device, {
+      localConnected,
+      aggressive: !!(dom.footer?.classList.contains('is-expanded') && !document.hidden),
+    });
+    if (adaptive) return adaptive;
     const clientAt = Number(device.clientAt) || 0;
-    return clientAt > 0 && Date.now() - clientAt < DEVICE_STALE_MS;
+    const online = !!device.online && clientAt > 0 && Date.now() - clientAt < DEVICE_STALE_MS;
+    return { state: online ? 'online' : 'offline', online, source:'firestore' };
   }
+
+  function isDeviceOnline(device) { return !!devicePresenceStatus(device).online; }
 
   function setFill(value) {
     const normalized = clamp(value, 0, 100);
@@ -354,6 +364,8 @@
   function setFooterExpanded(expanded) {
     if (!dom.footer || !dom.footerToggle) return;
     const next = !!expanded;
+    const deviceId = state.selectedDeviceId || '';
+    if (deviceId && state.user?.uid) void globalThis.StarTabPresence?.setWatcher?.(state.user.uid, 'windows', deviceId, next && !document.hidden);
     dom.footer.classList.toggle('is-expanded', next);
     dom.footerToggle.setAttribute('aria-expanded', next ? 'true' : 'false');
     const path = dom.footerToggle.querySelector('.multimedia-system-volume-chevron path');
@@ -415,7 +427,9 @@
     for (const device of devices) {
       const option = document.createElement('option');
       option.value = device.deviceId;
-      option.textContent = `${device.deviceName || 'PC Windows'}${isDeviceOnline(device) ? ' · En línea' : ' · Offline'}`;
+      const pstatus = devicePresenceStatus(device);
+      const statusLabel = pstatus.state === 'standby' ? 'Standby' : pstatus.state === 'unresponsive' ? 'Sin respuesta' : pstatus.online ? 'En línea' : 'No disponible';
+      option.textContent = `${device.deviceName || 'PC Windows'} · ${statusLabel}`;
       dom.device.append(option);
     }
 
@@ -442,7 +456,8 @@
     if (!dom.card) return;
     const device = selectedDevice();
     const loggedIn = !!state.user?.uid;
-    const online = isDeviceOnline(device);
+    const pstatus = devicePresenceStatus(device);
+    const online = !!pstatus.online;
     reconcileOptimisticState(device);
     const rawVolume = device ? clamp(device.volume, 0, 100) : 0;
     const rawMuted = !!device?.muted;
@@ -463,9 +478,13 @@
           ? state.native.connected
             ? 'Agente conectado · registrando este PC en StarTab'
             : 'No hay PCs Windows vinculados'
-          : online
-            ? 'Volumen maestro sincronizado en tiempo real'
-            : 'PC sin conexión · esperando reconexión';
+          : pstatus.state === 'unresponsive'
+            ? 'PC sin respuesta · comprobando presencia'
+            : pstatus.state === 'standby'
+              ? 'PC en Standby · presencia activa'
+              : online
+                ? (pstatus.source === 'lan' ? 'PC disponible por conexión local' : 'Volumen maestro sincronizado en tiempo real')
+                : 'PC no disponible · apagado, sin Internet o sin corriente';
     }
 
     if (dom.range && !dom.range.matches(':active')) dom.range.value = String(volume);
@@ -515,12 +534,21 @@
   function connectDeviceListener() {
     state.unsubscribeDevices?.();
     state.unsubscribeDevices = null;
+    state.unsubscribePresence?.();
+    state.unsubscribePresence = null;
     state.devices.clear();
 
     if (!state.user?.uid || !state.db) {
       renderDevices();
       render();
       return;
+    }
+
+    if (globalThis.StarTabPresence?.watchType) {
+      state.unsubscribePresence = globalThis.StarTabPresence.watchType(state.user.uid, 'windows', () => {
+        renderDevices();
+        render();
+      });
     }
 
     state.unsubscribeDevices = state.db
@@ -742,8 +770,13 @@
     });
 
     dom.device?.addEventListener('change', () => {
+      const previousId = state.selectedDeviceId;
+      if (previousId && state.user?.uid) void globalThis.StarTabPresence?.setWatcher?.(state.user.uid, 'windows', previousId, false);
       clearOptimisticState();
       state.selectedDeviceId = dom.device.value || null;
+      if (dom.footer?.classList.contains('is-expanded') && state.selectedDeviceId && state.user?.uid) {
+        void globalThis.StarTabPresence?.setWatcher?.(state.user.uid, 'windows', state.selectedDeviceId, !document.hidden);
+      }
       persistSelectedDevice();
       announceSelectedDevice(state.selectedDeviceId);
       render();
@@ -805,6 +838,10 @@
     syncUser();
     state.userTimer = window.setInterval(syncUser, 900);
     state.statusTimer = window.setInterval(render, 5_000);
+    document.addEventListener('visibilitychange', () => {
+      if (!dom.footer?.classList.contains('is-expanded') || !state.selectedDeviceId || !state.user?.uid) return;
+      void globalThis.StarTabPresence?.setWatcher?.(state.user.uid, 'windows', state.selectedDeviceId, !document.hidden);
+    });
     window.addEventListener('storage', (event) => {
       if (event.key === 'starTab_lastUser') syncUser();
     });

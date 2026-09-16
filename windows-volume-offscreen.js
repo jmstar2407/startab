@@ -4,13 +4,14 @@
   const firebaseConfig = {
     apiKey: 'AIzaSyBU8DyN2kRcDq0fxB20qRUXWBHV0E-0d6A',
     authDomain: 'startab-44e48.firebaseapp.com',
+    databaseURL: 'https://startab-44e48-default-rtdb.firebaseio.com',
     projectId: 'startab-44e48',
     storageBucket: 'startab-44e48.firebasestorage.app',
     messagingSenderId: '874084877753',
     appId: '1:874084877753:web:cf9cbe9a344356dc9be268',
   };
 
-  const HEARTBEAT_MS = 25_000;
+  const HEARTBEAT_MS = 60_000;
   const COMMAND_MAX_AGE_MS = 20_000;
 
   const state = {
@@ -29,6 +30,8 @@
     bridgeKey: null,
     userTimer: 0,
     standaloneCloudOnline: false,
+    presenceRef: null,
+    presenceOnDisconnect: null,
   };
 
   function readSavedUser() {
@@ -53,7 +56,52 @@
     return readSavedUser();
   }
 
+  async function publishRealtimePresence(online = true) {
+    if (!state.user?.uid || !state.nativeState?.deviceId || state.standaloneCloudOnline) return false;
+    try {
+      if (typeof firebase.database !== 'function') return false;
+      const ref = firebase.database().ref(`startab/v2/users/${state.user.uid}/presence/windows/${state.nativeState.deviceId}`);
+      state.presenceRef = ref;
+      const payload = {
+        state: online ? 'online' : 'offline',
+        standby: false,
+        platform: 'windows',
+        transport: 'extension-offscreen',
+        clientAt: Date.now(),
+        lastSeen: firebase.database.ServerValue.TIMESTAMP,
+        deviceName: state.nativeState.deviceName || 'PC Windows',
+        agentVersion: state.nativeState.agentVersion || '2.0.0',
+      };
+      await ref.update(payload);
+      try {
+        const od = ref.onDisconnect();
+        state.presenceOnDisconnect = od;
+        await od.update({ state:'offline', clientAt:Date.now(), lastSeen:firebase.database.ServerValue.TIMESTAMP });
+      } catch (_) {}
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  async function publishPresenceHeartbeat() {
+    if (!state.nativeConnected || state.standaloneCloudOnline) return;
+    const realtimeOk = await publishRealtimePresence(true);
+    if (realtimeOk || !state.deviceRef) return;
+    try {
+      await state.deviceRef.set({
+        online: true,
+        clientAt: Date.now(),
+        presenceMode: 'firestore-fallback',
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      }, { merge:true });
+    } catch (_) {}
+  }
+
   async function markCurrentOffline() {
+    if (!state.standaloneCloudOnline) {
+      try { await publishRealtimePresence(false); } catch (_) {}
+    }
     if (!state.deviceRef) return;
     try {
       await state.deviceRef.set({
@@ -90,13 +138,6 @@
     return data?.standalone === true && data?.cloudLinked === true && data?.online === true && at > 0 && Date.now() - at < 70_000;
   }
 
-  function supportsStandaloneAgent(version) {
-    const parts = String(version || '').split('.').map((part) => Number.parseInt(part, 10) || 0);
-    const major = parts[0] || 0;
-    const minor = parts[1] || 0;
-    return major > 2 || (major === 2 && minor >= 8);
-  }
-
   async function startDeviceBridge() {
     if (!state.db || !state.user?.uid || !state.nativeState?.deviceId) return;
     const deviceId = state.nativeState.deviceId;
@@ -117,12 +158,20 @@
       .doc(deviceId);
 
     await publishNativeState(true);
+    void publishRealtimePresence(true);
 
     state.unsubscribeDevice = state.deviceRef.onSnapshot(
       (snapshot) => {
         if (!snapshot.exists) return;
         const data = snapshot.data() || {};
+        const wasStandalone = state.standaloneCloudOnline;
         state.standaloneCloudOnline = standaloneCloudActive(data);
+        if (!wasStandalone && state.standaloneCloudOnline) {
+          try { state.presenceOnDisconnect?.cancel?.(); } catch (_) {}
+          state.presenceOnDisconnect = null;
+        } else if (wasStandalone && !state.standaloneCloudOnline && state.nativeConnected) {
+          void publishRealtimePresence(true);
+        }
         // Incluso con el daemon cloud activo mantenemos el listener de sesiones
         // para poder responder la oferta WebRTC del móvil. El relay Firestore no
         // se ejecuta aquí mientras el daemon esté online, evitando doble cursor.
@@ -465,7 +514,7 @@
       deviceId: native.deviceId,
       deviceName: native.deviceName || 'PC Windows',
       platform: 'windows',
-      bridge: supportsStandaloneAgent(native.agentVersion) ? 'standaloneNative' : 'nativeMessaging',
+      bridge: String(native.agentVersion || '').startsWith('2.8.') ? 'standaloneNative' : 'nativeMessaging',
       agentVersion: native.agentVersion || '2.0.0',
       online: !!state.nativeConnected,
       clientAt: Date.now(),
@@ -475,20 +524,15 @@
     if (typeof native.muted === 'boolean') payload.muted = native.muted;
     if (typeof native.audioActive === 'boolean') payload.audioActive = native.audioActive;
     if (typeof native.systemControl === 'boolean') payload.systemControl = native.systemControl;
-    // Con el daemon standalone activo, él es la autoridad de hotspot/RGB/Modo ahorro.
-    // Esto evita que un Native Messaging abierto en Chrome publique un estado RGB
-    // cacheado y pise el estado real mientras el PC está en Modo ahorro.
-    if (!state.standaloneCloudOnline) {
-      if (typeof native.hotspotState === 'string') payload.hotspotState = native.hotspotState;
-      if (Number.isFinite(Number(native.hotspotClients))) payload.hotspotClients = Math.max(0, Number(native.hotspotClients));
-      if (typeof native.hotspotMessage === 'string') payload.hotspotMessage = native.hotspotMessage.slice(0, 500);
-      if (typeof native.rgbControl === 'boolean') payload.rgbControl = native.rgbControl;
-      if (typeof native.rgbAvailable === 'boolean') payload.rgbAvailable = native.rgbAvailable;
-      if (typeof native.rgbState === 'string') payload.rgbState = native.rgbState;
-      if (typeof native.rgbColor === 'string') payload.rgbColor = native.rgbColor.slice(0, 16);
-      if (typeof native.rgbTransport === 'string') payload.rgbTransport = native.rgbTransport.slice(0, 40);
-      if (typeof native.rgbMessage === 'string') payload.rgbMessage = native.rgbMessage.slice(0, 500);
-    }
+    if (typeof native.hotspotState === 'string') payload.hotspotState = native.hotspotState;
+    if (Number.isFinite(Number(native.hotspotClients))) payload.hotspotClients = Math.max(0, Number(native.hotspotClients));
+    if (typeof native.hotspotMessage === 'string') payload.hotspotMessage = native.hotspotMessage.slice(0, 500);
+    if (typeof native.rgbControl === 'boolean') payload.rgbControl = native.rgbControl;
+    if (typeof native.rgbAvailable === 'boolean') payload.rgbAvailable = native.rgbAvailable;
+    if (typeof native.rgbState === 'string') payload.rgbState = native.rgbState;
+    if (typeof native.rgbColor === 'string') payload.rgbColor = native.rgbColor.slice(0, 16);
+    if (typeof native.rgbTransport === 'string') payload.rgbTransport = native.rgbTransport.slice(0, 40);
+    if (typeof native.rgbMessage === 'string') payload.rgbMessage = native.rgbMessage.slice(0, 500);
     if (force) payload.connectedAt = firebase.firestore.FieldValue.serverTimestamp();
 
     try {
@@ -507,7 +551,7 @@
       // v2.8+ tiene un daemon cloud independiente. Que Chrome pierda Native
       // Messaging no significa que el PC esté offline, por lo que no debemos
       // pisar el heartbeat del agente standalone con online=false.
-      if (!supportsStandaloneAgent(state.nativeState?.agentVersion)) {
+      if (!String(state.nativeState?.agentVersion || '').startsWith('2.8.')) {
         await publishNativeState(false);
       }
       return;
@@ -586,7 +630,7 @@
   });
 
   state.heartbeat = window.setInterval(() => {
-    if (state.nativeConnected) void publishNativeState(false);
+    if (state.nativeConnected) void publishPresenceHeartbeat();
   }, HEARTBEAT_MS);
 
   state.userTimer = window.setInterval(() => void syncUser(), 3_000);

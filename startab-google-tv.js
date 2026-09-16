@@ -23,6 +23,7 @@
     editingAppPackage: '', editingBackground: '', contextAppPackage: '', appEditHoldTimer: 0,
     cameraStream: null, scannerActive: false, scanTimer: 0, scanBusy: false, barcodeDetector: null,
     availableApps: [], appSearch: '', wsKeepAlive: 0, firebaseSessionTimer: 0, modalOpen: false, keyboardBuffer: '', keyboardTimer: 0,
+    unsubscribePresence: null, realtimeCommandOk: null,
   };
   const dom = {};
   const $ = id => document.getElementById(id);
@@ -260,7 +261,18 @@
   }
 
   function selectedDevice() { return state.devices.get(state.selectedId) || null; }
-  function isOnline(d) { return !!d?.online && Date.now() - Number(d.clientAt || 0) < DEVICE_STALE_MS; }
+  function presenceStatus(d = selectedDevice()) {
+    if (!d) return { state:'offline', online:false, source:'none' };
+    const userId = uid();
+    const adaptive = globalThis.StarTabPresence?.status?.(userId, 'tv', d.deviceId || state.selectedId, d, {
+      localConnected: state.wsReady && (d.deviceId || state.selectedId) === state.selectedId,
+      aggressive: state.modalOpen && !document.hidden,
+    });
+    if (adaptive) return adaptive;
+    const online = !!d?.online && Date.now() - Number(d.clientAt || 0) < DEVICE_STALE_MS;
+    return { state: online ? (d?.powerOn === false ? 'standby' : 'online') : 'offline', online, source:'firestore' };
+  }
+  function isOnline(d) { return !!presenceStatus(d).online; }
 
   function applyRemoteState(data = {}, force = false) {
     const now = performance.now();
@@ -661,13 +673,16 @@
     renderQuickApps();
     renderCaptureButtons();
 
+    const pstatus = d ? presenceStatus(d) : { state:'offline', online:false, source:'none' };
     if (!uid()) setStatus('error','Sin sesión','Inicia sesión en StarTab.');
     else if (!d && state.selectedId) setStatus('warn','Buscando TV','Sincronizando con Firebase…');
     else if (!d) setStatus('idle','Sin TV','Toca + para agregar uno.');
     else if (d.accessibility === false) setStatus('warn','Activar Accesibilidad','En el TV activa “StarTab TV · Cursor remoto”.');
-    else if (state.wsReady) setStatus('direct','Directo',`${d.deviceName || 'Google TV'} · LAN de baja latencia`);
-    else if (isOnline(d)) setStatus('firebase','Firebase',`${d.deviceName || 'Google TV'} · conexión remota`);
-    else setStatus('error','Sin conexión',`${d.deviceName || 'Google TV'} no está disponible.`);
+    else if (state.wsReady) setStatus('direct','Directo',`${d.deviceName || 'Google TV'} · LAN de baja latencia${globalThis.StarTabPresence?.isRealtimeConnected?.() === false ? ' · sin Internet' : ''}`);
+    else if (pstatus.state === 'standby') setStatus('firebase','Standby',`${d.deviceName || 'Google TV'} · conectado y en reposo`);
+    else if (pstatus.state === 'online') setStatus('firebase','Firebase',`${d.deviceName || 'Google TV'} · conexión remota en tiempo real`);
+    else if (pstatus.state === 'unresponsive') setStatus('warn','Sin respuesta',`${d.deviceName || 'Google TV'} dejó de responder recientemente.`);
+    else setStatus('error','No disponible',`${d.deviceName || 'Google TV'} está apagado, sin Internet o sin corriente.`);
   }
 
   async function initFirebase(retry = 0) {
@@ -681,8 +696,13 @@
   }
 
   function listenDevices() {
-    state.unsubscribe?.(); state.unsubscribe = null; state.devices.clear();
+    state.unsubscribe?.(); state.unsubscribe = null;
+    state.unsubscribePresence?.(); state.unsubscribePresence = null;
+    state.devices.clear();
     const userId = uid(); if (!state.db || !userId) { render(); return; }
+    if (globalThis.StarTabPresence?.watchType) {
+      state.unsubscribePresence = globalThis.StarTabPresence.watchType(userId, 'tv', () => render());
+    }
     state.unsubscribe = state.db.collection('users').doc(userId).collection('tvDevices').onSnapshot(snap => {
       state.devices.clear(); snap.forEach(doc => state.devices.set(doc.id, { deviceId: doc.id, ...doc.data() }));
       const saved = localStorage.getItem(SELECTED_KEY) || '';
@@ -911,6 +931,15 @@
 
   async function firebaseMerge(payload, leaseMs = 12000) {
     const d = selectedDevice(); if (!d || !state.db || !uid()) return false;
+    // Ruta preferida: RTDB mantiene un stream SSE abierto en el TV. No hay polling
+    // y la orden llega apenas cambia el nodo. Firestore queda como fallback compatible.
+    if (globalThis.StarTabPresence?.sendTvCommand) {
+      try {
+        const realtimeOk = await globalThis.StarTabPresence.sendTvCommand(uid(), d.deviceId, payload, leaseMs);
+        state.realtimeCommandOk = realtimeOk;
+        if (realtimeOk) return true;
+      } catch (_) { state.realtimeCommandOk = false; }
+    }
     const lease = { id: unique(), clientAt: Date.now(), expiresAtClient: Date.now() + leaseMs };
     try { await state.db.collection('users').doc(uid()).collection('tvDevices').doc(d.deviceId).set({ ...payload, controlLease: lease }, { merge:true }); return true; } catch (_) { return false; }
   }
@@ -1181,11 +1210,22 @@
     if(next.length>700){el.value=next.slice(-350);el.dataset.prev=el.value;}
   }
 
-  function stopFirebaseSessionLease() { clearInterval(state.firebaseSessionTimer); state.firebaseSessionTimer=0; }
+  function stopFirebaseSessionLease() {
+    clearInterval(state.firebaseSessionTimer); state.firebaseSessionTimer=0;
+    const d = selectedDevice();
+    if (d && uid()) void globalThis.StarTabPresence?.setWatcher?.(uid(), 'tv', d.deviceId, false);
+  }
   function startFirebaseSessionLease() {
     stopFirebaseSessionLease();
-    const tick=()=>{ if(state.modalOpen && !state.wsReady && selectedDevice()) firebaseMerge({},30000); };
-    setTimeout(tick,120); state.firebaseSessionTimer=setInterval(tick,24000);
+    const d = selectedDevice();
+    if (!state.modalOpen || !d || !uid()) return;
+    const activate = async () => {
+      const ok = await globalThis.StarTabPresence?.setWatcher?.(uid(), 'tv', d.deviceId, !document.hidden);
+      // Si RTDB no está disponible todavía, conserva el lease Firestore como respaldo.
+      if (ok === false && state.modalOpen && !state.wsReady) void firebaseMerge({}, 30000);
+    };
+    void activate();
+    state.firebaseSessionTimer=setInterval(()=>{ if(state.modalOpen) void activate(); },24000);
   }
 
   function bindUi() {
@@ -1217,7 +1257,7 @@
     window.addEventListener('resize',closeAppContext); window.addEventListener('scroll',closeAppContext,true);
 
     dom.scannerClose?.addEventListener('click',stopQrScanner); dom.scannerCancel?.addEventListener('click',stopQrScanner); dom.scanner?.querySelector('.startab-tv-scanner-backdrop')?.addEventListener('click',stopQrScanner);
-    dom.deviceSelect?.addEventListener('change',()=>{const next=dom.deviceSelect.value||'';if(next==='__add_tv__'){openAddModal();dom.deviceSelect.value=state.selectedId||'';return;}state.selectedId=next;localStorage.setItem(SELECTED_KEY,state.selectedId);state.optimisticVolume=null;state.optimisticBrightness=null;state.volumeHoldUntil=0;state.brightnessHoldUntil=0;controlPaint.volume=null;controlPaint.brightness=null;state.availableApps=[];closeWs();connectSelectedLocal();startFirebaseSessionLease();render();});
+    dom.deviceSelect?.addEventListener('change',()=>{const next=dom.deviceSelect.value||'';if(next==='__add_tv__'){openAddModal();dom.deviceSelect.value=state.selectedId||'';return;}stopFirebaseSessionLease();state.selectedId=next;localStorage.setItem(SELECTED_KEY,state.selectedId);state.optimisticVolume=null;state.optimisticBrightness=null;state.volumeHoldUntil=0;state.brightnessHoldUntil=0;controlPaint.volume=null;controlPaint.brightness=null;state.availableApps=[];closeWs();connectSelectedLocal();startFirebaseSessionLease();render();});
 
     dom.power?.addEventListener('click',()=>{
       const action = state.powerOn === false ? 'on' : 'off';
@@ -1251,6 +1291,12 @@
       if (dom.appContext?.classList.contains('is-open')) { closeAppContext(); e.preventDefault(); return; }
       if (dom.addLayer?.classList.contains('is-open')) { closeAddModal(); e.preventDefault(); return; }
       if (dom.modal?.classList.contains('is-open')) { close(); e.preventDefault(); }
+    });
+    document.addEventListener('visibilitychange',()=>{
+      if (!state.modalOpen) return;
+      if (document.hidden) {
+        const d=selectedDevice(); if(d&&uid()) void globalThis.StarTabPresence?.setWatcher?.(uid(),'tv',d.deviceId,false);
+      } else startFirebaseSessionLease();
     });
     bindNavTouch();
   }
