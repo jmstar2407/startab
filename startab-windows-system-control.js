@@ -127,6 +127,19 @@
 
   function isOnline(device) { return !!presenceStatus(device).online; }
 
+  function isStandaloneCloudDevice(device) {
+    if (!device) return false;
+    const bridge = String(device.bridge || '').toLowerCase();
+    return device.standalone === true || device.cloudLinked === true || bridge === 'standalonenative';
+  }
+
+  function canCommandDevice(device) {
+    if (!device) return false;
+    const presence = presenceStatus(device);
+    if (presence?.online || presence?.commandable) return true;
+    return isStandaloneCloudDevice(device);
+  }
+
   function selectedDeviceId() {
     const selectValue = String(dom.deviceSelect?.value || '').trim();
     if (selectValue) return selectValue;
@@ -191,7 +204,8 @@
     state.lastDevice = device || null;
     const loggedIn = !!state.user?.uid;
     const online = isOnline(device);
-    const supported = online && versionAtLeast(device?.agentVersion);
+    const commandable = canCommandDevice(device);
+    const supported = commandable && versionAtLeast(device?.agentVersion);
 
     if (dom.device) {
       dom.device.textContent = device
@@ -202,7 +216,9 @@
     const pstatus = device ? presenceStatus(device) : { state:'offline', online:false };
     if (!loggedIn) setOnlineState('error', 'Sin sesión');
     else if (!device) setOnlineState('error', 'Sin PC');
+    else if (pstatus.state === 'unresponsive' && commandable) setOnlineState('warning', 'Reconectando');
     else if (pstatus.state === 'unresponsive') setOnlineState('warning', 'Sin respuesta');
+    else if (!online && commandable) setOnlineState('warning', 'Confirmando');
     else if (!online) setOnlineState('error', 'No disponible');
     else if (!supported) setOnlineState('warning', 'EXE antiguo');
     else if (pstatus.state === 'standby') setOnlineState('warning', 'Standby');
@@ -233,7 +249,7 @@
               : supported ? 'Consultando estado del PC…' : 'Requiere agente Windows v2.4.0';
     }
 
-    const rgbVersionOk = online && versionAtLeast(device?.agentVersion, RGB_REQUIRED_AGENT);
+    const rgbVersionOk = commandable && versionAtLeast(device?.agentVersion, RGB_REQUIRED_AGENT);
     const rgbAvailable = rgbVersionOk && device?.rgbAvailable !== false;
     const reportedRgbState = normalizeRgbState(device?.rgbState);
     const reportedRgbColor = normalizeRgbColor(device?.rgbColor || dom.rgbColor?.value || '#FFFFFF');
@@ -291,7 +307,9 @@
     if (dom.note) {
       if (!loggedIn) dom.note.textContent = 'Inicia sesión en StarTab para controlar el PC seleccionado.';
       else if (!device) dom.note.textContent = 'Selecciona primero un PC en “Volumen del sistema”.';
+      else if (pstatus.state === 'unresponsive' && commandable) dom.note.textContent = 'La presencia está reconectando; los comandos cloud siguen disponibles.';
       else if (pstatus.state === 'unresponsive') dom.note.textContent = 'El PC dejó de responder recientemente; StarTab sigue comprobando su presencia.';
+      else if (!online && commandable) dom.note.textContent = 'Confirmando presencia del PC; el agente cloud sigue vinculado y acepta comandos.';
       else if (!online) dom.note.textContent = 'El PC no está disponible: puede estar apagado, sin Internet o sin corriente.';
       else if (!supported) dom.note.textContent = `Estas acciones requieren StartabWindowsVolume.exe v2.4.0 o superior. Tu PC usa ${device.agentVersion || 'una versión anterior'}.`;
       else dom.note.textContent = 'Los comandos se envían únicamente al PC Windows seleccionado en StarTab.';
@@ -340,7 +358,25 @@
   async function writeCommand(action, extra = {}) {
     state.user = currentUser();
     const device = state.lastDevice;
-    if (!state.db || !state.user?.uid || !device?.deviceId || !isOnline(device) || !versionAtLeast(device.agentVersion)) return false;
+    if (!state.db || !state.user?.uid || !device?.deviceId || !canCommandDevice(device) || !versionAtLeast(device.agentVersion)) return false;
+    const realtimePayload = {
+      action,
+      issuedBy: state.user.uid,
+      issuedByClient: clientId,
+      clientAt: Date.now(),
+      ...extra,
+    };
+    const routePresence = presenceStatus(device);
+    const preferRealtime = globalThis.StarTabPresence?.isRealtimeConnected?.() === true
+      && routePresence?.state === 'online'
+      && routePresence?.source === 'rtdb';
+    if (preferRealtime && globalThis.StarTabPresence?.sendWindowsCommand) {
+      try {
+        const realtimeOk = await globalThis.StarTabPresence.sendWindowsCommand(state.user.uid, device.deviceId, realtimePayload, 20_000);
+        if (realtimeOk) return true;
+      } catch (_) {}
+    }
+
     const command = {
       id: `${Date.now().toString(36)}-${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}`,
       action,
@@ -387,10 +423,10 @@
     document.body.classList.add('windows-pc-control-open');
     connectSelectedDevice();
     const watchedId = selectedDeviceId();
-    if (watchedId && currentUser()?.uid) void globalThis.StarTabPresence?.setWatcher?.(currentUser().uid, 'windows', watchedId, !document.hidden);
+    if (watchedId && currentUser()?.uid) void globalThis.StarTabPresence?.setWatcher?.(currentUser().uid, 'windows', watchedId, !document.hidden, 'pc-system-control');
     globalThis.StartabHaptics?.pulse?.('pc-control-open', 7, 70);
     window.setTimeout(() => {
-      if (state.open && versionAtLeast(state.lastDevice?.agentVersion) && isOnline(state.lastDevice)) void sendCommand('getSystemState');
+      if (state.open && versionAtLeast(state.lastDevice?.agentVersion) && canCommandDevice(state.lastDevice)) void sendCommand('getSystemState');
     }, 120);
     scheduleRefresh();
     clearInterval(state.statusTimer);
@@ -410,7 +446,7 @@
     clearInterval(state.statusTimer);
     state.statusTimer = 0;
     const watchedId = state.deviceId || selectedDeviceId();
-    if (watchedId && currentUser()?.uid) void globalThis.StarTabPresence?.setWatcher?.(currentUser().uid, 'windows', watchedId, false);
+    if (watchedId && currentUser()?.uid) void globalThis.StarTabPresence?.setWatcher?.(currentUser().uid, 'windows', watchedId, false, 'pc-system-control');
     stopDeviceListener();
     dom.modal?.classList.remove('is-open');
     dom.modal?.setAttribute('aria-hidden', 'true');
@@ -637,20 +673,20 @@
     dom.deviceSelect?.addEventListener('change', () => {
       if (state.open) {
         const previousId = state.deviceId;
-        if (previousId && currentUser()?.uid) void globalThis.StarTabPresence?.setWatcher?.(currentUser().uid, 'windows', previousId, false);
+        if (previousId && currentUser()?.uid) void globalThis.StarTabPresence?.setWatcher?.(currentUser().uid, 'windows', previousId, false, 'pc-system-control');
         clearConfirmation();
         connectSelectedDevice();
         const nextId = selectedDeviceId();
-        if (nextId && currentUser()?.uid) void globalThis.StarTabPresence?.setWatcher?.(currentUser().uid, 'windows', nextId, !document.hidden);
+        if (nextId && currentUser()?.uid) void globalThis.StarTabPresence?.setWatcher?.(currentUser().uid, 'windows', nextId, !document.hidden, 'pc-system-control');
         window.setTimeout(() => {
-          if (state.open && versionAtLeast(state.lastDevice?.agentVersion) && isOnline(state.lastDevice)) void sendCommand('getSystemState');
+          if (state.open && versionAtLeast(state.lastDevice?.agentVersion) && canCommandDevice(state.lastDevice)) void sendCommand('getSystemState');
         }, 120);
       }
     });
     document.addEventListener('visibilitychange', () => {
       if (!state.open) return;
       const id = state.deviceId || selectedDeviceId();
-      if (id && currentUser()?.uid) void globalThis.StarTabPresence?.setWatcher?.(currentUser().uid, 'windows', id, !document.hidden);
+      if (id && currentUser()?.uid) void globalThis.StarTabPresence?.setWatcher?.(currentUser().uid, 'windows', id, !document.hidden, 'pc-system-control');
     });
     document.addEventListener('keydown', (event) => {
       if (event.key !== 'Escape' || !state.open) return;

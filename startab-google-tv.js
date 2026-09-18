@@ -733,8 +733,9 @@
         const direct = item.deviceId === state.selectedId && state.wsReady;
         const statusLabel = direct ? 'Directo'
           : itemStatus.state === 'standby' ? 'Standby'
-            : itemStatus.state === 'unresponsive' ? 'Sin respuesta'
-              : itemStatus.online ? 'Firebase' : 'No disponible';
+            : itemStatus.state === 'reconnecting' ? 'Reconectando'
+              : itemStatus.state === 'unresponsive' ? 'Sin respuesta'
+                : itemStatus.online ? 'Firebase' : 'No disponible';
         dom.deviceSelect.add(new Option(`${item.deviceName || 'Google TV'} · ${statusLabel}`, item.deviceId));
       });
       dom.deviceSelect.add(new Option('＋ Añadir otro TV…', '__add_tv__'));
@@ -758,6 +759,7 @@
     else if (state.wsReady) setStatus('direct','Directo',`${d.deviceName || 'Google TV'} · LAN de baja latencia${globalThis.StarTabPresence?.isRealtimeConnected?.() === false ? ' · sin Internet' : ''}`);
     else if (pstatus.state === 'standby') setStatus('firebase','Standby',`${d.deviceName || 'Google TV'} · conectado y en reposo`);
     else if (pstatus.state === 'online') setStatus('firebase','Firebase',`${d.deviceName || 'Google TV'} · conexión remota en tiempo real`);
+    else if (pstatus.state === 'reconnecting') setStatus('warn','Reconectando',`${d.deviceName || 'Google TV'} · recuperando presencia por Firebase…`);
     else if (pstatus.state === 'unresponsive') setStatus('warn','Sin respuesta',`${d.deviceName || 'Google TV'} dejó de responder recientemente.`);
     else setStatus('error','No disponible',`${d.deviceName || 'Google TV'} está apagado, sin Internet o sin corriente.`);
   }
@@ -1058,7 +1060,11 @@
     const d = selectedDevice(); if (!d || !state.db || !uid()) return false;
     // Ruta preferida: RTDB mantiene un stream SSE abierto en el TV. No hay polling
     // y la orden llega apenas cambia el nodo. Firestore queda como fallback compatible.
-    if (globalThis.StarTabPresence?.sendTvCommand) {
+    const pstatus = presenceStatus(d);
+    const preferRealtime = globalThis.StarTabPresence?.isRealtimeConnected?.() === true
+      && pstatus?.state === 'online'
+      && pstatus?.source === 'rtdb';
+    if (preferRealtime && globalThis.StarTabPresence?.sendTvCommand) {
       try {
         const realtimeOk = await globalThis.StarTabPresence.sendTvCommand(uid(), d.deviceId, payload, leaseMs);
         state.realtimeCommandOk = realtimeOk;
@@ -1107,6 +1113,22 @@
     const elapsed=now-state.lastVolumeFirebaseAt;
     if (elapsed>=60) { state.lastVolumeFirebaseAt=now; const v=state.pendingVolume;state.pendingVolume=null;firebaseMerge({volumeCommand:{id:unique(),value:v,clientAt:Date.now()}}); return; }
     clearTimeout(state.volumeTimer); state.volumeTimer=setTimeout(()=>{state.lastVolumeFirebaseAt=performance.now();const v=state.pendingVolume;state.pendingVolume=null;if(v!=null)firebaseMerge({volumeCommand:{id:unique(),value:v,clientAt:Date.now()}});},Math.max(0,60-elapsed));
+  }
+
+  function stepVolume(steps) {
+    steps = Math.max(-8, Math.min(8, Math.trunc(Number(steps) || 0)));
+    if (!steps) return;
+    globalThis.StartabHaptics?.click?.();
+    const d = selectedDevice();
+    const maxSteps = Math.max(1, Number(d?.volumeMaxSteps) || 20);
+    const current = Number(state.optimisticVolume ?? d?.volume ?? 0);
+    state.optimisticVolume = Math.round(clamp(current + (steps * 100 / maxSteps), 0, 100));
+    state.lastVolumeInputAt = performance.now();
+    state.volumeHoldUntil = state.lastVolumeInputAt + CONTROL_LOCAL_HOLD_MS;
+    paintTvControls();
+    const commandId = unique();
+    if (wsSend({ id:commandId, t:'volumeStep', value:steps })) return;
+    firebaseMerge({ actionCommand:{ id:commandId, type:'volumeStep', value:steps, clientAt:Date.now() } });
   }
 
   function toggleMute() {
@@ -1338,16 +1360,16 @@
   function stopFirebaseSessionLease() {
     clearInterval(state.firebaseSessionTimer); state.firebaseSessionTimer=0;
     const d = selectedDevice();
-    if (d && uid()) void globalThis.StarTabPresence?.setWatcher?.(uid(), 'tv', d.deviceId, false);
+    if (d && uid()) void globalThis.StarTabPresence?.setWatcher?.(uid(), 'tv', d.deviceId, false, 'tv-control');
   }
   function startFirebaseSessionLease() {
     stopFirebaseSessionLease();
     const d = selectedDevice();
     if (!state.modalOpen || !d || !uid()) return;
     const activate = async () => {
-      const ok = await globalThis.StarTabPresence?.setWatcher?.(uid(), 'tv', d.deviceId, !document.hidden);
-      // Si RTDB no está disponible todavía, conserva el lease Firestore como respaldo.
-      if (ok === false && state.modalOpen && !state.wsReady) void firebaseMerge({}, 30000);
+      await globalThis.StarTabPresence?.setWatcher?.(uid(), 'tv', d.deviceId, !document.hidden, 'tv-control');
+      // No escribimos leases vacíos en Firestore. El snapshot existente es
+      // suficiente como respaldo si RTDB tarda en reconectar.
     };
     void activate();
     state.firebaseSessionTimer=setInterval(()=>{ if(state.modalOpen) void activate(); },24000);
@@ -1405,8 +1427,8 @@
     dom.settings?.addEventListener('click',()=>sendAction('settings'));
     dom.mute?.addEventListener('click',toggleMute);
     dom.volume?.addEventListener('input',()=>setVolume(dom.volume.value));
-    dom.volDown?.addEventListener('click',()=>setVolume((state.optimisticVolume ?? Number(selectedDevice()?.volume||0))-1));
-    dom.volUp?.addEventListener('click',()=>setVolume((state.optimisticVolume ?? Number(selectedDevice()?.volume||0))+1));
+    dom.volDown?.addEventListener('click',()=>stepVolume(-1));
+    dom.volUp?.addEventListener('click',()=>stepVolume(1));
     dom.brightness?.addEventListener('input',()=>setBrightness(dom.brightness.value));
 
     document.addEventListener('keydown', e => {
@@ -1421,7 +1443,7 @@
     document.addEventListener('visibilitychange',()=>{
       if (!state.modalOpen) return;
       if (document.hidden) {
-        const d=selectedDevice(); if(d&&uid()) void globalThis.StarTabPresence?.setWatcher?.(uid(),'tv',d.deviceId,false);
+        const d=selectedDevice(); if(d&&uid()) void globalThis.StarTabPresence?.setWatcher?.(uid(),'tv',d.deviceId,false,'tv-control');
       } else startFirebaseSessionLease();
     });
     bindNavTouch();

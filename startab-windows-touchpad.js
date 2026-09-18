@@ -203,8 +203,16 @@
     const snapshot = await ref.get();
     if (!snapshot.exists) return null;
     const data = snapshot.data() || {};
-    const online = !!data.online && Number(data.clientAt) > 0 && Date.now() - Number(data.clientAt) < DEVICE_STALE_MS;
-    return { ref, data: { ...data, deviceId }, online };
+    const full = { ...data, deviceId };
+    const adaptive = globalThis.StarTabPresence?.status?.(state.user.uid, 'windows', deviceId, full, { aggressive: true });
+    const legacyOnline = !!data.online && Number(data.clientAt) > 0 && Date.now() - Number(data.clientAt) < DEVICE_STALE_MS;
+    const online = adaptive ? !!adaptive.online : legacyOnline;
+    const bridge = String(data.bridge || '').toLowerCase();
+    const standalone = data.standalone === true || data.cloudLinked === true || bridge === 'standalonenative';
+    const commandable = standalone || (adaptive && typeof adaptive.commandable === 'boolean'
+      ? adaptive.commandable
+      : online);
+    return { ref, data: full, online, commandable, presence: adaptive || null };
   }
 
   function waitForIceGathering(pc, timeout = ICE_TIMEOUT_MS) {
@@ -252,6 +260,9 @@
   }
 
   async function cleanupSession(removeRemote = true) {
+    if (state.user?.uid && state.deviceId) {
+      try { await globalThis.StarTabPresence?.setWatcher?.(state.user.uid, 'windows', state.deviceId, false, 'pc-touchpad'); } catch (_) {}
+    }
     state.unsubscribeSession?.();
     state.unsubscribeSession = null;
     closePeer();
@@ -339,9 +350,10 @@
 
     state.deviceId = device.data.deviceId;
     state.deviceName = device.data.deviceName || 'PC Windows';
+    try { await globalThis.StarTabPresence?.setWatcher?.(state.user.uid, 'windows', state.deviceId, true, 'pc-touchpad'); } catch (_) {}
     if (dom.device) dom.device.textContent = `${state.deviceName} · ${String(state.deviceId).slice(0, 8)}…`;
-    if (!device.online) {
-      setStatus('error', 'Desconectado', 'El PC seleccionado no está en línea.');
+    if (!device.commandable) {
+      setStatus('error', 'Desconectado', 'El PC seleccionado no está disponible.');
       return;
     }
     applyAgentCapabilities(device.data.agentVersion);

@@ -151,6 +151,27 @@
 
   function isDeviceOnline(device) { return !!devicePresenceStatus(device).online; }
 
+  function isStandaloneCloudDevice(device) {
+    if (!device) return false;
+    const bridge = String(device.bridge || '').toLowerCase();
+    return device.standalone === true || device.cloudLinked === true || bridge === 'standalonenative';
+  }
+
+  function canControlDevice(device) {
+    if (!device) return false;
+    if (isLocalNativeTarget(device)) return true;
+    const presence = devicePresenceStatus(device);
+    if (presence?.online || presence?.commandable) return true;
+    // Capability is intentionally separate from the visual presence state.
+    // A linked standalone agent may reconnect after a stale offline marker;
+    // sending an explicit user command is safe because it carries a short TTL.
+    return isStandaloneCloudDevice(device);
+  }
+
+  function normalizedDeviceName(device) {
+    return String(device?.deviceName || '').trim().toLocaleLowerCase('es');
+  }
+
   function setFill(value) {
     const normalized = clamp(value, 0, 100);
     dom.fill?.style.setProperty('--windows-volume', `${normalized}%`);
@@ -365,7 +386,7 @@
     if (!dom.footer || !dom.footerToggle) return;
     const next = !!expanded;
     const deviceId = state.selectedDeviceId || '';
-    if (deviceId && state.user?.uid) void globalThis.StarTabPresence?.setWatcher?.(state.user.uid, 'windows', deviceId, next && !document.hidden);
+    if (deviceId && state.user?.uid) void globalThis.StarTabPresence?.setWatcher?.(state.user.uid, 'windows', deviceId, next && !document.hidden, 'pc-volume');
     dom.footer.classList.toggle('is-expanded', next);
     dom.footerToggle.setAttribute('aria-expanded', next ? 'true' : 'false');
     const path = dom.footerToggle.querySelector('.multimedia-system-volume-chevron path');
@@ -428,7 +449,15 @@
       const option = document.createElement('option');
       option.value = device.deviceId;
       const pstatus = devicePresenceStatus(device);
-      const statusLabel = pstatus.state === 'standby' ? 'Standby' : pstatus.state === 'unresponsive' ? 'Sin respuesta' : pstatus.online ? 'En línea' : 'No disponible';
+      const statusLabel = pstatus.state === 'standby'
+        ? 'Standby'
+        : pstatus.state === 'reconnecting'
+          ? 'Reconectando'
+          : pstatus.state === 'unresponsive'
+            ? 'Sin respuesta'
+            : pstatus.online
+              ? (pstatus.source === 'lan' ? 'Directo' : 'Firebase')
+              : 'No disponible';
       option.textContent = `${device.deviceName || 'PC Windows'} · ${statusLabel}`;
       dom.device.append(option);
     }
@@ -445,12 +474,40 @@
       : null;
     if (desired && nativeDevice && String(desired) !== String(nativeDevice.deviceId)) {
       const desiredDevice = state.devices.get(desired);
-      const sameMachineName = String(desiredDevice?.deviceName || '').trim().toLowerCase()
-        && String(desiredDevice?.deviceName || '').trim().toLowerCase() === String(nativeDevice.deviceName || state.native.deviceName || '').trim().toLowerCase();
+      const sameMachineName = normalizedDeviceName(desiredDevice)
+        && normalizedDeviceName(desiredDevice) === normalizedDeviceName(nativeDevice);
       // Auto-heal a stale document id left by an old agent installation, but
       // never override an explicitly selected remote PC with a different name.
       if (sameMachineName && !isDeviceOnline(desiredDevice) && isDeviceOnline(nativeDevice)) desired = nativeDevice.deviceId;
     }
+
+    // Mobile/web has no local Native Messaging id to perform the repair above.
+    // If a reinstall left an old document selected, automatically move to the
+    // live document with the SAME PC name. This is the common cause of a PC
+    // being visibly connected while the phone keeps showing “No disponible”.
+    if (desired && state.devices.has(desired) && !isDeviceOnline(state.devices.get(desired))) {
+      const desiredDevice = state.devices.get(desired);
+      const wantedName = normalizedDeviceName(desiredDevice);
+      if (wantedName) {
+        const desiredAt = Number(desiredDevice?.clientAt || 0);
+        const replacement = devices
+          .filter((candidate) => candidate.deviceId !== desired && normalizedDeviceName(candidate) === wantedName)
+          .sort((a, b) => {
+            const onlineDelta = Number(isDeviceOnline(b)) - Number(isDeviceOnline(a));
+            if (onlineDelta) return onlineDelta;
+            return Number(b.clientAt || 0) - Number(a.clientAt || 0);
+          })
+          .find((candidate) => {
+            if (isDeviceOnline(candidate)) return true;
+            const candidateAt = Number(candidate.clientAt || 0);
+            return isStandaloneCloudDevice(candidate)
+              && candidate.online !== false
+              && candidateAt > desiredAt + 30_000;
+          });
+        if (replacement) desired = replacement.deviceId;
+      }
+    }
+
     if (!desired || !state.devices.has(desired)) {
       desired = nativeDevice?.deviceId
         || devices.find(isDeviceOnline)?.deviceId
@@ -476,9 +533,18 @@
     const volume = optimisticActive && state.optimisticVolume != null ? state.optimisticVolume : rawVolume;
     const muted = optimisticActive && typeof state.optimisticMuted === 'boolean' ? state.optimisticMuted : rawMuted;
 
-    dom.card.dataset.state = !loggedIn ? 'signed-out' : !device ? 'empty' : online ? 'online' : 'offline';
-    dom.status?.classList.toggle('is-online', online);
-    dom.status?.classList.toggle('is-offline', !!device && !online);
+    dom.card.dataset.state = !loggedIn
+      ? 'signed-out'
+      : !device
+        ? 'empty'
+        : online
+          ? 'online'
+          : canControlDevice(device)
+            ? 'syncing'
+            : 'offline';
+    const commandable = canControlDevice(device);
+    dom.status?.classList.toggle('is-online', online || commandable);
+    dom.status?.classList.toggle('is-offline', !!device && !commandable);
 
     if (dom.statusText) {
       dom.statusText.textContent = !loggedIn
@@ -489,13 +555,17 @@
           ? state.native.connected
             ? 'Agente conectado · registrando este PC en StarTab'
             : 'No hay PCs Windows vinculados'
-          : pstatus.state === 'unresponsive'
-            ? 'PC sin respuesta · comprobando presencia'
-            : pstatus.state === 'standby'
+          : pstatus.state === 'reconnecting'
+            ? 'PC reconectando · comandos disponibles por Firebase'
+            : pstatus.state === 'unresponsive'
+              ? 'PC sin respuesta · comprobando presencia'
+              : pstatus.state === 'standby'
               ? 'PC en Standby · presencia activa'
               : online
                 ? (pstatus.source === 'lan' ? 'PC disponible por conexión local' : 'Volumen maestro sincronizado en tiempo real')
-                : 'PC no disponible · apagado, sin Internet o sin corriente';
+                : canControlDevice(device)
+                  ? 'Agente cloud vinculado · confirmando presencia del PC'
+                  : 'PC no disponible · apagado, sin Internet o sin corriente';
     }
 
     if (dom.range && !dom.range.matches(':active')) dom.range.value = String(volume);
@@ -514,7 +584,7 @@
       dom.mute.title = muted ? 'Activar sonido de Windows' : 'Silenciar Windows';
     }
 
-    setControlDisabled(!loggedIn || !device || !online);
+    setControlDisabled(!loggedIn || !device || !canControlDevice(device));
     if (dom.device) dom.device.disabled = !loggedIn || state.devices.size === 0;
 
     const canUseNative = isWindows && isExtension;
@@ -648,7 +718,29 @@
       // control can still work through the standalone cloud agent.
     }
 
-    if (!state.db || !isDeviceOnline(device)) return false;
+    if (!state.db || !canControlDevice(device)) return false;
+
+    // Remote-first optimized path: the standalone Windows agent keeps one RTDB
+    // SSE connection open, so volume/system commands do not need to mutate the
+    // Firestore device document on every interaction.
+    const realtimePayload = {
+      action,
+      issuedBy: state.user.uid,
+      issuedByClient: clientId,
+      clientAt: Date.now(),
+    };
+    if (Number.isFinite(Number(value))) realtimePayload.value = Number(value);
+    if (action === 'setMute') realtimePayload.muted = !!options.muted;
+    const routePresence = devicePresenceStatus(device);
+    const preferRealtime = globalThis.StarTabPresence?.isRealtimeConnected?.() === true
+      && routePresence?.state === 'online'
+      && routePresence?.source === 'rtdb';
+    if (preferRealtime && globalThis.StarTabPresence?.sendWindowsCommand) {
+      try {
+        const realtimeOk = await globalThis.StarTabPresence.sendWindowsCommand(state.user.uid, device.deviceId, realtimePayload, 20_000);
+        if (realtimeOk) return true;
+      } catch (_) {}
+    }
 
     const command = {
       id: `${Date.now().toString(36)}-${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}`,
@@ -827,11 +919,11 @@
 
     dom.device?.addEventListener('change', () => {
       const previousId = state.selectedDeviceId;
-      if (previousId && state.user?.uid) void globalThis.StarTabPresence?.setWatcher?.(state.user.uid, 'windows', previousId, false);
+      if (previousId && state.user?.uid) void globalThis.StarTabPresence?.setWatcher?.(state.user.uid, 'windows', previousId, false, 'pc-volume');
       clearOptimisticState();
       state.selectedDeviceId = dom.device.value || null;
       if (dom.footer?.classList.contains('is-expanded') && state.selectedDeviceId && state.user?.uid) {
-        void globalThis.StarTabPresence?.setWatcher?.(state.user.uid, 'windows', state.selectedDeviceId, !document.hidden);
+        void globalThis.StarTabPresence?.setWatcher?.(state.user.uid, 'windows', state.selectedDeviceId, !document.hidden, 'pc-volume');
       }
       persistSelectedDevice();
       announceSelectedDevice(state.selectedDeviceId);
@@ -897,7 +989,7 @@
     state.statusTimer = window.setInterval(render, 5_000);
     document.addEventListener('visibilitychange', () => {
       if (!dom.footer?.classList.contains('is-expanded') || !state.selectedDeviceId || !state.user?.uid) return;
-      void globalThis.StarTabPresence?.setWatcher?.(state.user.uid, 'windows', state.selectedDeviceId, !document.hidden);
+      void globalThis.StarTabPresence?.setWatcher?.(state.user.uid, 'windows', state.selectedDeviceId, !document.hidden, 'pc-volume');
     });
     window.addEventListener('storage', (event) => {
       if (event.key === 'starTab_lastUser') syncUser();

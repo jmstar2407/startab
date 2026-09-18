@@ -1,0 +1,22 @@
+StarTab v1.4.30 - Centro de control unificado
+
+Incluye:
+- Web/extensión StarTab v1.4.30.
+- Windows Control Host v2.9.0 en windows-native-host/.
+- El paquete completo también incluye Google TV v1.4.3.
+
+Presencia y estados:
+- Una sola lógica para Directo / Firebase / Standby / Reconectando / Sin respuesta / Sin conexión.
+- Realtime Database es la ruta rápida de presencia/comandos cuando está sana.
+- Firestore actúa como respaldo cuando RTDB no está disponible o está reconectando.
+- Los módulos Multimedia, PC, volumen, touchpad y TV usan watchers independientes para no desconectarse entre sí.
+
+Controles:
+- El touchpad intenta abrir sesión incluso si un heartbeat visual se retrasó.
+- Los comandos explícitos del PC no quedan bloqueados solo por un falso offline.
+- Volumen de Google TV +/- usa pasos físicos reales de AudioManager.
+- No se generan leases Firestore vacíos de TV en reposo.
+
+Para las mejoras completas instala/actualiza:
+- Windows agent: v2.9.0
+- Google TV: v1.4.3

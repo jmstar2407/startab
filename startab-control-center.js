@@ -58,25 +58,25 @@
   function selectedPcLabel() {
     const select = $('windows-device-select');
     const option = select?.selectedOptions?.[0];
-    return option?.textContent?.replace(/\s·\s(?:Directo|Firebase|En línea|Standby|Sin respuesta|No disponible).*$/i, '').trim() || 'PC seleccionado';
+    return option?.textContent?.replace(/\s·\s(?:Directo|Firebase|En línea|Standby|Reconectando|Sin respuesta|No disponible).*$/i, '').trim() || 'PC seleccionado';
   }
 
   function selectedTvLabel() {
     const select = $('startab-tv-device-select');
     const option = select?.selectedOptions?.[0];
-    return option?.textContent?.replace(/\s·\s(?:Directo|Firebase|Standby|Sin respuesta|No disponible|sin conexión)$/i, '').trim() || 'Google TV';
+    return option?.textContent?.replace(/\s·\s(?:Directo|Firebase|Standby|Reconectando|Sin respuesta|No disponible|sin conexión)$/i, '').trim() || 'Google TV';
   }
 
   async function setMediaWindowsWatcher(active) {
     const user = currentUser();
     const id = selectedWindowsDeviceId();
     if (state.windowsWatchedId && (!active || state.windowsWatchedId !== id)) {
-      try { await globalThis.StarTabPresence?.setWatcher?.(user?.uid || '', 'windows', state.windowsWatchedId, false); } catch (_) {}
+      try { await globalThis.StarTabPresence?.setWatcher?.(user?.uid || '', 'windows', state.windowsWatchedId, false, 'control-media'); } catch (_) {}
       state.windowsWatchedId = '';
     }
     if (!active || !user?.uid || !id || document.hidden) return;
     state.windowsWatchedId = id;
-    try { await globalThis.StarTabPresence?.setWatcher?.(user.uid, 'windows', id, true); } catch (_) {}
+    try { await globalThis.StarTabPresence?.setWatcher?.(user.uid, 'windows', id, true, 'control-media'); } catch (_) {}
   }
 
   function makeNavButton(mode, label, icon) {
@@ -368,8 +368,10 @@
     const card = $('windows-system-volume');
     const statusText = $('windows-volume-status-text')?.textContent || '';
     const data = card?.dataset.state || 'empty';
+    if (/reconectando/i.test(statusText)) return { key: 'unresponsive', text: 'Reconectando' };
     if (/sin respuesta/i.test(statusText)) return { key: 'unresponsive', text: 'Sin respuesta' };
     if (/standby/i.test(statusText)) return { key: 'standby', text: 'Standby' };
+    if (data === 'syncing' || /confirmando presencia|agente cloud vinculado/i.test(statusText)) return { key: 'unresponsive', text: 'Firebase' };
     if (data === 'online') return { key: 'online', text: 'En línea' };
     if (data === 'signed-out') return { key: 'offline', text: 'Sin sesión' };
     if (data === 'empty') return { key: 'offline', text: 'Sin PC seleccionado' };
@@ -379,6 +381,7 @@
   function tvStatus() {
     const title = $('startab-tv-status-title')?.textContent || '';
     const led = $('startab-tv-led')?.dataset.state || 'idle';
+    if (/reconectando/i.test(title)) return { key: 'unresponsive', text: 'Reconectando' };
     if (/sin respuesta/i.test(title)) return { key: 'unresponsive', text: 'Sin respuesta' };
     if (/standby/i.test(title)) return { key: 'standby', text: 'Standby' };
     if (led === 'direct' || led === 'firebase') return { key: 'online', text: title || 'En línea' };
