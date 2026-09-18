@@ -22,6 +22,9 @@
     headerDeviceHost: null,
     headerPcShell: null,
     headerTvShell: null,
+    globalPresenceUid: '',
+    globalPresenceWindowsUnsub: null,
+    globalPresenceTvUnsub: null,
   };
 
   const $ = (id) => document.getElementById(id);
@@ -65,6 +68,26 @@
     const select = $('startab-tv-device-select');
     const option = select?.selectedOptions?.[0];
     return option?.textContent?.replace(/\s·\s(?:Directo|Firebase|Standby|Reconectando|Sin respuesta|No disponible|sin conexión)$/i, '').trim() || 'Google TV';
+  }
+
+  function ensureGlobalPresenceSubscriptions() {
+    const user = currentUser();
+    const uid = String(user?.uid || '');
+    if (!globalThis.StarTabPresence?.watchType) return;
+    if (!globalThis.StarTabPresence?.ensure?.()) return;
+    if (uid === state.globalPresenceUid && state.globalPresenceWindowsUnsub && state.globalPresenceTvUnsub) return;
+    try { state.globalPresenceWindowsUnsub?.(); } catch (_) {}
+    try { state.globalPresenceTvUnsub?.(); } catch (_) {}
+    state.globalPresenceWindowsUnsub = null;
+    state.globalPresenceTvUnsub = null;
+    state.globalPresenceUid = uid;
+    if (!uid) return;
+    const refresh = () => {
+      ensureEmbedded();
+      updateStatuses();
+    };
+    state.globalPresenceWindowsUnsub = globalThis.StarTabPresence.watchType(uid, 'windows', refresh);
+    state.globalPresenceTvUnsub = globalThis.StarTabPresence.watchType(uid, 'tv', refresh);
   }
 
   async function setMediaWindowsWatcher(active) {
@@ -410,6 +433,7 @@
   }
 
   function updateStatuses() {
+    ensureGlobalPresenceSubscriptions();
     enhanceVolumeToggle();
     const pc = pcStatus();
     const tv = tvStatus();
@@ -490,8 +514,9 @@
 
     state.statusTimer = window.setInterval(() => {
       ensureEmbedded();
+      ensureGlobalPresenceSubscriptions();
       updateStatuses();
-    }, 650);
+    }, 900);
   }
 
   function relabel() {

@@ -9,7 +9,7 @@
   const CONTROL_LOCAL_HOLD_MS = 2400;
   const NAV_REPEAT_SLOW_MS = 700;
   const NAV_REPEAT_FAST_MS = 300;
-  const LAN_HEALTH_PING_MS = 1_000;
+  const LAN_HEALTH_PING_MS = 2_000;
   const LAN_HEALTH_REPLY_TIMEOUT_MS = 700;
   const LAN_UNRESPONSIVE_FAILURES = 2;
   const LAN_OFFLINE_FAILURES = 3;
@@ -28,7 +28,7 @@
     cameraStream: null, scannerActive: false, scanTimer: 0, scanBusy: false, barcodeDetector: null,
     availableApps: [], appSearch: '', wsKeepAlive: 0, firebaseSessionTimer: 0, modalOpen: false, keyboardBuffer: '', keyboardTimer: 0,
     unsubscribePresence: null, realtimeCommandOk: null,
-    lanHealth: '', lanFailures: 0, lanLastAliveAt: 0, lanTrackedDeviceId: '',
+    lanHealth: '', lanFailures: 0, lanLastAliveAt: 0, lanTrackedDeviceId: '', preconnectTimer: 0,
   };
   const dom = {};
   const $ = id => document.getElementById(id);
@@ -878,15 +878,34 @@
     setTimeout(() => render(), 2600);
   }
 
+  function mobileDirectWarmEnabled() {
+    try { return !document.hidden && window.matchMedia?.('(max-width: 760px), (hover: none) and (pointer: coarse)')?.matches; }
+    catch (_) { return false; }
+  }
+
+  function shouldKeepLocalWarm() {
+    return state.modalOpen || mobileDirectWarmEnabled();
+  }
+
+  function scheduleLocalReconnect(delay = 850) {
+    clearTimeout(state.preconnectTimer);
+    state.preconnectTimer = 0;
+    if (!shouldKeepLocalWarm() || !state.selectedId || state.wsReady || state.wsConnecting) return;
+    state.preconnectTimer = setTimeout(() => {
+      state.preconnectTimer = 0;
+      connectSelectedLocal();
+    }, Math.max(350, Number(delay) || 850));
+  }
+
   function connectSelectedLocal() {
-    if (!state.modalOpen) return;
+    if (!shouldKeepLocalWarm()) return;
     const d = selectedDevice(); if (!d || state.wsConnecting || state.wsReady) return;
     const { ip, port, secret } = localEndpoint(d); if (!ip || !secret) return;
     state.wsConnecting = true;
     let ws;
     try { ws = new WebSocket(`ws://${ip}:${port}`); } catch (_) { state.wsConnecting = false; markLanFailure(); return; }
     state.ws = ws;
-    const timer = setTimeout(() => { try { ws.close(); } catch (_) {} }, 900);
+    const timer = setTimeout(() => { try { ws.close(); } catch (_) {} }, 1800);
     ws.onopen = () => { clearTimeout(timer); ws.send(JSON.stringify({ type:'hello', secret })); };
     ws.onmessage = ev => {
       markLanAlive();
@@ -916,6 +935,7 @@
         clearInterval(state.wsKeepAlive); state.wsKeepAlive = 0;
         markLanFailure();
         render();
+        scheduleLocalReconnect(state.modalOpen ? 650 : 1200);
       }
     };
   }
@@ -1062,8 +1082,7 @@
     // y la orden llega apenas cambia el nodo. Firestore queda como fallback compatible.
     const pstatus = presenceStatus(d);
     const preferRealtime = globalThis.StarTabPresence?.isRealtimeConnected?.() === true
-      && pstatus?.state === 'online'
-      && pstatus?.source === 'rtdb';
+      && pstatus?.commandable !== false;
     if (preferRealtime && globalThis.StarTabPresence?.sendTvCommand) {
       try {
         const realtimeOk = await globalThis.StarTabPresence.sendTvCommand(uid(), d.deviceId, payload, leaseMs);
@@ -1378,7 +1397,7 @@
   function bindUi() {
     dom.toggle = $('startab-tv-toggle');
     dom.toggle?.addEventListener('click',()=>{ state.modalOpen=true; dom.modal?.classList.add('is-open'); dom.modal?.setAttribute('aria-hidden','false'); document.documentElement.classList.add('startab-tv-modal-open'); connectSelectedLocal(); startFirebaseSessionLease(); render(); });
-    const close=()=>{ state.modalOpen=false; stopFirebaseSessionLease(); closeWs(); stopQrScanner(); closeAddModal(); closeAppsModal(); closeAppEditor(); closeAppContext(); closeKeyboard(); dom.modal?.classList.remove('is-open'); dom.modal?.setAttribute('aria-hidden','true'); document.documentElement.classList.remove('startab-tv-modal-open'); };
+    const close=()=>{ state.modalOpen=false; stopFirebaseSessionLease(); if (!mobileDirectWarmEnabled()) closeWs(); else scheduleLocalReconnect(450); stopQrScanner(); closeAddModal(); closeAppsModal(); closeAppEditor(); closeAppContext(); closeKeyboard(); dom.modal?.classList.remove('is-open'); dom.modal?.setAttribute('aria-hidden','true'); document.documentElement.classList.remove('startab-tv-modal-open'); };
     dom.close?.addEventListener('click',close); dom.backdrop?.addEventListener('click',close);
 
     dom.add?.addEventListener('click',openAddModal); dom.addClose?.addEventListener('click',closeAddModal); dom.addLayer?.querySelector('.startab-tv-layer-backdrop')?.addEventListener('click',closeAddModal);
@@ -1441,17 +1460,22 @@
       if (dom.modal?.classList.contains('is-open')) { close(); e.preventDefault(); }
     });
     document.addEventListener('visibilitychange',()=>{
-      if (!state.modalOpen) return;
       if (document.hidden) {
-        const d=selectedDevice(); if(d&&uid()) void globalThis.StarTabPresence?.setWatcher?.(uid(),'tv',d.deviceId,false,'tv-control');
-      } else startFirebaseSessionLease();
+        if (state.modalOpen) {
+          const d=selectedDevice(); if(d&&uid()) void globalThis.StarTabPresence?.setWatcher?.(uid(),'tv',d.deviceId,false,'tv-control');
+        }
+        if (!state.modalOpen) closeWs();
+      } else {
+        if (state.modalOpen) startFirebaseSessionLease();
+        if (shouldKeepLocalWarm()) scheduleLocalReconnect(120);
+      }
     });
     bindNavTouch();
   }
 
   function boot() {
     injectUi(); state.selectedId=localStorage.getItem(SELECTED_KEY)||''; initFirebase();
-    setInterval(()=>{if(state.modalOpen&&state.selectedId&&!state.wsReady)connectSelectedLocal();},1000);
+    setInterval(()=>{if(shouldKeepLocalWarm()&&state.selectedId&&!state.wsReady&&!state.wsConnecting)connectSelectedLocal();},1500);
     setInterval(()=>{if(dom.modal?.classList.contains('is-open'))render();},1000);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, {once:true}); else boot();

@@ -368,8 +368,7 @@
     };
     const routePresence = presenceStatus(device);
     const preferRealtime = globalThis.StarTabPresence?.isRealtimeConnected?.() === true
-      && routePresence?.state === 'online'
-      && routePresence?.source === 'rtdb';
+      && routePresence?.commandable !== false;
     if (preferRealtime && globalThis.StarTabPresence?.sendWindowsCommand) {
       try {
         const realtimeOk = await globalThis.StarTabPresence.sendWindowsCommand(state.user.uid, device.deviceId, realtimePayload, 20_000);
