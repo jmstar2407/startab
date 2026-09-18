@@ -9,6 +9,10 @@
   const CONTROL_LOCAL_HOLD_MS = 2400;
   const NAV_REPEAT_SLOW_MS = 700;
   const NAV_REPEAT_FAST_MS = 300;
+  const LAN_HEALTH_PING_MS = 1_000;
+  const LAN_HEALTH_REPLY_TIMEOUT_MS = 700;
+  const LAN_UNRESPONSIVE_FAILURES = 2;
+  const LAN_OFFLINE_FAILURES = 3;
   const state = {
     db: null, auth: null, user: null, devices: new Map(), unsubscribe: null,
     selectedId: '', ws: null, wsReady: false, wsConnecting: false,
@@ -24,6 +28,7 @@
     cameraStream: null, scannerActive: false, scanTimer: 0, scanBusy: false, barcodeDetector: null,
     availableApps: [], appSearch: '', wsKeepAlive: 0, firebaseSessionTimer: 0, modalOpen: false, keyboardBuffer: '', keyboardTimer: 0,
     unsubscribePresence: null, realtimeCommandOk: null,
+    lanHealth: '', lanFailures: 0, lanLastAliveAt: 0, lanTrackedDeviceId: '',
   };
   const dom = {};
   const $ = id => document.getElementById(id);
@@ -108,6 +113,13 @@
             </div>
 
             <div class="startab-tv-remote-content" id="startab-tv-remote-content">
+              <form class="windows-touchpad-keyboard startab-tv-keyboard-bar is-ready" id="startab-tv-keyboard-bar" autocomplete="off">
+                <label class="windows-touchpad-keyboard-shell startab-tv-keyboard-shell" for="startab-tv-keyboard-input">
+                  <span class="windows-touchpad-keyboard-icon" aria-hidden="true">${ICONS.keyboard}</span>
+                  <input id="startab-tv-keyboard-input" type="text" inputmode="text" enterkeyhint="enter" autocomplete="off" autocorrect="off" autocapitalize="sentences" spellcheck="false" placeholder="Escribe en el Google TV…" aria-label="Teclado remoto de Google TV">
+                  <span class="windows-touchpad-keyboard-state" id="startab-tv-keyboard-state">TECLADO TV</span>
+                </label>
+              </form>
               <div class="startab-tv-navigation-stage startab-tv-gesture-stage">
                 <button class="startab-tv-round-action startab-tv-power" id="startab-tv-power" type="button" data-tv-control aria-label="Encender o apagar TV" title="Power">${ICONS.power}<span>Power</span></button>
 
@@ -124,7 +136,6 @@
 
                 <div class="startab-tv-side-actions is-right">
                   <button class="startab-tv-round-action startab-tv-input" id="startab-tv-input" type="button" data-tv-control aria-label="Cambiar entrada o fuente" title="Input">${ICONS.input}<span>Input</span></button>
-                  <button class="startab-tv-round-action startab-tv-keyboard" id="startab-tv-keyboard" type="button" data-tv-control aria-label="Teclado remoto" title="Teclado remoto">${ICONS.keyboard}<span>Teclado</span></button>
                 </div>
               </div>
 
@@ -222,7 +233,6 @@
 
         <div class="startab-tv-app-context" id="startab-tv-app-context" aria-hidden="true"><button id="startab-tv-app-context-edit" type="button">Editar</button></div>
 
-        <textarea id="startab-tv-keyboard-input" class="startab-tv-native-keyboard-capture" rows="1" inputmode="text" enterkeyhint="enter" autocomplete="off" autocorrect="off" autocapitalize="sentences" spellcheck="false" aria-label="Teclado remoto de Google TV"></textarea>
         <div class="startab-tv-scanner" id="startab-tv-scanner" aria-hidden="true">
           <div class="startab-tv-scanner-backdrop"></div>
           <section class="startab-tv-scanner-card" role="dialog" aria-modal="true" aria-labelledby="startab-tv-scanner-title">
@@ -245,7 +255,7 @@
       'add','add-layer','add-close','scan-btn','pair-ip','pair-pin','pair-btn',
       'apps-layer','apps-close','app-search','apps-list',
       'app-edit-layer','app-edit-close','app-edit-file','app-edit-preview','app-edit-save','app-edit-reset','app-context','app-context-edit',
-      'keyboard-layer','keyboard-close','keyboard-input','keyboard-backspace','keyboard-enter',
+      'keyboard-bar','keyboard-state','keyboard-layer','keyboard-close','keyboard-input','keyboard-backspace','keyboard-enter',
       'scanner','scanner-video','scanner-note','scanner-close','scanner-cancel'
     ];
     ids.forEach(k => {
@@ -264,8 +274,12 @@
   function presenceStatus(d = selectedDevice()) {
     if (!d) return { state:'offline', online:false, source:'none' };
     const userId = uid();
-    const adaptive = globalThis.StarTabPresence?.status?.(userId, 'tv', d.deviceId || state.selectedId, d, {
-      localConnected: state.wsReady && (d.deviceId || state.selectedId) === state.selectedId,
+    const deviceId = d.deviceId || state.selectedId;
+    const useLanHealth = state.modalOpen && state.lanTrackedDeviceId === deviceId && !!state.lanHealth;
+    const adaptive = globalThis.StarTabPresence?.status?.(userId, 'tv', deviceId, d, {
+      localConnected: state.wsReady && deviceId === state.selectedId,
+      localState: useLanHealth ? state.lanHealth : '',
+      localAge: useLanHealth && state.lanLastAliveAt ? Date.now() - state.lanLastAliveAt : 0,
       aggressive: state.modalOpen && !document.hidden,
     });
     if (adaptive) return adaptive;
@@ -714,15 +728,54 @@
     }, () => render());
   }
 
+  function resetLanTracking() {
+    state.lanHealth = '';
+    state.lanFailures = 0;
+    state.lanLastAliveAt = 0;
+    state.lanTrackedDeviceId = '';
+  }
+
+  function markLanAlive() {
+    const was = state.lanHealth;
+    state.lanTrackedDeviceId = state.selectedId;
+    state.lanLastAliveAt = Date.now();
+    state.lanFailures = 0;
+    state.lanHealth = 'online';
+    if (was && was !== 'online' && state.modalOpen) render();
+  }
+
+  function markLanFailure() {
+    if (!state.modalOpen || !state.selectedId) return;
+    if (state.lanTrackedDeviceId && state.lanTrackedDeviceId !== state.selectedId) resetLanTracking();
+    state.lanTrackedDeviceId = state.selectedId;
+    state.lanFailures = Math.min(LAN_OFFLINE_FAILURES, state.lanFailures + 1);
+    const next = state.lanFailures >= LAN_OFFLINE_FAILURES
+      ? 'offline'
+      : (state.lanFailures >= LAN_UNRESPONSIVE_FAILURES ? 'unresponsive' : 'online');
+    if (state.lanHealth !== next) {
+      state.lanHealth = next;
+      render();
+    }
+  }
+
   function closeWs() {
     state.wsReady = false; state.wsConnecting = false;
     clearInterval(state.wsKeepAlive); state.wsKeepAlive = 0;
     try { state.ws?.close(); } catch (_) {} state.ws = null;
+    resetLanTracking();
   }
 
   function startWsKeepAlive() {
     clearInterval(state.wsKeepAlive);
-    state.wsKeepAlive = setInterval(() => { if (state.wsReady) wsSend({ t:'ping' }); }, 12000);
+    state.wsKeepAlive = setInterval(() => {
+      if (!state.wsReady || state.ws?.readyState !== WebSocket.OPEN) return;
+      const probeAt = Date.now();
+      if (!wsSend({ t:'ping', id:`lan-health-${probeAt}` })) { markLanFailure(); return; }
+      window.setTimeout(() => {
+        if (!state.modalOpen || state.lanTrackedDeviceId !== state.selectedId) return;
+        if (state.lanLastAliveAt < probeAt) markLanFailure();
+      }, LAN_HEALTH_REPLY_TIMEOUT_MS);
+    }, LAN_HEALTH_PING_MS);
   }
 
   function localEndpoint(device) {
@@ -766,11 +819,12 @@
     const { ip, port, secret } = localEndpoint(d); if (!ip || !secret) return;
     state.wsConnecting = true;
     let ws;
-    try { ws = new WebSocket(`ws://${ip}:${port}`); } catch (_) { state.wsConnecting = false; return; }
+    try { ws = new WebSocket(`ws://${ip}:${port}`); } catch (_) { state.wsConnecting = false; markLanFailure(); return; }
     state.ws = ws;
-    const timer = setTimeout(() => { try { ws.close(); } catch (_) {} }, 1600);
+    const timer = setTimeout(() => { try { ws.close(); } catch (_) {} }, 900);
     ws.onopen = () => { clearTimeout(timer); ws.send(JSON.stringify({ type:'hello', secret })); };
     ws.onmessage = ev => {
+      markLanAlive();
       try {
         const data = JSON.parse(ev.data || '{}');
         if (data.type === 'state' && data.ok) {
@@ -790,7 +844,15 @@
       } catch (_) {}
     };
     ws.onerror = () => {};
-    ws.onclose = () => { clearTimeout(timer); if (state.ws === ws) { state.ws = null; state.wsReady = false; state.wsConnecting = false; clearInterval(state.wsKeepAlive); state.wsKeepAlive=0; render(); } };
+    ws.onclose = () => {
+      clearTimeout(timer);
+      if (state.ws === ws) {
+        state.ws = null; state.wsReady = false; state.wsConnecting = false;
+        clearInterval(state.wsKeepAlive); state.wsKeepAlive = 0;
+        markLanFailure();
+        render();
+      }
+    };
   }
 
   function wsSend(obj) {
@@ -1267,6 +1329,7 @@
     });
     dom.input?.addEventListener('click',()=>sendAction('input'));
     dom.keyboard?.addEventListener('click',openKeyboard);
+    dom.keyboardBar?.addEventListener('submit',e=>e.preventDefault());
     const sendKeyboardEnter=()=>{const now=Date.now();if(now-(state.lastKeyboardEnterAt||0)<120)return;state.lastKeyboardEnterAt=now;sendKeyboardKey('enter');};
     dom.keyboardInput?.addEventListener('beforeinput',e=>{if(e.inputType==='insertLineBreak'||e.inputType==='insertParagraph'){e.preventDefault();sendKeyboardEnter();}});
     dom.keyboardInput?.addEventListener('input',handleKeyboardInput);
@@ -1303,8 +1366,8 @@
 
   function boot() {
     injectUi(); state.selectedId=localStorage.getItem(SELECTED_KEY)||''; initFirebase();
-    setInterval(()=>{if(state.modalOpen&&state.selectedId&&!state.wsReady)connectSelectedLocal();},1200);
-    setInterval(()=>{if(dom.modal?.classList.contains('is-open'))render();},10000);
+    setInterval(()=>{if(state.modalOpen&&state.selectedId&&!state.wsReady)connectSelectedLocal();},1000);
+    setInterval(()=>{if(dom.modal?.classList.contains('is-open'))render();},1000);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, {once:true}); else boot();
 })();

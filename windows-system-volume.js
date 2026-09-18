@@ -440,8 +440,19 @@
         if (stored?.uid === state.user?.uid && state.devices.has(stored.deviceId)) desired = stored.deviceId;
       } catch (_) {}
     }
+    const nativeDevice = state.native.deviceId
+      ? devices.find((device) => String(device.deviceId) === String(state.native.deviceId))
+      : null;
+    if (desired && nativeDevice && String(desired) !== String(nativeDevice.deviceId)) {
+      const desiredDevice = state.devices.get(desired);
+      const sameMachineName = String(desiredDevice?.deviceName || '').trim().toLowerCase()
+        && String(desiredDevice?.deviceName || '').trim().toLowerCase() === String(nativeDevice.deviceName || state.native.deviceName || '').trim().toLowerCase();
+      // Auto-heal a stale document id left by an old agent installation, but
+      // never override an explicitly selected remote PC with a different name.
+      if (sameMachineName && !isDeviceOnline(desiredDevice) && isDeviceOnline(nativeDevice)) desired = nativeDevice.deviceId;
+    }
     if (!desired || !state.devices.has(desired)) {
-      desired = devices.find((device) => device.deviceId === state.native.deviceId)?.deviceId
+      desired = nativeDevice?.deviceId
         || devices.find(isDeviceOnline)?.deviceId
         || devices[0].deviceId;
     }
@@ -591,9 +602,53 @@
     }
   }
 
-  async function sendCommand(action, value = null) {
+  function isLocalNativeTarget(device = selectedDevice()) {
+    return !!(
+      device?.deviceId
+      && state.native.connected
+      && state.native.deviceId
+      && String(device.deviceId) === String(state.native.deviceId)
+      && isExtension
+      && isWindows
+    );
+  }
+
+  function nativeCommandFor(action, value = null, options = {}) {
+    if (action === 'setVolume') return { type: 'setVolume', value: clamp(value, 0, 100) };
+    if (action === 'setMute') return { type: 'setMute', muted: !!options.muted };
+    if (action === 'toggleMute') return { type: 'toggleMute' };
+    if (action === 'step') return { type: 'step', delta: clamp(value, -100, 100) };
+    return null;
+  }
+
+  async function sendNativeCommand(command) {
+    if (!command || !isExtension || !globalThis.chrome?.runtime?.sendMessage) return false;
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: 'STARTAB_WINDOWS_NATIVE_COMMAND',
+        command,
+      });
+      return !!response?.ok;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  async function sendCommand(action, value = null, options = {}) {
     const device = selectedDevice();
-    if (!state.user?.uid || !state.db || !device || !isDeviceOnline(device)) return false;
+    if (!state.user?.uid || !device) return false;
+
+    // Fast path: if the selected PC is this Windows machine, do NOT touch
+    // Firestore. Native Messaging is lower latency and produces zero cloud
+    // command reads/writes for local volume changes.
+    if (isLocalNativeTarget(device)) {
+      const nativeCommand = nativeCommandFor(action, value, options);
+      if (nativeCommand && await sendNativeCommand(nativeCommand)) return true;
+      // If the native port briefly drops, fall through to the remote path so
+      // control can still work through the standalone cloud agent.
+    }
+
+    if (!state.db || !isDeviceOnline(device)) return false;
 
     const command = {
       id: `${Date.now().toString(36)}-${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}`,
@@ -605,6 +660,7 @@
       serverAt: firebase.firestore.FieldValue.serverTimestamp(),
     };
     if (Number.isFinite(Number(value))) command.value = Number(value);
+    if (action === 'setMute') command.muted = !!options.muted;
 
     try {
       await state.db
@@ -765,7 +821,7 @@
       globalThis.StartabHaptics?.mute?.(nextMuted);
       holdOptimisticState({ muted: nextMuted });
       render();
-      const ok = await sendCommand('toggleMute');
+      const ok = await sendCommand('setMute', null, { muted: nextMuted });
       if (!ok) { clearOptimisticState(); render(); }
     });
 
@@ -801,7 +857,7 @@
       globalThis.StartabHaptics?.mute?.(nextMuted);
       holdOptimisticState({ muted: nextMuted });
       render();
-      const ok = await sendCommand('toggleMute');
+      const ok = await sendCommand('setMute', null, { muted: nextMuted });
       if (!ok) { clearOptimisticState(); render(); }
     });
     const stepVolume = (delta) => {

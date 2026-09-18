@@ -6,8 +6,10 @@
   const WATCH_TTL_MS = 32_000;
   const ONLINE_FRESH_MS = 65_000;
   const UNRESPONSIVE_MS = 105_000;
-  const ACTIVE_ONLINE_FRESH_MS = 25_000;
-  const ACTIVE_UNRESPONSIVE_MS = 45_000;
+  // Panel visible: presencia agresiva. El agente publica cada ~3 s; damos
+  // margen para jitter sin convertir un retraso aislado en un falso offline.
+  const ACTIVE_ONLINE_FRESH_MS = 6_000;
+  const ACTIVE_UNRESPONSIVE_MS = 10_000;
   const FIRESTORE_FALLBACK_STALE_MS = 120_000;
 
   const cache = new Map();
@@ -110,6 +112,16 @@
 
   function status(uid, type, deviceId, firestoreDevice, options = {}) {
     const now = Date.now();
+    const localState = String(options.localState || '');
+    if (['online', 'unresponsive', 'offline'].includes(localState)) {
+      return {
+        state: localState,
+        online: localState === 'online',
+        source: 'lan',
+        age: Number(options.localAge || 0),
+        connected,
+      };
+    }
     if (options.localConnected) {
       return { state: 'online', online: true, source: 'lan', age: 0, connected };
     }

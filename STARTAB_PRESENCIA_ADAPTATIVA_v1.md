@@ -16,7 +16,7 @@ Cuando el panel de un dispositivo está abierto y la página está visible, Star
 - Panel abierto: presencia del dispositivo ~cada **10 s**.
 - Panel cerrado/inactivo: presencia ~cada **45 s**.
 - Watcher web: se renueva ~cada **12 s** y expira solo.
-- Con el panel abierto, una presencia de hasta **25 s** se considera fresca; entre **25–45 s** se muestra **Sin respuesta** y después pasa a **No disponible** (salvo que LAN siga respondiendo).
+- Con el panel abierto, los agentes publican presencia aproximadamente cada **3 s**; hasta **6 s** se considera fresca, después se muestra **Sin respuesta** y a partir de ~**10 s** pasa a **No disponible** (salvo que LAN siga respondiendo).
 - Con el panel cerrado, la ventana se relaja: hasta **65 s** se considera fresca; entre **65–105 s** se muestra **Sin respuesta** y después **No disponible**.
 
 ## Estados

@@ -20,6 +20,7 @@
     unsubscribeDevice: null,
     unsubscribePresence: null,
     refreshTimer: 0,
+    statusTimer: 0,
     confirmAction: '',
     confirmTimer: 0,
     commandChain: Promise.resolve(),
@@ -27,6 +28,7 @@
     rgbBusy: false,
     rgbOptimistic: null,
     rgbOptimisticTimer: 0,
+    hotspotPendingEnabled: null,
   };
 
   const dom = {};
@@ -56,7 +58,14 @@
     dom.hotspot = $('windows-pc-hotspot');
     dom.hotspotState = $('windows-pc-hotspot-state');
     dom.hotspotNote = $('windows-pc-hotspot-note');
+    dom.hotspotConfirmModal = $('windows-hotspot-confirm-modal');
+    dom.hotspotConfirmBackdrop = $('windows-hotspot-confirm-backdrop');
+    dom.hotspotConfirmCancel = $('windows-hotspot-confirm-cancel');
+    dom.hotspotConfirmAction = $('windows-hotspot-confirm-action');
+    dom.hotspotConfirmTitle = $('windows-hotspot-confirm-title');
+    dom.hotspotConfirmCopy = $('windows-hotspot-confirm-copy');
     dom.rgb = $('windows-pc-rgb');
+    dom.rgbConfig = $('windows-pc-rgb-config');
     dom.rgbPower = $('windows-pc-rgb-power');
     dom.rgbState = $('windows-pc-rgb-state');
     dom.rgbNote = $('windows-pc-rgb-note');
@@ -65,6 +74,11 @@
     dom.rgbHex = $('windows-pc-rgb-hex');
     dom.rgbTransport = $('windows-pc-rgb-transport');
     dom.rgbSwatches = $('windows-pc-rgb-swatches');
+    dom.rgbConfigModal = $('windows-rgb-config-modal');
+    dom.rgbConfigBackdrop = $('windows-rgb-config-backdrop');
+    dom.rgbConfigClose = $('windows-rgb-config-close');
+    dom.rgbModalPower = $('windows-rgb-modal-power');
+    dom.rgbModalPowerLabel = $('windows-rgb-modal-power-label');
     dom.note = $('windows-pc-control-note');
     dom.deviceSelect = $('windows-device-select');
   }
@@ -244,7 +258,16 @@
     if (dom.rgbPower) {
       dom.rgbPower.disabled = !rgbAvailable || state.rgbBusy;
       dom.rgbPower.setAttribute('aria-pressed', rgbState === 'on' ? 'true' : 'false');
+      const label = dom.rgbPower.querySelector('span');
+      if (label) label.textContent = rgbState === 'on' ? 'Apagar' : 'Encender';
     }
+    if (dom.rgbConfig) dom.rgbConfig.disabled = !rgbAvailable || state.rgbBusy;
+    if (dom.rgbModalPower) {
+      dom.rgbModalPower.disabled = !rgbAvailable || state.rgbBusy;
+      dom.rgbModalPower.setAttribute('aria-pressed', rgbState === 'on' ? 'true' : 'false');
+      dom.rgbModalPower.classList.toggle('is-on', rgbState === 'on');
+    }
+    if (dom.rgbModalPowerLabel) dom.rgbModalPowerLabel.textContent = rgbState === 'on' ? 'Apagar' : 'Encender';
     if (dom.rgbState) dom.rgbState.textContent = rgbState === 'on' ? 'ON' : rgbState === 'off' ? 'OFF' : '--';
     if (dom.rgbTransport) {
       const transport = String(device?.rgbTransport || '').toLowerCase();
@@ -359,7 +382,7 @@
     if (!dom.modal || state.open) return;
     state.open = true;
     clearConfirmation();
-    if (dom.modal.parentElement !== document.body) document.body.appendChild(dom.modal);
+    if (!dom.modal.classList.contains('startab-control-embedded') && dom.modal.parentElement !== document.body) document.body.appendChild(dom.modal);
     dom.modal.style.zIndex = '2147483647';
     dom.modal.classList.add('is-open');
     dom.modal.setAttribute('aria-hidden', 'false');
@@ -372,14 +395,22 @@
       if (state.open && versionAtLeast(state.lastDevice?.agentVersion) && isOnline(state.lastDevice)) void sendCommand('getSystemState');
     }, 120);
     scheduleRefresh();
+    clearInterval(state.statusTimer);
+    state.statusTimer = window.setInterval(() => {
+      if (state.open && state.lastDevice) render(state.lastDevice);
+    }, 1_000);
   }
 
   function closeModal() {
     if (!state.open) return;
+    closeHotspotConfirm();
+    closeRgbConfig();
     state.open = false;
     clearConfirmation();
     clearInterval(state.refreshTimer);
     state.refreshTimer = 0;
+    clearInterval(state.statusTimer);
+    state.statusTimer = 0;
     const watchedId = state.deviceId || selectedDeviceId();
     if (watchedId && currentUser()?.uid) void globalThis.StarTabPresence?.setWatcher?.(currentUser().uid, 'windows', watchedId, false);
     stopDeviceListener();
@@ -426,10 +457,36 @@
     }
   }
 
-  async function toggleHotspot() {
+  function closeHotspotConfirm() {
+    state.hotspotPendingEnabled = null;
+    dom.hotspotConfirmModal?.classList.remove('is-open');
+    dom.hotspotConfirmModal?.setAttribute('aria-hidden', 'true');
+  }
+
+  function openHotspotConfirm() {
+    if (!dom.hotspot || dom.hotspot.disabled) return;
+    const current = normalizeHotspotState(state.lastDevice?.hotspotState);
+    const enabled = current !== 'on';
+    state.hotspotPendingEnabled = enabled;
+    if (dom.hotspotConfirmTitle) dom.hotspotConfirmTitle.textContent = enabled ? '¿Encender Mobile Hotspot?' : '¿Apagar Mobile Hotspot?';
+    if (dom.hotspotConfirmCopy) {
+      dom.hotspotConfirmCopy.textContent = enabled
+        ? 'El PC seleccionado empezará a compartir su conexión de red mediante el hotspot de Windows.'
+        : 'Se detendrá el hotspot de Windows y los dispositivos conectados perderán esa conexión.';
+    }
+    if (dom.hotspotConfirmAction) {
+      dom.hotspotConfirmAction.textContent = enabled ? 'Encender hotspot' : 'Apagar hotspot';
+      dom.hotspotConfirmAction.classList.toggle('is-danger', !enabled);
+    }
+    dom.hotspotConfirmModal?.classList.add('is-open');
+    dom.hotspotConfirmModal?.setAttribute('aria-hidden', 'false');
+    globalThis.StartabHaptics?.pulse?.('pc-hotspot-confirm', enabled ? 10 : 8, 55);
+  }
+
+  async function toggleHotspot(desiredEnabled = null) {
     const device = state.lastDevice;
     const current = normalizeHotspotState(device?.hotspotState);
-    const enabled = current !== 'on';
+    const enabled = typeof desiredEnabled === 'boolean' ? desiredEnabled : current !== 'on';
     if (!dom.hotspot || dom.hotspot.disabled) return;
     dom.hotspot.classList.add('is-sending');
     dom.hotspot.disabled = true;
@@ -446,6 +503,18 @@
     window.setTimeout(() => {
       if (state.open) void sendCommand('getSystemState');
     }, 900);
+  }
+
+  function openRgbConfig() {
+    if (!dom.rgbConfig || dom.rgbConfig.disabled) return;
+    dom.rgbConfigModal?.classList.add('is-open');
+    dom.rgbConfigModal?.setAttribute('aria-hidden', 'false');
+    globalThis.StartabHaptics?.pulse?.('pc-rgb-config-open', 6, 45);
+  }
+
+  function closeRgbConfig() {
+    dom.rgbConfigModal?.classList.remove('is-open');
+    dom.rgbConfigModal?.setAttribute('aria-hidden', 'true');
   }
 
   async function tryLocalRgbFastPath(enabled, color, intent = 'power') {
@@ -488,7 +557,16 @@
       dom.rgb.style.setProperty('--active-rgb', normalized);
     }
     if (dom.rgbState) dom.rgbState.textContent = enabled ? 'ON' : 'OFF';
-    if (dom.rgbPower) dom.rgbPower.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+    if (dom.rgbPower) {
+      dom.rgbPower.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+      const label = dom.rgbPower.querySelector('span');
+      if (label) label.textContent = enabled ? 'Apagar' : 'Encender';
+    }
+    if (dom.rgbModalPower) {
+      dom.rgbModalPower.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+      dom.rgbModalPower.classList.toggle('is-on', enabled);
+    }
+    if (dom.rgbModalPowerLabel) dom.rgbModalPowerLabel.textContent = enabled ? 'Apagar' : 'Encender';
     if (dom.rgbNote) dom.rgbNote.textContent = enabled ? `Aplicando ${normalized}…` : 'Apagando todas las luces…';
   }
 
@@ -535,8 +613,19 @@
       if (!button || button.disabled) return;
       void runSystemAction(button);
     });
-    dom.hotspot?.addEventListener('click', () => void toggleHotspot());
+    dom.hotspot?.addEventListener('click', openHotspotConfirm);
+    dom.hotspotConfirmCancel?.addEventListener('click', closeHotspotConfirm);
+    dom.hotspotConfirmBackdrop?.addEventListener('click', closeHotspotConfirm);
+    dom.hotspotConfirmAction?.addEventListener('click', () => {
+      const enabled = state.hotspotPendingEnabled;
+      closeHotspotConfirm();
+      if (typeof enabled === 'boolean') void toggleHotspot(enabled);
+    });
+    dom.rgbConfig?.addEventListener('click', openRgbConfig);
+    dom.rgbConfigClose?.addEventListener('click', closeRgbConfig);
+    dom.rgbConfigBackdrop?.addEventListener('click', closeRgbConfig);
     dom.rgbPower?.addEventListener('click', toggleRgb);
+    dom.rgbModalPower?.addEventListener('click', toggleRgb);
     dom.rgbColor?.addEventListener('input', () => {
       const color = setRgbVisualColor(dom.rgbColor.value);
       if (dom.rgb) dom.rgb.style.setProperty('--active-rgb', color);
@@ -567,6 +656,18 @@
     });
     document.addEventListener('keydown', (event) => {
       if (event.key !== 'Escape' || !state.open) return;
+      if (dom.hotspotConfirmModal?.classList.contains('is-open')) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        closeHotspotConfirm();
+        return;
+      }
+      if (dom.rgbConfigModal?.classList.contains('is-open')) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        closeRgbConfig();
+        return;
+      }
       event.preventDefault();
       event.stopImmediatePropagation();
       closeModal();
