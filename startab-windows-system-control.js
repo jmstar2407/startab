@@ -369,13 +369,11 @@
   }
 
   function scheduleRefresh() {
+    // No hacer polling escribiendo en `command`. El documento del dispositivo ya llega
+    // por snapshot/presencia. `getSystemState` se solicita solo al abrir, cambiar de PC
+    // o después de una acción explícita que necesite refresco.
     clearInterval(state.refreshTimer);
     state.refreshTimer = 0;
-    if (!state.open) return;
-    state.refreshTimer = window.setInterval(() => {
-      if (!state.open || !versionAtLeast(state.lastDevice?.agentVersion) || !isOnline(state.lastDevice)) return;
-      void sendCommand('getSystemState');
-    }, REFRESH_INTERVAL_MS);
   }
 
   async function openModal() {

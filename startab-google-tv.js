@@ -92,14 +92,10 @@
     wrap.innerHTML = `
       <div class="startab-tv-modal" id="startab-tv-modal" aria-hidden="true">
         <div class="startab-tv-backdrop" id="startab-tv-backdrop"></div>
-        <section class="startab-tv-card startab-tv-remote-shell" role="dialog" aria-modal="true" aria-labelledby="startab-tv-title">
+        <section class="startab-tv-card startab-tv-remote-shell" role="dialog" aria-modal="true" aria-label="Control remoto de Google TV">
           <header class="startab-tv-head startab-tv-head-compact">
-            <div class="startab-tv-head-brand">
-              <span class="startab-tv-head-icon">${ICONS.remote}</span>
-              <div class="startab-tv-head-copy">
-                <h3 id="startab-tv-title">StarTab - Google TV</h3>
-                <div class="startab-tv-head-status"><i id="startab-tv-led"></i><b id="startab-tv-status-title">Sin TV</b><span id="startab-tv-status-note">Selecciona o agrega un televisor.</span></div>
-              </div>
+            <div class="startab-tv-status-data" hidden aria-hidden="true">
+              <i id="startab-tv-led"></i><b id="startab-tv-status-title">Sin TV</b><span id="startab-tv-status-note">Selecciona o agrega un televisor.</span>
             </div>
             <div class="startab-tv-head-actions">
               <div class="startab-tv-device-select-wrap startab-tv-device-select-head"><select id="startab-tv-device-select" aria-label="Google TV seleccionado"><option value="">Sin TVs vinculados</option></select></div>
@@ -577,6 +573,61 @@
     }, 16_500);
   }
 
+  function capturedBindingFallback(binding = {}) {
+    const code = Number(binding.keyCode);
+    const label = `${binding.keyName || ''} ${binding.friendlyName || ''}`.toUpperCase();
+    const has = (...parts) => parts.some(part => label.includes(part));
+
+    if (code === 19 || has('DPAD_UP', 'ARRIBA')) return { type:'dpad', extra:{ direction:'up' } };
+    if (code === 20 || has('DPAD_DOWN', 'ABAJO')) return { type:'dpad', extra:{ direction:'down' } };
+    if (code === 21 || has('DPAD_LEFT', 'IZQUIERDA')) return { type:'dpad', extra:{ direction:'left' } };
+    if (code === 22 || has('DPAD_RIGHT', 'DERECHA')) return { type:'dpad', extra:{ direction:'right' } };
+    if (code === 23 || code === 66 || has('DPAD_CENTER', 'ENTER', ' OK')) return { type:'ok', extra:{} };
+    if (code === 4 || has('KEYCODE_BACK', 'ATRÁS', 'BACK')) return { type:'back', extra:{} };
+    if (code === 3 || has('KEYCODE_HOME', 'HOME', 'INICIO')) return { type:'home', extra:{} };
+    if (code === 82 || has('KEYCODE_MENU', 'MENÚ', 'MENU')) return { type:'menu', extra:{} };
+    if (code === 178 || has('TV_INPUT', 'SOURCE', 'FUENTE', 'INPUT')) return { type:'input', extra:{} };
+    if (code === 176 || has('SETTINGS', 'CONFIGURACIÓN', 'AJUSTES')) return { type:'settings', extra:{} };
+    if (code === 219 || has('ASSIST', 'ASISTENTE', 'VOICE', 'MIC')) return { type:'assistant', extra:{} };
+    if (code === 26 || has('KEYCODE_POWER', 'POWER', 'ENCEND')) return { type:'power', extra:{} };
+    if (code === 24 || has('VOLUME_UP', 'VOL+', 'SUBIR VOLUMEN')) return { type:'volumeUp', extra:{} };
+    if (code === 25 || has('VOLUME_DOWN', 'VOL-', 'BAJAR VOLUMEN')) return { type:'volumeDown', extra:{} };
+    if (code === 164 || has('VOLUME_MUTE', 'MUTE', 'SILENC')) return { type:'mute', extra:{} };
+    return null;
+  }
+
+  function replayCapturedKey(slot, binding) {
+    if (!binding) return false;
+    const fallback = capturedBindingFallback(binding);
+    if (fallback) {
+      if (fallback.type === 'back') { sendBack(); return true; }
+      if (fallback.type === 'volumeUp') { setVolume((state.optimisticVolume ?? Number(selectedDevice()?.volume || 0)) + 1); return true; }
+      if (fallback.type === 'volumeDown') { setVolume((state.optimisticVolume ?? Number(selectedDevice()?.volume || 0)) - 1); return true; }
+      if (fallback.type === 'mute') { toggleMute(); return true; }
+      sendAction(fallback.type, fallback.extra || {});
+      return true;
+    }
+
+    // Enviar también los datos completos aprendidos. Las versiones nuevas del TV pueden
+    // reproducir la tecla por keyCode/scanCode aunque el slot local se haya desincronizado.
+    const payload = {
+      slot,
+      binding: {
+        keyCode: Number.isFinite(Number(binding.keyCode)) ? Number(binding.keyCode) : null,
+        scanCode: Number.isFinite(Number(binding.scanCode)) ? Number(binding.scanCode) : null,
+        keyName: String(binding.keyName || ''),
+        friendlyName: String(binding.friendlyName || ''),
+        source: Number.isFinite(Number(binding.source)) ? Number(binding.source) : binding.source ?? null,
+        deviceId: Number.isFinite(Number(binding.deviceId)) ? Number(binding.deviceId) : binding.deviceId ?? null,
+      }
+    };
+    if (Number.isFinite(Number(binding.keyCode))) payload.keyCode = Number(binding.keyCode);
+    if (Number.isFinite(Number(binding.scanCode))) payload.scanCode = Number(binding.scanCode);
+    if (binding.keyName) payload.keyName = String(binding.keyName);
+    sendAction('runCapturedKey', payload);
+    return true;
+  }
+
   function bindLearnableButtons() {
     document.querySelectorAll('.startab-tv-learnable-keys [data-capture-slot]').forEach(btn => {
       let holdTimer = 0;
@@ -604,7 +655,7 @@
         }
         const slot = String(btn.dataset.captureSlot || '').toUpperCase();
         const binding = captureBindingFor(slot);
-        if (binding) sendAction('runCapturedKey', { slot });
+        if (binding) replayCapturedKey(slot, binding);
         else sendAction(btn.dataset.nativeCommand, { variant: btn.dataset.nativeVariant || '' });
       });
     });
@@ -671,8 +722,13 @@
       dom.deviceSelect.innerHTML = '';
       if (!state.devices.size) dom.deviceSelect.add(new Option('Sin TVs vinculados', ''));
       else [...state.devices.values()].sort((a,b)=>String(a.deviceName).localeCompare(String(b.deviceName))).forEach(item => {
-        const suffix = isOnline(item) ? '' : ' · sin conexión';
-        dom.deviceSelect.add(new Option(`${item.deviceName || 'Google TV'}${suffix}`, item.deviceId));
+        const itemStatus = presenceStatus(item);
+        const direct = item.deviceId === state.selectedId && state.wsReady;
+        const statusLabel = direct ? 'Directo'
+          : itemStatus.state === 'standby' ? 'Standby'
+            : itemStatus.state === 'unresponsive' ? 'Sin respuesta'
+              : itemStatus.online ? 'Firebase' : 'No disponible';
+        dom.deviceSelect.add(new Option(`${item.deviceName || 'Google TV'} · ${statusLabel}`, item.deviceId));
       });
       dom.deviceSelect.add(new Option('＋ Añadir otro TV…', '__add_tv__'));
       dom.deviceSelect.value = state.devices.has(current) ? current : (state.devices.size ? [...state.devices.keys()][0] : '');

@@ -870,8 +870,9 @@
       renderDial(next, false);
       queueVolume(next);
     };
-    dom.down?.addEventListener('click', () => stepVolume(-5));
-    dom.up?.addEventListener('click', () => stepVolume(5));
+    const legacyStepAmount = () => state.mobileLayoutMql?.matches ? 5 : 1;
+    dom.down?.addEventListener('click', () => stepVolume(-legacyStepAmount()));
+    dom.up?.addEventListener('click', () => stepVolume(legacyStepAmount()));
     dom.dialDown?.addEventListener('click', () => { globalThis.StartabHaptics?.pulse?.('windows-volume-step', 7, 45); stepVolume(-1); });
     dom.dialUp?.addEventListener('click', () => { globalThis.StartabHaptics?.pulse?.('windows-volume-step', 7, 45); stepVolume(1); });
     dom.pair?.addEventListener('click', () => void copyExtensionId());

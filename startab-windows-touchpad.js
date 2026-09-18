@@ -136,6 +136,19 @@
   function setStatus(kind, text, note = '') {
     if (dom.connection) dom.connection.dataset.state = kind;
     if (dom.connectionText) dom.connectionText.textContent = text;
+    if (dom.keyboardState) {
+      const transportLabel = kind === 'connected' ? 'DIRECTO'
+        : kind === 'relay' ? 'FIREBASE'
+          : kind === 'connecting' ? 'CONECTANDO'
+            : 'SIN CONEXIÓN';
+      dom.keyboardState.textContent = transportLabel;
+      dom.keyboardState.dataset.transport = kind === 'connected' ? 'direct' : kind === 'relay' ? 'firebase' : kind;
+      dom.keyboardState.title = kind === 'connected'
+        ? 'Conexión directa WebRTC con el PC'
+        : kind === 'relay'
+          ? 'Conexión remota mediante Firebase'
+          : text || transportLabel;
+    }
     if (note && dom.note) dom.note.textContent = note;
   }
 
@@ -151,7 +164,7 @@
       dom.keyboardInput.placeholder = advanced ? 'Escribe en la PC…' : 'Actualiza el EXE para usar teclado remoto';
     }
     if (dom.keyboard) dom.keyboard.classList.toggle('is-ready', advanced);
-    if (dom.keyboardState) dom.keyboardState.textContent = advanced ? 'TECLADO REMOTO' : 'REQUIERE EXE 2.3';
+    if (dom.keyboardState && !advanced) dom.keyboardState.title = 'El teclado y el arrastre requieren el agente Windows v2.3.0 o superior';
     if (dom.dragLock) {
       dom.dragLock.disabled = !advanced;
       dom.dragLock.title = advanced ? 'Mantener clic izquierdo para arrastrar' : 'El arrastre bloqueado requiere el agente Windows v2.3.0 o superior';

@@ -257,12 +257,12 @@
 <button class="windows-volume-action windows-volume-mute" id="windows-volume-mute" type="button" aria-label="Silenciar volumen de Windows" aria-pressed="false" title="Silenciar Windows">
 <svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" viewBox="0 0 24 24"><path d="M11 5 6 9H3v6h3l5 4V5Z"></path><path class="windows-volume-wave" d="M15.5 8.5a5 5 0 0 1 0 7"></path><path class="windows-volume-wave" d="M18 6a8 8 0 0 1 0 12"></path><path class="windows-volume-muted-mark" d="m16 10 5 5m0-5-5 5"></path></svg>
 </button>
-<button class="windows-volume-step" id="windows-volume-down" type="button" aria-label="Bajar 5 por ciento el volumen de Windows">−</button>
+<button class="windows-volume-step" id="windows-volume-down" type="button" aria-label="Bajar volumen de Windows">−</button>
 <div class="windows-volume-slider-wrap">
 <div class="multimedia-range-shell windows-volume-fill" id="windows-volume-fill"><span class="multimedia-range-track"></span><input class="multimedia-range" id="windows-volume-range" type="range" min="0" max="100" step="1" value="0" aria-label="Volumen maestro de Windows"></div>
 <span class="windows-volume-value" id="windows-volume-value">0%</span>
 </div>
-<button class="windows-volume-step" id="windows-volume-up" type="button" aria-label="Subir 5 por ciento el volumen de Windows">+</button>
+<button class="windows-volume-step" id="windows-volume-up" type="button" aria-label="Subir volumen de Windows">+</button>
 </div>
 <div class="windows-volume-hint" id="windows-volume-hint">Inicia sesión para sincronizar el volumen de tus PCs.</div>
 <div class="windows-volume-spectrum" id="windows-volume-spectrum" aria-label="Actividad de audio de Windows" role="img"></div>
@@ -337,18 +337,8 @@
 <!-- CONTROL REMOTO · PC SELECCIONADO -->
 <div aria-hidden="true" class="windows-pc-control-modal" id="windows-pc-control-modal" role="presentation">
 <div class="windows-pc-control-backdrop" id="windows-pc-control-backdrop"></div>
-<section aria-labelledby="windows-pc-control-title" aria-modal="true" class="windows-pc-control-card" role="dialog">
-<header class="windows-pc-control-header">
-<div class="windows-pc-control-heading">
-<span>StarTab · WINDOWS SYSTEM</span>
-<h3 id="windows-pc-control-title">Control del PC seleccionado</h3>
-<p id="windows-pc-control-device">Selecciona un PC Windows conectado.</p>
-</div>
-<div class="windows-pc-control-header-actions">
-<span class="windows-pc-control-online" id="windows-pc-control-online" data-state="idle"><i aria-hidden="true"></i><span>Preparando</span></span>
-<button aria-label="Cerrar controles del PC" class="windows-pc-control-close" id="windows-pc-control-close" type="button">×</button>
-</div>
-</header>
+<section aria-label="Control del PC seleccionado" aria-modal="true" class="windows-pc-control-card" role="dialog">
+<button aria-label="Cerrar controles del PC" class="windows-pc-control-close startab-pc-control-internal-close" id="windows-pc-control-close" type="button" hidden tabindex="-1">×</button>
 <div class="windows-pc-control-body">
 <div class="windows-pc-control-grid" id="windows-pc-control-grid">
 <button class="windows-pc-action" data-system-action="monitorOff" type="button">
@@ -398,7 +388,6 @@
 </button>
 </div>
 </div>
-<div class="windows-pc-control-note" id="windows-pc-control-note" aria-live="polite">Los comandos se envían únicamente al PC Windows seleccionado en StarTab.</div>
 </div>
 </section>
 </div>

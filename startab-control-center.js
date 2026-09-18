@@ -19,6 +19,9 @@
     mediaObserver: null,
     statusTimer: 0,
     windowsWatchedId: '',
+    headerDeviceHost: null,
+    headerPcShell: null,
+    headerTvShell: null,
   };
 
   const $ = (id) => document.getElementById(id);
@@ -55,13 +58,13 @@
   function selectedPcLabel() {
     const select = $('windows-device-select');
     const option = select?.selectedOptions?.[0];
-    return option?.textContent?.replace(/\s·\s(?:En línea|Standby|Sin respuesta|No disponible).*$/i, '').trim() || 'PC seleccionado';
+    return option?.textContent?.replace(/\s·\s(?:Directo|Firebase|En línea|Standby|Sin respuesta|No disponible).*$/i, '').trim() || 'PC seleccionado';
   }
 
   function selectedTvLabel() {
     const select = $('startab-tv-device-select');
     const option = select?.selectedOptions?.[0];
-    return option?.textContent?.replace(/\s·\ssin conexión$/i, '').trim() || 'Google TV';
+    return option?.textContent?.replace(/\s·\s(?:Directo|Firebase|Standby|Sin respuesta|No disponible|sin conexión)$/i, '').trim() || 'Google TV';
   }
 
   async function setMediaWindowsWatcher(active) {
@@ -111,6 +114,61 @@
     state.nav = nav;
   }
 
+  function buildHeaderDeviceHost() {
+    const topbar = document.querySelector('.multimedia-topbar');
+    const actions = document.querySelector('.multimedia-topbar-actions');
+    if (!topbar || !actions) return null;
+
+    let host = $('startab-control-header-device');
+    if (!host) {
+      host = document.createElement('div');
+      host.id = 'startab-control-header-device';
+      host.className = 'startab-control-header-device';
+      host.setAttribute('aria-label', 'Dispositivo seleccionado');
+      host.innerHTML = `
+        <div class="startab-control-header-select-shell" data-device-kind="pc" hidden>
+          <span class="startab-control-header-device-icon" aria-hidden="true">${ICONS.pc}<i id="startab-control-header-pc-dot"></i></span>
+          <div class="startab-control-header-select-slot" id="startab-control-header-pc-slot"></div>
+        </div>
+        <div class="startab-control-header-select-shell" data-device-kind="tv" hidden>
+          <span class="startab-control-header-device-icon is-tv" aria-hidden="true">${ICONS.tv}<i id="startab-control-header-tv-dot"></i></span>
+          <div class="startab-control-header-select-slot" id="startab-control-header-tv-slot"></div>
+        </div>`;
+      topbar.insertBefore(host, actions);
+    }
+    state.headerDeviceHost = host;
+    state.headerPcShell = host.querySelector('[data-device-kind="pc"]');
+    state.headerTvShell = host.querySelector('[data-device-kind="tv"]');
+    return host;
+  }
+
+  function mountHeaderDeviceSelectors() {
+    const host = buildHeaderDeviceHost();
+    if (!host) return;
+
+    const pcSelect = $('windows-device-select');
+    const pcSlot = $('startab-control-header-pc-slot');
+    if (pcSelect && pcSlot && pcSelect.parentElement !== pcSlot) pcSlot.appendChild(pcSelect);
+
+    const tvSelect = $('startab-tv-device-select');
+    const tvSlot = $('startab-control-header-tv-slot');
+    if (tvSelect && tvSlot && tvSelect.parentElement !== tvSlot) tvSlot.appendChild(tvSelect);
+
+    const oldPcWrap = document.querySelector('.windows-volume-device-wrap');
+    if (oldPcWrap && !oldPcWrap.querySelector('select')) oldPcWrap.classList.add('startab-control-device-wrap-without-select');
+    const oldTvWrap = document.querySelector('.startab-tv-device-select-head');
+    if (oldTvWrap && !oldTvWrap.querySelector('select')) oldTvWrap.classList.add('startab-control-device-wrap-without-select');
+  }
+
+  function updateHeaderDeviceSelector(mode = state.mode) {
+    mountHeaderDeviceSelectors();
+    const pcVisible = mode !== 'tv';
+    const tvVisible = mode === 'tv';
+    if (state.headerPcShell) state.headerPcShell.hidden = !pcVisible;
+    if (state.headerTvShell) state.headerTvShell.hidden = !tvVisible;
+    if (state.headerDeviceHost) state.headerDeviceHost.hidden = !(pcVisible || tvVisible);
+  }
+
   function buildPanes() {
     state.panel = document.querySelector('.multimedia-modal-panel');
     state.main = document.querySelector('.multimedia-main');
@@ -129,11 +187,6 @@
     pcPane.className = 'startab-control-pane startab-control-pane-pc';
     pcPane.dataset.controlPane = 'pc';
     pcPane.innerHTML = `
-      <div class="startab-control-pc-context">
-        <span class="startab-control-pc-context-dot" id="startab-control-pc-context-dot" aria-hidden="true"></span>
-        <strong id="startab-control-pc-name">PC seleccionado</strong>
-        <small id="startab-control-pc-state">Preparando controles…</small>
-      </div>
       <div class="startab-control-pc-touchpad-slot" id="startab-control-pc-touchpad-slot"></div>
       <div class="startab-control-pc-system-slot" id="startab-control-pc-system-slot"></div>
       <div class="startab-control-volume-slot" id="startab-control-pc-volume-slot"></div>`;
@@ -166,6 +219,8 @@
       $('multimedia-system-footer'),
     ].filter(Boolean);
     movable.forEach((node) => mediaPane.appendChild(node));
+    const mobileSourceSlot = $('multimedia-mobile-source-slot');
+    if (mobileSourceSlot) mediaPane.prepend(mobileSourceSlot);
     topbar.after(mediaPane, pcPane, tvPane, morePane);
 
     state.mediaPane = mediaPane;
@@ -211,6 +266,7 @@
   function ensureEmbedded() {
     embedPcModal();
     embedTvModal();
+    mountHeaderDeviceSelectors();
     if ($('windows-touchpad-modal')?.classList.contains('is-open')) embedTouchpadModal();
   }
 
@@ -265,29 +321,11 @@
     else if (!active && isOpen) $('startab-tv-close')?.click();
   }
 
-  function updateTopbar(mode) {
+  function updateTopbar() {
     const title = document.querySelector('.multimedia-topbar-copy strong');
     const sub = document.querySelector('.multimedia-topbar-copy span');
-    const setText = (node, value) => {
-      if (node && node.textContent !== value) node.textContent = value;
-    };
-
-    // En escritorio el encabezado permanece completamente estable para evitar
-    // el cambio visible de texto al navegar entre Multimedia / PC / TV.
-    if (window.matchMedia('(min-width: 761px)').matches) {
-      setText(title, 'Centro de control');
-      setText(sub, 'Multimedia, PC y Google TV en un solo espacio');
-      return;
-    }
-
-    const map = {
-      media: ['Multimedia', `Reproducción y volumen de ${selectedPcLabel()}`],
-      pc: ['Control del PC', 'Mouse, volumen, iluminación y comandos del sistema'],
-      tv: ['Google TV', 'Navegación, apps, volumen y controles del televisor'],
-      more: ['Más controles', 'Dispositivos, estado y acceso rápido'],
-    };
-    setText(title, map[mode]?.[0] || 'Centro de control');
-    setText(sub, map[mode]?.[1] || '');
+    if (title && title.textContent !== 'Centro de control') title.textContent = 'Centro de control';
+    if (sub && sub.textContent !== 'Multimedia, PC y Google TV en un solo espacio') sub.textContent = 'Multimedia, PC y Google TV en un solo espacio';
   }
 
   function switchMode(mode = 'media') {
@@ -320,7 +358,8 @@
       else void setMediaWindowsWatcher(false);
     }
 
-    updateTopbar(mode);
+    updateTopbar();
+    updateHeaderDeviceSelector(mode);
     updateStatuses();
     window.dispatchEvent(new Event('resize'));
   }
@@ -375,13 +414,10 @@
     const tvName = selectedTvLabel();
     paintModeStatus('pc', pc, pcName);
     paintModeStatus('tv', tv, tvName);
-
-    const pcNameEl = $('startab-control-pc-name');
-    const pcStateEl = $('startab-control-pc-state');
-    if (pcNameEl) pcNameEl.textContent = pcName;
-    if (pcStateEl) { pcStateEl.textContent = pc.text; pcStateEl.dataset.state = pc.key; }
-    const pcContextDot = $('startab-control-pc-context-dot');
-    if (pcContextDot) pcContextDot.dataset.state = pc.key;
+    const headerPcDot = $('startab-control-header-pc-dot');
+    const headerTvDot = $('startab-control-header-tv-dot');
+    if (headerPcDot) headerPcDot.dataset.state = pc.key;
+    if (headerTvDot) headerTvDot.dataset.state = tv.key;
 
     const volDevice = $('startab-control-volume-device');
     const volValue = $('startab-control-volume-value');
@@ -402,7 +438,8 @@
     if (moreTvState) moreTvState.textContent = tv.text;
     if (moreTvDot) moreTvDot.dataset.state = tv.key;
 
-    if (state.mode === 'media') updateTopbar('media');
+    updateTopbar();
+    updateHeaderDeviceSelector(state.mode);
   }
 
   function handleModalVisibility() {
@@ -465,12 +502,13 @@
     if (button) { button.title = 'Centro de control'; button.setAttribute('aria-label', 'Centro de control'); }
     const tooltip = $('multimedia-tooltip');
     if (tooltip) tooltip.textContent = 'Centro de control';
-    updateTopbar(state.mode || 'media');
+    updateTopbar();
   }
 
   function boot() {
     relabel();
     buildNav();
+    buildHeaderDeviceHost();
     buildPanes();
     enhanceVolumeToggle();
 
