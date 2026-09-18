@@ -619,11 +619,18 @@
         friendlyName: String(binding.friendlyName || ''),
         source: Number.isFinite(Number(binding.source)) ? Number(binding.source) : binding.source ?? null,
         deviceId: Number.isFinite(Number(binding.deviceId)) ? Number(binding.deviceId) : binding.deviceId ?? null,
+        inputDeviceName: String(binding.inputDeviceName || ''),
+        inputDeviceDescriptor: String(binding.inputDeviceDescriptor || ''),
+        observedPackageName: String(binding.observedPackageName || ''),
+        observedClassName: String(binding.observedClassName || ''),
+        observedAt: Number.isFinite(Number(binding.observedAt)) ? Number(binding.observedAt) : 0,
       }
     };
     if (Number.isFinite(Number(binding.keyCode))) payload.keyCode = Number(binding.keyCode);
     if (Number.isFinite(Number(binding.scanCode))) payload.scanCode = Number(binding.scanCode);
     if (binding.keyName) payload.keyName = String(binding.keyName);
+    if (binding.observedPackageName) payload.observedPackageName = String(binding.observedPackageName);
+    if (binding.observedClassName) payload.observedClassName = String(binding.observedClassName);
     sendAction('runCapturedKey', payload);
     return true;
   }

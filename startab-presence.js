@@ -4,13 +4,14 @@
   const ROOT = 'startab/v2';
   const ACTIVE_WATCH_REFRESH_MS = 12_000;
   const WATCH_TTL_MS = 32_000;
-  const ONLINE_FRESH_MS = 65_000;
-  const UNRESPONSIVE_MS = 105_000;
+  const ONLINE_FRESH_MS = 75_000;
+  const UNRESPONSIVE_MS = 180_000;
   // Panel visible: presencia agresiva. El agente publica cada ~3 s; damos
   // margen para jitter sin convertir un retraso aislado en un falso offline.
-  const ACTIVE_ONLINE_FRESH_MS = 6_000;
-  const ACTIVE_UNRESPONSIVE_MS = 10_000;
-  const FIRESTORE_FALLBACK_STALE_MS = 120_000;
+  const ACTIVE_ONLINE_FRESH_MS = 12_000;
+  const ACTIVE_UNRESPONSIVE_MS = 35_000;
+  const FIRESTORE_FALLBACK_STALE_MS = 180_000;
+  const FIRESTORE_FALLBACK_WHEN_RTDB_DOWN_MS = 20 * 60_000;
 
   const cache = new Map();
   const typeSubscriptions = new Map();
@@ -113,17 +114,12 @@
   function status(uid, type, deviceId, firestoreDevice, options = {}) {
     const now = Date.now();
     const localState = String(options.localState || '');
-    if (['online', 'unresponsive', 'offline'].includes(localState)) {
-      return {
-        state: localState,
-        online: localState === 'online',
-        source: 'lan',
-        age: Number(options.localAge || 0),
-        connected,
-      };
-    }
-    if (options.localConnected) {
-      return { state: 'online', online: true, source: 'lan', age: 0, connected };
+    // Una conexión LAN confirmada sí tiene prioridad. En cambio, un fallo LAN no
+    // debe marcar el equipo offline si RTDB/Firebase sigue demostrando presencia.
+    // Esto evita falsos "No disponible" al cambiar de Wi‑Fi, perder un ping o
+    // cuando el WebSocket local tarda unos segundos en reconectar.
+    if (options.localConnected || localState === 'online') {
+      return { state: 'online', online: true, source: 'lan', age: Number(options.localAge || 0), connected };
     }
 
     const live = presenceFor(uid, type, deviceId);
@@ -154,7 +150,10 @@
 
     // Compatibilidad: si RTDB aún no está configurado/reglas no desplegadas,
     // el estado Firestore anterior sigue funcionando sin romper el control.
-    if (firestoreDevice?.online === true && fsAge <= FIRESTORE_FALLBACK_STALE_MS) {
+    const firestoreGrace = connected === false
+      ? FIRESTORE_FALLBACK_WHEN_RTDB_DOWN_MS
+      : FIRESTORE_FALLBACK_STALE_MS;
+    if (firestoreDevice?.online === true && fsAge <= firestoreGrace) {
       return {
         state: firestoreDevice?.powerOn === false && type === 'tv' ? 'standby' : 'online',
         online: true,
@@ -163,10 +162,15 @@
         connected,
       };
     }
+
+    // Solo después de comprobar nube/presencia aplicamos el diagnóstico LAN fallido.
+    if (localState === 'unresponsive') {
+      return { state: 'unresponsive', online: false, source: 'lan', age: Number(options.localAge || 0), connected };
+    }
     if (Math.min(liveAge, fsAge) <= unresponsiveMs) {
       return { state: 'unresponsive', online: false, source: liveAt ? 'rtdb' : 'firestore', age: Math.min(liveAge, fsAge), connected };
     }
-    return { state: 'offline', online: false, source: liveAt ? 'rtdb' : 'firestore', age: Math.min(liveAge, fsAge), connected };
+    return { state: 'offline', online: false, source: localState === 'offline' ? 'lan' : (liveAt ? 'rtdb' : 'firestore'), age: Math.min(liveAge, fsAge), connected };
   }
 
   async function sendTvCommand(uid, deviceId, payload, ttlMs = 15_000) {
