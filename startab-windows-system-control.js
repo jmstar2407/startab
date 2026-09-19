@@ -369,15 +369,25 @@
     const routePresence = presenceStatus(device);
     const preferRealtime = globalThis.StarTabPresence?.isRealtimeConnected?.() === true
       && routePresence?.commandable !== false;
+    let fallbackCommandId = '';
     if (preferRealtime && globalThis.StarTabPresence?.sendWindowsCommand) {
       try {
-        const realtimeOk = await globalThis.StarTabPresence.sendWindowsCommand(state.user.uid, device.deviceId, realtimePayload, 20_000);
-        if (realtimeOk) return true;
+        const realtimeResult = await globalThis.StarTabPresence.sendWindowsCommand(
+          state.user.uid,
+          device.deviceId,
+          realtimePayload,
+          20_000,
+          850,
+        );
+        if (realtimeResult?.ok === true && realtimeResult?.acknowledged === true) return true;
+        fallbackCommandId = String(realtimeResult?.id || '');
       } catch (_) {}
     }
 
+    // Firestore remains the compatibility fallback. Reusing the RTDB id makes
+    // monitor/hotspot/RGB/power actions safe even if both transports overlap.
     const command = {
-      id: `${Date.now().toString(36)}-${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}`,
+      id: fallbackCommandId || `${Date.now().toString(36)}-${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}`,
       action,
       issuedBy: state.user.uid,
       issuedByClient: clientId,

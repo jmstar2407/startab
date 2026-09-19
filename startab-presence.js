@@ -264,8 +264,55 @@
     return sendDeviceCommand(uid, 'tv', deviceId, payload, ttlMs);
   }
 
-  function sendWindowsCommand(uid, deviceId, payload, ttlMs = 20_000) {
-    return sendDeviceCommand(uid, 'windows', deviceId, payload, ttlMs);
+  async function sendWindowsCommand(uid, deviceId, payload, ttlMs = 20_000, ackTimeoutMs = 900) {
+    const db = ensure();
+    if (!db || !uid || !deviceId) return { ok: false, acknowledged: false, written: false, id: '' };
+
+    const envelope = commandEnvelope(payload, ttlMs);
+    const commandRef = db.ref(`${base(uid)}/devices/windows/${deviceId}/command`);
+    const ackRef = db.ref(`${base(uid)}/devices/windows/${deviceId}/commandAck`);
+
+    let ackHandler = null;
+    let timer = 0;
+    let settled = false;
+
+    const ackPromise = new Promise((resolve) => {
+      const finish = (value) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        try { ackRef.off('value', ackHandler); } catch (_) {}
+        resolve(value);
+      };
+      ackHandler = (snap) => {
+        const value = snap.val();
+        if (!value || typeof value !== 'object' || String(value.id || '') !== envelope.id) return;
+        finish({
+          ok: value.ok === true,
+          acknowledged: true,
+          written: true,
+          id: envelope.id,
+          reason: String(value.reason || ''),
+        });
+      };
+      ackRef.on('value', ackHandler, () => finish({
+        ok: false, acknowledged: false, written: true, id: envelope.id, reason: 'ack-listener-error',
+      }));
+      timer = window.setTimeout(() => finish({
+        ok: false, acknowledged: false, written: true, id: envelope.id, reason: 'ack-timeout',
+      }), Math.max(350, Number(ackTimeoutMs) || 900));
+    });
+
+    try {
+      await commandRef.set(envelope);
+    } catch (_) {
+      clearTimeout(timer);
+      try { ackRef.off('value', ackHandler); } catch (_) {}
+      settled = true;
+      return { ok: false, acknowledged: false, written: false, id: envelope.id, reason: 'write-failed' };
+    }
+
+    return ackPromise;
   }
 
   async function removeWatcher(session) {
