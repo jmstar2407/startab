@@ -9,10 +9,6 @@
   const CONTROL_LOCAL_HOLD_MS = 2400;
   const NAV_REPEAT_SLOW_MS = 700;
   const NAV_REPEAT_FAST_MS = 300;
-  const LAN_HEALTH_PING_MS = 2_000;
-  const LAN_HEALTH_REPLY_TIMEOUT_MS = 700;
-  const LAN_UNRESPONSIVE_FAILURES = 2;
-  const LAN_OFFLINE_FAILURES = 3;
   const state = {
     db: null, auth: null, user: null, devices: new Map(), unsubscribe: null,
     selectedId: '', ws: null, wsReady: false, wsConnecting: false,
@@ -27,8 +23,6 @@
     editingAppPackage: '', editingBackground: '', contextAppPackage: '', appEditHoldTimer: 0,
     cameraStream: null, scannerActive: false, scanTimer: 0, scanBusy: false, barcodeDetector: null,
     availableApps: [], appSearch: '', wsKeepAlive: 0, firebaseSessionTimer: 0, modalOpen: false, keyboardBuffer: '', keyboardTimer: 0,
-    unsubscribePresence: null, realtimeCommandOk: null,
-    lanHealth: '', lanFailures: 0, lanLastAliveAt: 0, lanTrackedDeviceId: '', preconnectTimer: 0,
   };
   const dom = {};
   const $ = id => document.getElementById(id);
@@ -92,10 +86,14 @@
     wrap.innerHTML = `
       <div class="startab-tv-modal" id="startab-tv-modal" aria-hidden="true">
         <div class="startab-tv-backdrop" id="startab-tv-backdrop"></div>
-        <section class="startab-tv-card startab-tv-remote-shell" role="dialog" aria-modal="true" aria-label="Control remoto de Google TV">
+        <section class="startab-tv-card startab-tv-remote-shell" role="dialog" aria-modal="true" aria-labelledby="startab-tv-title">
           <header class="startab-tv-head startab-tv-head-compact">
-            <div class="startab-tv-status-data" hidden aria-hidden="true">
-              <i id="startab-tv-led"></i><b id="startab-tv-status-title">Sin TV</b><span id="startab-tv-status-note">Selecciona o agrega un televisor.</span>
+            <div class="startab-tv-head-brand">
+              <span class="startab-tv-head-icon">${ICONS.remote}</span>
+              <div class="startab-tv-head-copy">
+                <h3 id="startab-tv-title">StarTab - Google TV</h3>
+                <div class="startab-tv-head-status"><i id="startab-tv-led"></i><b id="startab-tv-status-title">Sin TV</b><span id="startab-tv-status-note">Selecciona o agrega un televisor.</span></div>
+              </div>
             </div>
             <div class="startab-tv-head-actions">
               <div class="startab-tv-device-select-wrap startab-tv-device-select-head"><select id="startab-tv-device-select" aria-label="Google TV seleccionado"><option value="">Sin TVs vinculados</option></select></div>
@@ -109,13 +107,6 @@
             </div>
 
             <div class="startab-tv-remote-content" id="startab-tv-remote-content">
-              <form class="windows-touchpad-keyboard startab-tv-keyboard-bar is-ready" id="startab-tv-keyboard-bar" autocomplete="off">
-                <label class="windows-touchpad-keyboard-shell startab-tv-keyboard-shell" for="startab-tv-keyboard-input">
-                  <span class="windows-touchpad-keyboard-icon" aria-hidden="true">${ICONS.keyboard}</span>
-                  <input id="startab-tv-keyboard-input" type="text" inputmode="text" enterkeyhint="enter" autocomplete="off" autocorrect="off" autocapitalize="sentences" spellcheck="false" placeholder="Escribe en el Google TV…" aria-label="Teclado remoto de Google TV">
-                  <span class="windows-touchpad-keyboard-state" id="startab-tv-keyboard-state">TECLADO TV</span>
-                </label>
-              </form>
               <div class="startab-tv-navigation-stage startab-tv-gesture-stage">
                 <button class="startab-tv-round-action startab-tv-power" id="startab-tv-power" type="button" data-tv-control aria-label="Encender o apagar TV" title="Power">${ICONS.power}<span>Power</span></button>
 
@@ -132,6 +123,7 @@
 
                 <div class="startab-tv-side-actions is-right">
                   <button class="startab-tv-round-action startab-tv-input" id="startab-tv-input" type="button" data-tv-control aria-label="Cambiar entrada o fuente" title="Input">${ICONS.input}<span>Input</span></button>
+                  <button class="startab-tv-round-action startab-tv-keyboard" id="startab-tv-keyboard" type="button" data-tv-control aria-label="Teclado remoto" title="Teclado remoto">${ICONS.keyboard}<span>Teclado</span></button>
                 </div>
               </div>
 
@@ -229,6 +221,7 @@
 
         <div class="startab-tv-app-context" id="startab-tv-app-context" aria-hidden="true"><button id="startab-tv-app-context-edit" type="button">Editar</button></div>
 
+        <textarea id="startab-tv-keyboard-input" class="startab-tv-native-keyboard-capture" rows="1" inputmode="text" enterkeyhint="enter" autocomplete="off" autocorrect="off" autocapitalize="sentences" spellcheck="false" aria-label="Teclado remoto de Google TV"></textarea>
         <div class="startab-tv-scanner" id="startab-tv-scanner" aria-hidden="true">
           <div class="startab-tv-scanner-backdrop"></div>
           <section class="startab-tv-scanner-card" role="dialog" aria-modal="true" aria-labelledby="startab-tv-scanner-title">
@@ -251,7 +244,7 @@
       'add','add-layer','add-close','scan-btn','pair-ip','pair-pin','pair-btn',
       'apps-layer','apps-close','app-search','apps-list',
       'app-edit-layer','app-edit-close','app-edit-file','app-edit-preview','app-edit-save','app-edit-reset','app-context','app-context-edit',
-      'keyboard-bar','keyboard-state','keyboard-layer','keyboard-close','keyboard-input','keyboard-backspace','keyboard-enter',
+      'keyboard-layer','keyboard-close','keyboard-input','keyboard-backspace','keyboard-enter',
       'scanner','scanner-video','scanner-note','scanner-close','scanner-cancel'
     ];
     ids.forEach(k => {
@@ -267,22 +260,7 @@
   }
 
   function selectedDevice() { return state.devices.get(state.selectedId) || null; }
-  function presenceStatus(d = selectedDevice()) {
-    if (!d) return { state:'offline', online:false, source:'none' };
-    const userId = uid();
-    const deviceId = d.deviceId || state.selectedId;
-    const useLanHealth = state.modalOpen && state.lanTrackedDeviceId === deviceId && !!state.lanHealth;
-    const adaptive = globalThis.StarTabPresence?.status?.(userId, 'tv', deviceId, d, {
-      localConnected: state.wsReady && deviceId === state.selectedId,
-      localState: useLanHealth ? state.lanHealth : '',
-      localAge: useLanHealth && state.lanLastAliveAt ? Date.now() - state.lanLastAliveAt : 0,
-      aggressive: state.modalOpen && !document.hidden,
-    });
-    if (adaptive) return adaptive;
-    const online = !!d?.online && Date.now() - Number(d.clientAt || 0) < DEVICE_STALE_MS;
-    return { state: online ? (d?.powerOn === false ? 'standby' : 'online') : 'offline', online, source:'firestore' };
-  }
-  function isOnline(d) { return !!presenceStatus(d).online; }
+  function isOnline(d) { return !!d?.online && Date.now() - Number(d.clientAt || 0) < DEVICE_STALE_MS; }
 
   function applyRemoteState(data = {}, force = false) {
     const now = performance.now();
@@ -573,68 +551,6 @@
     }, 16_500);
   }
 
-  function capturedBindingFallback(binding = {}) {
-    const code = Number(binding.keyCode);
-    const label = `${binding.keyName || ''} ${binding.friendlyName || ''}`.toUpperCase();
-    const has = (...parts) => parts.some(part => label.includes(part));
-
-    if (code === 19 || has('DPAD_UP', 'ARRIBA')) return { type:'dpad', extra:{ direction:'up' } };
-    if (code === 20 || has('DPAD_DOWN', 'ABAJO')) return { type:'dpad', extra:{ direction:'down' } };
-    if (code === 21 || has('DPAD_LEFT', 'IZQUIERDA')) return { type:'dpad', extra:{ direction:'left' } };
-    if (code === 22 || has('DPAD_RIGHT', 'DERECHA')) return { type:'dpad', extra:{ direction:'right' } };
-    if (code === 23 || code === 66 || has('DPAD_CENTER', 'ENTER', ' OK')) return { type:'ok', extra:{} };
-    if (code === 4 || has('KEYCODE_BACK', 'ATRÁS', 'BACK')) return { type:'back', extra:{} };
-    if (code === 3 || has('KEYCODE_HOME', 'HOME', 'INICIO')) return { type:'home', extra:{} };
-    if (code === 82 || has('KEYCODE_MENU', 'MENÚ', 'MENU')) return { type:'menu', extra:{} };
-    if (code === 178 || has('TV_INPUT', 'SOURCE', 'FUENTE', 'INPUT')) return { type:'input', extra:{} };
-    if (code === 176 || has('SETTINGS', 'CONFIGURACIÓN', 'AJUSTES')) return { type:'settings', extra:{} };
-    if (code === 219 || has('ASSIST', 'ASISTENTE', 'VOICE', 'MIC')) return { type:'assistant', extra:{} };
-    if (code === 26 || has('KEYCODE_POWER', 'POWER', 'ENCEND')) return { type:'power', extra:{} };
-    if (code === 24 || has('VOLUME_UP', 'VOL+', 'SUBIR VOLUMEN')) return { type:'volumeUp', extra:{} };
-    if (code === 25 || has('VOLUME_DOWN', 'VOL-', 'BAJAR VOLUMEN')) return { type:'volumeDown', extra:{} };
-    if (code === 164 || has('VOLUME_MUTE', 'MUTE', 'SILENC')) return { type:'mute', extra:{} };
-    return null;
-  }
-
-  function replayCapturedKey(slot, binding) {
-    if (!binding) return false;
-    const fallback = capturedBindingFallback(binding);
-    if (fallback) {
-      if (fallback.type === 'back') { sendBack(); return true; }
-      if (fallback.type === 'volumeUp') { setVolume((state.optimisticVolume ?? Number(selectedDevice()?.volume || 0)) + 1); return true; }
-      if (fallback.type === 'volumeDown') { setVolume((state.optimisticVolume ?? Number(selectedDevice()?.volume || 0)) - 1); return true; }
-      if (fallback.type === 'mute') { toggleMute(); return true; }
-      sendAction(fallback.type, fallback.extra || {});
-      return true;
-    }
-
-    // Enviar también los datos completos aprendidos. Las versiones nuevas del TV pueden
-    // reproducir la tecla por keyCode/scanCode aunque el slot local se haya desincronizado.
-    const payload = {
-      slot,
-      binding: {
-        keyCode: Number.isFinite(Number(binding.keyCode)) ? Number(binding.keyCode) : null,
-        scanCode: Number.isFinite(Number(binding.scanCode)) ? Number(binding.scanCode) : null,
-        keyName: String(binding.keyName || ''),
-        friendlyName: String(binding.friendlyName || ''),
-        source: Number.isFinite(Number(binding.source)) ? Number(binding.source) : binding.source ?? null,
-        deviceId: Number.isFinite(Number(binding.deviceId)) ? Number(binding.deviceId) : binding.deviceId ?? null,
-        inputDeviceName: String(binding.inputDeviceName || ''),
-        inputDeviceDescriptor: String(binding.inputDeviceDescriptor || ''),
-        observedPackageName: String(binding.observedPackageName || ''),
-        observedClassName: String(binding.observedClassName || ''),
-        observedAt: Number.isFinite(Number(binding.observedAt)) ? Number(binding.observedAt) : 0,
-      }
-    };
-    if (Number.isFinite(Number(binding.keyCode))) payload.keyCode = Number(binding.keyCode);
-    if (Number.isFinite(Number(binding.scanCode))) payload.scanCode = Number(binding.scanCode);
-    if (binding.keyName) payload.keyName = String(binding.keyName);
-    if (binding.observedPackageName) payload.observedPackageName = String(binding.observedPackageName);
-    if (binding.observedClassName) payload.observedClassName = String(binding.observedClassName);
-    sendAction('runCapturedKey', payload);
-    return true;
-  }
-
   function bindLearnableButtons() {
     document.querySelectorAll('.startab-tv-learnable-keys [data-capture-slot]').forEach(btn => {
       let holdTimer = 0;
@@ -662,7 +578,7 @@
         }
         const slot = String(btn.dataset.captureSlot || '').toUpperCase();
         const binding = captureBindingFor(slot);
-        if (binding) replayCapturedKey(slot, binding);
+        if (binding) sendAction('runCapturedKey', { slot });
         else sendAction(btn.dataset.nativeCommand, { variant: btn.dataset.nativeVariant || '' });
       });
     });
@@ -729,14 +645,8 @@
       dom.deviceSelect.innerHTML = '';
       if (!state.devices.size) dom.deviceSelect.add(new Option('Sin TVs vinculados', ''));
       else [...state.devices.values()].sort((a,b)=>String(a.deviceName).localeCompare(String(b.deviceName))).forEach(item => {
-        const itemStatus = presenceStatus(item);
-        const direct = item.deviceId === state.selectedId && state.wsReady;
-        const statusLabel = direct ? 'Directo'
-          : itemStatus.state === 'standby' ? 'Standby'
-            : itemStatus.state === 'reconnecting' ? 'Reconectando'
-              : itemStatus.state === 'unresponsive' ? 'Sin respuesta'
-                : itemStatus.online ? 'Firebase' : 'No disponible';
-        dom.deviceSelect.add(new Option(`${item.deviceName || 'Google TV'} · ${statusLabel}`, item.deviceId));
+        const suffix = isOnline(item) ? '' : ' · sin conexión';
+        dom.deviceSelect.add(new Option(`${item.deviceName || 'Google TV'}${suffix}`, item.deviceId));
       });
       dom.deviceSelect.add(new Option('＋ Añadir otro TV…', '__add_tv__'));
       dom.deviceSelect.value = state.devices.has(current) ? current : (state.devices.size ? [...state.devices.keys()][0] : '');
@@ -751,17 +661,13 @@
     renderQuickApps();
     renderCaptureButtons();
 
-    const pstatus = d ? presenceStatus(d) : { state:'offline', online:false, source:'none' };
     if (!uid()) setStatus('error','Sin sesión','Inicia sesión en StarTab.');
     else if (!d && state.selectedId) setStatus('warn','Buscando TV','Sincronizando con Firebase…');
     else if (!d) setStatus('idle','Sin TV','Toca + para agregar uno.');
     else if (d.accessibility === false) setStatus('warn','Activar Accesibilidad','En el TV activa “StarTab TV · Cursor remoto”.');
-    else if (state.wsReady) setStatus('direct','Directo',`${d.deviceName || 'Google TV'} · LAN de baja latencia${globalThis.StarTabPresence?.isRealtimeConnected?.() === false ? ' · sin Internet' : ''}`);
-    else if (pstatus.state === 'standby') setStatus('firebase','Standby',`${d.deviceName || 'Google TV'} · conectado y en reposo`);
-    else if (pstatus.state === 'online') setStatus('firebase','Firebase',`${d.deviceName || 'Google TV'} · conexión remota en tiempo real`);
-    else if (pstatus.state === 'reconnecting') setStatus('warn','Reconectando',`${d.deviceName || 'Google TV'} · recuperando presencia por Firebase…`);
-    else if (pstatus.state === 'unresponsive') setStatus('warn','Sin respuesta',`${d.deviceName || 'Google TV'} dejó de responder recientemente.`);
-    else setStatus('error','No disponible',`${d.deviceName || 'Google TV'} está apagado, sin Internet o sin corriente.`);
+    else if (state.wsReady) setStatus('direct','Directo',`${d.deviceName || 'Google TV'} · LAN de baja latencia`);
+    else if (isOnline(d)) setStatus('firebase','Firebase',`${d.deviceName || 'Google TV'} · conexión remota`);
+    else setStatus('error','Sin conexión',`${d.deviceName || 'Google TV'} no está disponible.`);
   }
 
   async function initFirebase(retry = 0) {
@@ -775,13 +681,8 @@
   }
 
   function listenDevices() {
-    state.unsubscribe?.(); state.unsubscribe = null;
-    state.unsubscribePresence?.(); state.unsubscribePresence = null;
-    state.devices.clear();
+    state.unsubscribe?.(); state.unsubscribe = null; state.devices.clear();
     const userId = uid(); if (!state.db || !userId) { render(); return; }
-    if (globalThis.StarTabPresence?.watchType) {
-      state.unsubscribePresence = globalThis.StarTabPresence.watchType(userId, 'tv', () => render());
-    }
     state.unsubscribe = state.db.collection('users').doc(userId).collection('tvDevices').onSnapshot(snap => {
       state.devices.clear(); snap.forEach(doc => state.devices.set(doc.id, { deviceId: doc.id, ...doc.data() }));
       const saved = localStorage.getItem(SELECTED_KEY) || '';
@@ -793,54 +694,15 @@
     }, () => render());
   }
 
-  function resetLanTracking() {
-    state.lanHealth = '';
-    state.lanFailures = 0;
-    state.lanLastAliveAt = 0;
-    state.lanTrackedDeviceId = '';
-  }
-
-  function markLanAlive() {
-    const was = state.lanHealth;
-    state.lanTrackedDeviceId = state.selectedId;
-    state.lanLastAliveAt = Date.now();
-    state.lanFailures = 0;
-    state.lanHealth = 'online';
-    if (was && was !== 'online' && state.modalOpen) render();
-  }
-
-  function markLanFailure() {
-    if (!state.modalOpen || !state.selectedId) return;
-    if (state.lanTrackedDeviceId && state.lanTrackedDeviceId !== state.selectedId) resetLanTracking();
-    state.lanTrackedDeviceId = state.selectedId;
-    state.lanFailures = Math.min(LAN_OFFLINE_FAILURES, state.lanFailures + 1);
-    const next = state.lanFailures >= LAN_OFFLINE_FAILURES
-      ? 'offline'
-      : (state.lanFailures >= LAN_UNRESPONSIVE_FAILURES ? 'unresponsive' : 'online');
-    if (state.lanHealth !== next) {
-      state.lanHealth = next;
-      render();
-    }
-  }
-
   function closeWs() {
     state.wsReady = false; state.wsConnecting = false;
     clearInterval(state.wsKeepAlive); state.wsKeepAlive = 0;
     try { state.ws?.close(); } catch (_) {} state.ws = null;
-    resetLanTracking();
   }
 
   function startWsKeepAlive() {
     clearInterval(state.wsKeepAlive);
-    state.wsKeepAlive = setInterval(() => {
-      if (!state.wsReady || state.ws?.readyState !== WebSocket.OPEN) return;
-      const probeAt = Date.now();
-      if (!wsSend({ t:'ping', id:`lan-health-${probeAt}` })) { markLanFailure(); return; }
-      window.setTimeout(() => {
-        if (!state.modalOpen || state.lanTrackedDeviceId !== state.selectedId) return;
-        if (state.lanLastAliveAt < probeAt) markLanFailure();
-      }, LAN_HEALTH_REPLY_TIMEOUT_MS);
-    }, LAN_HEALTH_PING_MS);
+    state.wsKeepAlive = setInterval(() => { if (state.wsReady) wsSend({ t:'ping' }); }, 12000);
   }
 
   function localEndpoint(device) {
@@ -878,37 +740,17 @@
     setTimeout(() => render(), 2600);
   }
 
-  function mobileDirectWarmEnabled() {
-    try { return !document.hidden && window.matchMedia?.('(max-width: 760px), (hover: none) and (pointer: coarse)')?.matches; }
-    catch (_) { return false; }
-  }
-
-  function shouldKeepLocalWarm() {
-    return state.modalOpen || mobileDirectWarmEnabled();
-  }
-
-  function scheduleLocalReconnect(delay = 850) {
-    clearTimeout(state.preconnectTimer);
-    state.preconnectTimer = 0;
-    if (!shouldKeepLocalWarm() || !state.selectedId || state.wsReady || state.wsConnecting) return;
-    state.preconnectTimer = setTimeout(() => {
-      state.preconnectTimer = 0;
-      connectSelectedLocal();
-    }, Math.max(350, Number(delay) || 850));
-  }
-
   function connectSelectedLocal() {
-    if (!shouldKeepLocalWarm()) return;
+    if (!state.modalOpen) return;
     const d = selectedDevice(); if (!d || state.wsConnecting || state.wsReady) return;
     const { ip, port, secret } = localEndpoint(d); if (!ip || !secret) return;
     state.wsConnecting = true;
     let ws;
-    try { ws = new WebSocket(`ws://${ip}:${port}`); } catch (_) { state.wsConnecting = false; markLanFailure(); return; }
+    try { ws = new WebSocket(`ws://${ip}:${port}`); } catch (_) { state.wsConnecting = false; return; }
     state.ws = ws;
-    const timer = setTimeout(() => { try { ws.close(); } catch (_) {} }, 1800);
+    const timer = setTimeout(() => { try { ws.close(); } catch (_) {} }, 1600);
     ws.onopen = () => { clearTimeout(timer); ws.send(JSON.stringify({ type:'hello', secret })); };
     ws.onmessage = ev => {
-      markLanAlive();
       try {
         const data = JSON.parse(ev.data || '{}');
         if (data.type === 'state' && data.ok) {
@@ -928,16 +770,7 @@
       } catch (_) {}
     };
     ws.onerror = () => {};
-    ws.onclose = () => {
-      clearTimeout(timer);
-      if (state.ws === ws) {
-        state.ws = null; state.wsReady = false; state.wsConnecting = false;
-        clearInterval(state.wsKeepAlive); state.wsKeepAlive = 0;
-        markLanFailure();
-        render();
-        scheduleLocalReconnect(state.modalOpen ? 650 : 1200);
-      }
-    };
+    ws.onclose = () => { clearTimeout(timer); if (state.ws === ws) { state.ws = null; state.wsReady = false; state.wsConnecting = false; clearInterval(state.wsKeepAlive); state.wsKeepAlive=0; render(); } };
   }
 
   function wsSend(obj) {
@@ -1078,18 +911,6 @@
 
   async function firebaseMerge(payload, leaseMs = 12000) {
     const d = selectedDevice(); if (!d || !state.db || !uid()) return false;
-    // Ruta preferida: RTDB mantiene un stream SSE abierto en el TV. No hay polling
-    // y la orden llega apenas cambia el nodo. Firestore queda como fallback compatible.
-    const pstatus = presenceStatus(d);
-    const preferRealtime = globalThis.StarTabPresence?.isRealtimeConnected?.() === true
-      && pstatus?.commandable !== false;
-    if (preferRealtime && globalThis.StarTabPresence?.sendTvCommand) {
-      try {
-        const realtimeOk = await globalThis.StarTabPresence.sendTvCommand(uid(), d.deviceId, payload, leaseMs);
-        state.realtimeCommandOk = realtimeOk;
-        if (realtimeOk) return true;
-      } catch (_) { state.realtimeCommandOk = false; }
-    }
     const lease = { id: unique(), clientAt: Date.now(), expiresAtClient: Date.now() + leaseMs };
     try { await state.db.collection('users').doc(uid()).collection('tvDevices').doc(d.deviceId).set({ ...payload, controlLease: lease }, { merge:true }); return true; } catch (_) { return false; }
   }
@@ -1132,22 +953,6 @@
     const elapsed=now-state.lastVolumeFirebaseAt;
     if (elapsed>=60) { state.lastVolumeFirebaseAt=now; const v=state.pendingVolume;state.pendingVolume=null;firebaseMerge({volumeCommand:{id:unique(),value:v,clientAt:Date.now()}}); return; }
     clearTimeout(state.volumeTimer); state.volumeTimer=setTimeout(()=>{state.lastVolumeFirebaseAt=performance.now();const v=state.pendingVolume;state.pendingVolume=null;if(v!=null)firebaseMerge({volumeCommand:{id:unique(),value:v,clientAt:Date.now()}});},Math.max(0,60-elapsed));
-  }
-
-  function stepVolume(steps) {
-    steps = Math.max(-8, Math.min(8, Math.trunc(Number(steps) || 0)));
-    if (!steps) return;
-    globalThis.StartabHaptics?.click?.();
-    const d = selectedDevice();
-    const maxSteps = Math.max(1, Number(d?.volumeMaxSteps) || 20);
-    const current = Number(state.optimisticVolume ?? d?.volume ?? 0);
-    state.optimisticVolume = Math.round(clamp(current + (steps * 100 / maxSteps), 0, 100));
-    state.lastVolumeInputAt = performance.now();
-    state.volumeHoldUntil = state.lastVolumeInputAt + CONTROL_LOCAL_HOLD_MS;
-    paintTvControls();
-    const commandId = unique();
-    if (wsSend({ id:commandId, t:'volumeStep', value:steps })) return;
-    firebaseMerge({ actionCommand:{ id:commandId, type:'volumeStep', value:steps, clientAt:Date.now() } });
   }
 
   function toggleMute() {
@@ -1376,28 +1181,17 @@
     if(next.length>700){el.value=next.slice(-350);el.dataset.prev=el.value;}
   }
 
-  function stopFirebaseSessionLease() {
-    clearInterval(state.firebaseSessionTimer); state.firebaseSessionTimer=0;
-    const d = selectedDevice();
-    if (d && uid()) void globalThis.StarTabPresence?.setWatcher?.(uid(), 'tv', d.deviceId, false, 'tv-control');
-  }
+  function stopFirebaseSessionLease() { clearInterval(state.firebaseSessionTimer); state.firebaseSessionTimer=0; }
   function startFirebaseSessionLease() {
     stopFirebaseSessionLease();
-    const d = selectedDevice();
-    if (!state.modalOpen || !d || !uid()) return;
-    const activate = async () => {
-      await globalThis.StarTabPresence?.setWatcher?.(uid(), 'tv', d.deviceId, !document.hidden, 'tv-control');
-      // No escribimos leases vacíos en Firestore. El snapshot existente es
-      // suficiente como respaldo si RTDB tarda en reconectar.
-    };
-    void activate();
-    state.firebaseSessionTimer=setInterval(()=>{ if(state.modalOpen) void activate(); },24000);
+    const tick=()=>{ if(state.modalOpen && !state.wsReady && selectedDevice()) firebaseMerge({},30000); };
+    setTimeout(tick,120); state.firebaseSessionTimer=setInterval(tick,24000);
   }
 
   function bindUi() {
     dom.toggle = $('startab-tv-toggle');
     dom.toggle?.addEventListener('click',()=>{ state.modalOpen=true; dom.modal?.classList.add('is-open'); dom.modal?.setAttribute('aria-hidden','false'); document.documentElement.classList.add('startab-tv-modal-open'); connectSelectedLocal(); startFirebaseSessionLease(); render(); });
-    const close=()=>{ state.modalOpen=false; stopFirebaseSessionLease(); if (!mobileDirectWarmEnabled()) closeWs(); else scheduleLocalReconnect(450); stopQrScanner(); closeAddModal(); closeAppsModal(); closeAppEditor(); closeAppContext(); closeKeyboard(); dom.modal?.classList.remove('is-open'); dom.modal?.setAttribute('aria-hidden','true'); document.documentElement.classList.remove('startab-tv-modal-open'); };
+    const close=()=>{ state.modalOpen=false; stopFirebaseSessionLease(); closeWs(); stopQrScanner(); closeAddModal(); closeAppsModal(); closeAppEditor(); closeAppContext(); closeKeyboard(); dom.modal?.classList.remove('is-open'); dom.modal?.setAttribute('aria-hidden','true'); document.documentElement.classList.remove('startab-tv-modal-open'); };
     dom.close?.addEventListener('click',close); dom.backdrop?.addEventListener('click',close);
 
     dom.add?.addEventListener('click',openAddModal); dom.addClose?.addEventListener('click',closeAddModal); dom.addLayer?.querySelector('.startab-tv-layer-backdrop')?.addEventListener('click',closeAddModal);
@@ -1423,7 +1217,7 @@
     window.addEventListener('resize',closeAppContext); window.addEventListener('scroll',closeAppContext,true);
 
     dom.scannerClose?.addEventListener('click',stopQrScanner); dom.scannerCancel?.addEventListener('click',stopQrScanner); dom.scanner?.querySelector('.startab-tv-scanner-backdrop')?.addEventListener('click',stopQrScanner);
-    dom.deviceSelect?.addEventListener('change',()=>{const next=dom.deviceSelect.value||'';if(next==='__add_tv__'){openAddModal();dom.deviceSelect.value=state.selectedId||'';return;}stopFirebaseSessionLease();state.selectedId=next;localStorage.setItem(SELECTED_KEY,state.selectedId);state.optimisticVolume=null;state.optimisticBrightness=null;state.volumeHoldUntil=0;state.brightnessHoldUntil=0;controlPaint.volume=null;controlPaint.brightness=null;state.availableApps=[];closeWs();connectSelectedLocal();startFirebaseSessionLease();render();});
+    dom.deviceSelect?.addEventListener('change',()=>{const next=dom.deviceSelect.value||'';if(next==='__add_tv__'){openAddModal();dom.deviceSelect.value=state.selectedId||'';return;}state.selectedId=next;localStorage.setItem(SELECTED_KEY,state.selectedId);state.optimisticVolume=null;state.optimisticBrightness=null;state.volumeHoldUntil=0;state.brightnessHoldUntil=0;controlPaint.volume=null;controlPaint.brightness=null;state.availableApps=[];closeWs();connectSelectedLocal();startFirebaseSessionLease();render();});
 
     dom.power?.addEventListener('click',()=>{
       const action = state.powerOn === false ? 'on' : 'off';
@@ -1433,7 +1227,6 @@
     });
     dom.input?.addEventListener('click',()=>sendAction('input'));
     dom.keyboard?.addEventListener('click',openKeyboard);
-    dom.keyboardBar?.addEventListener('submit',e=>e.preventDefault());
     const sendKeyboardEnter=()=>{const now=Date.now();if(now-(state.lastKeyboardEnterAt||0)<120)return;state.lastKeyboardEnterAt=now;sendKeyboardKey('enter');};
     dom.keyboardInput?.addEventListener('beforeinput',e=>{if(e.inputType==='insertLineBreak'||e.inputType==='insertParagraph'){e.preventDefault();sendKeyboardEnter();}});
     dom.keyboardInput?.addEventListener('input',handleKeyboardInput);
@@ -1446,8 +1239,8 @@
     dom.settings?.addEventListener('click',()=>sendAction('settings'));
     dom.mute?.addEventListener('click',toggleMute);
     dom.volume?.addEventListener('input',()=>setVolume(dom.volume.value));
-    dom.volDown?.addEventListener('click',()=>stepVolume(-1));
-    dom.volUp?.addEventListener('click',()=>stepVolume(1));
+    dom.volDown?.addEventListener('click',()=>setVolume((state.optimisticVolume ?? Number(selectedDevice()?.volume||0))-1));
+    dom.volUp?.addEventListener('click',()=>setVolume((state.optimisticVolume ?? Number(selectedDevice()?.volume||0))+1));
     dom.brightness?.addEventListener('input',()=>setBrightness(dom.brightness.value));
 
     document.addEventListener('keydown', e => {
@@ -1459,24 +1252,13 @@
       if (dom.addLayer?.classList.contains('is-open')) { closeAddModal(); e.preventDefault(); return; }
       if (dom.modal?.classList.contains('is-open')) { close(); e.preventDefault(); }
     });
-    document.addEventListener('visibilitychange',()=>{
-      if (document.hidden) {
-        if (state.modalOpen) {
-          const d=selectedDevice(); if(d&&uid()) void globalThis.StarTabPresence?.setWatcher?.(uid(),'tv',d.deviceId,false,'tv-control');
-        }
-        if (!state.modalOpen) closeWs();
-      } else {
-        if (state.modalOpen) startFirebaseSessionLease();
-        if (shouldKeepLocalWarm()) scheduleLocalReconnect(120);
-      }
-    });
     bindNavTouch();
   }
 
   function boot() {
     injectUi(); state.selectedId=localStorage.getItem(SELECTED_KEY)||''; initFirebase();
-    setInterval(()=>{if(shouldKeepLocalWarm()&&state.selectedId&&!state.wsReady&&!state.wsConnecting)connectSelectedLocal();},1500);
-    setInterval(()=>{if(dom.modal?.classList.contains('is-open'))render();},1000);
+    setInterval(()=>{if(state.modalOpen&&state.selectedId&&!state.wsReady)connectSelectedLocal();},1200);
+    setInterval(()=>{if(dom.modal?.classList.contains('is-open'))render();},10000);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, {once:true}); else boot();
 })();

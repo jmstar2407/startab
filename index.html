@@ -12,7 +12,6 @@
 <link href="startab.min.css" rel="stylesheet"/>
 
 <script defer="" src="lib/firebase.bundle.js"></script>
-<script defer="" src="startab-presence.js"></script>
 <script defer="" src="startab-drag-webgl.js"></script>
 <script defer="" src="startab.bundle.js"></script>
 <script defer="" src="history-center.js"></script>
@@ -21,7 +20,6 @@
 <script defer="" src="startab-windows-touchpad.js"></script>
 <script defer="" src="startab-windows-system-control.js"></script>
 <script defer="" src="startab-google-tv.js"></script>
-<script defer="" src="startab-control-center.js"></script>
 </head>
 <body>
 <!-- BARRA SUPERIOR: CONTADOR DE PESTAÑAS + PERFIL/LOGIN -->
@@ -108,7 +106,7 @@
 </div>
 <!-- CENTRO MULTIMEDIA · SESIONES DEL NAVEGADOR -->
 <div class="multimedia-button-container" id="multimedia-button-container">
-<button aria-label="Centro de control" class="multimedia-button" id="multimedia-button" title="Centro de control" type="button">
+<button aria-label="Centro multimedia" class="multimedia-button" id="multimedia-button" title="Centro multimedia" type="button">
 <svg aria-hidden="true" class="multimedia-glyph" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" viewbox="0 0 24 24">
 <rect height="14" rx="4" width="18" x="3" y="5"></rect>
 <path d="m10 9 5 3-5 3Z"></path>
@@ -116,7 +114,7 @@
 <span aria-hidden="true" class="multimedia-eq"><i></i><i></i><i></i></span>
 <span class="multimedia-badge" hidden="" id="multimedia-badge">0</span>
 </button>
-<span class="multimedia-tooltip" id="multimedia-tooltip">Centro de control</span>
+<span class="multimedia-tooltip" id="multimedia-tooltip">Centro multimedia</span>
 </div>
 <!-- MODAL CENTRO MULTIMEDIA -->
 <div aria-hidden="true" class="multimedia-modal" id="multimedia-modal" role="presentation">
@@ -135,8 +133,8 @@
 <header class="multimedia-topbar">
 <div class="multimedia-mobile-source-slot" id="multimedia-mobile-source-slot" aria-label="Pestañas multimedia activas"></div>
 <div class="multimedia-topbar-copy">
-<strong>Centro de control</strong>
-<span>Multimedia, PC y Google TV en un solo espacio</span>
+<strong>Control multimedia del navegador</strong>
+<span>Estado y controles sincronizados en tiempo real</span>
 </div>
 <div class="multimedia-topbar-actions">
 <button aria-label="Controlar cursor de Windows" class="multimedia-cursor-toggle" id="multimedia-cursor-toggle" title="Touchpad remoto de Windows" type="button">
@@ -257,12 +255,12 @@
 <button class="windows-volume-action windows-volume-mute" id="windows-volume-mute" type="button" aria-label="Silenciar volumen de Windows" aria-pressed="false" title="Silenciar Windows">
 <svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" viewBox="0 0 24 24"><path d="M11 5 6 9H3v6h3l5 4V5Z"></path><path class="windows-volume-wave" d="M15.5 8.5a5 5 0 0 1 0 7"></path><path class="windows-volume-wave" d="M18 6a8 8 0 0 1 0 12"></path><path class="windows-volume-muted-mark" d="m16 10 5 5m0-5-5 5"></path></svg>
 </button>
-<button class="windows-volume-step" id="windows-volume-down" type="button" aria-label="Bajar volumen de Windows">−</button>
+<button class="windows-volume-step" id="windows-volume-down" type="button" aria-label="Bajar 5 por ciento el volumen de Windows">−</button>
 <div class="windows-volume-slider-wrap">
 <div class="multimedia-range-shell windows-volume-fill" id="windows-volume-fill"><span class="multimedia-range-track"></span><input class="multimedia-range" id="windows-volume-range" type="range" min="0" max="100" step="1" value="0" aria-label="Volumen maestro de Windows"></div>
 <span class="windows-volume-value" id="windows-volume-value">0%</span>
 </div>
-<button class="windows-volume-step" id="windows-volume-up" type="button" aria-label="Subir volumen de Windows">+</button>
+<button class="windows-volume-step" id="windows-volume-up" type="button" aria-label="Subir 5 por ciento el volumen de Windows">+</button>
 </div>
 <div class="windows-volume-hint" id="windows-volume-hint">Inicia sesión para sincronizar el volumen de tus PCs.</div>
 <div class="windows-volume-spectrum" id="windows-volume-spectrum" aria-label="Actividad de audio de Windows" role="img"></div>
@@ -337,8 +335,18 @@
 <!-- CONTROL REMOTO · PC SELECCIONADO -->
 <div aria-hidden="true" class="windows-pc-control-modal" id="windows-pc-control-modal" role="presentation">
 <div class="windows-pc-control-backdrop" id="windows-pc-control-backdrop"></div>
-<section aria-label="Control del PC seleccionado" aria-modal="true" class="windows-pc-control-card" role="dialog">
-<button aria-label="Cerrar controles del PC" class="windows-pc-control-close startab-pc-control-internal-close" id="windows-pc-control-close" type="button" hidden tabindex="-1">×</button>
+<section aria-labelledby="windows-pc-control-title" aria-modal="true" class="windows-pc-control-card" role="dialog">
+<header class="windows-pc-control-header">
+<div class="windows-pc-control-heading">
+<span>StarTab · WINDOWS SYSTEM</span>
+<h3 id="windows-pc-control-title">Control del PC seleccionado</h3>
+<p id="windows-pc-control-device">Selecciona un PC Windows conectado.</p>
+</div>
+<div class="windows-pc-control-header-actions">
+<span class="windows-pc-control-online" id="windows-pc-control-online" data-state="idle"><i aria-hidden="true"></i><span>Preparando</span></span>
+<button aria-label="Cerrar controles del PC" class="windows-pc-control-close" id="windows-pc-control-close" type="button">×</button>
+</div>
+</header>
 <div class="windows-pc-control-body">
 <div class="windows-pc-control-grid" id="windows-pc-control-grid">
 <button class="windows-pc-action" data-system-action="monitorOff" type="button">
@@ -372,61 +380,12 @@
 <span class="windows-pc-hotspot-state" id="windows-pc-hotspot-state">--</span>
 </button>
 <div class="windows-pc-rgb" id="windows-pc-rgb" data-state="unknown">
-<div class="windows-pc-rgb-main">
+<button class="windows-pc-rgb-power" id="windows-pc-rgb-power" type="button" aria-pressed="false" disabled>
 <span class="windows-pc-rgb-icon" aria-hidden="true"><svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.65" viewBox="0 0 24 24"><path d="M9 18h6"></path><path d="M10 22h4"></path><path d="M8.1 14.7A7 7 0 1 1 15.9 14.7C14.7 15.6 14 16.7 14 18h-4c0-1.3-.7-2.4-1.9-3.3Z"></path><path d="M12 2v2"></path><path d="m4.9 4.9 1.4 1.4"></path><path d="m19.1 4.9-1.4 1.4"></path></svg></span>
 <span class="windows-pc-rgb-copy"><strong>Iluminación RGB</strong><small id="windows-pc-rgb-note">Buscando OpenRGB en el PC…</small></span>
 <span class="windows-pc-rgb-state" id="windows-pc-rgb-state">--</span>
-</div>
-<div class="windows-pc-rgb-actions">
-<button class="windows-pc-rgb-config" id="windows-pc-rgb-config" type="button" disabled>
-<svg aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21h-4v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H3v-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.6V3h4v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.1v4H21a1.7 1.7 0 0 0-1.6 1Z"></path></svg>
-<span>Configuración</span>
 </button>
-<button class="windows-pc-rgb-power" id="windows-pc-rgb-power" type="button" aria-pressed="false" disabled>
-<svg aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" viewBox="0 0 24 24"><path d="M12 2v10"></path><path d="M6.4 5.6a8 8 0 1 0 11.2 0"></path></svg>
-<span>Encender</span>
-</button>
-</div>
-</div>
-</div>
-</section>
-</div>
-
-<!-- CONFIRMACIÓN · MOBILE HOTSPOT -->
-<div aria-hidden="true" class="startab-glass-dialog windows-hotspot-confirm-modal" id="windows-hotspot-confirm-modal" role="presentation">
-<div class="startab-glass-dialog-backdrop" id="windows-hotspot-confirm-backdrop"></div>
-<section aria-labelledby="windows-hotspot-confirm-title" aria-modal="true" class="startab-glass-dialog-card windows-hotspot-confirm-card" role="dialog">
-<div class="startab-glass-dialog-icon is-hotspot" aria-hidden="true"><svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" viewBox="0 0 24 24"><path d="M5 12.5a10 10 0 0 1 14 0"></path><path d="M8 15.5a6 6 0 0 1 8 0"></path><path d="M10.8 18.4a2 2 0 0 1 2.4 0"></path><circle cx="12" cy="20" r=".8" fill="currentColor" stroke="none"></circle></svg></div>
-<div class="startab-glass-dialog-copy">
-<span>StarTab · WINDOWS</span>
-<h3 id="windows-hotspot-confirm-title">¿Cambiar Mobile Hotspot?</h3>
-<p id="windows-hotspot-confirm-copy">Confirma la acción para el PC seleccionado.</p>
-</div>
-<div class="startab-glass-dialog-actions">
-<button class="is-secondary" id="windows-hotspot-confirm-cancel" type="button">Cancelar</button>
-<button class="is-primary" id="windows-hotspot-confirm-action" type="button">Confirmar</button>
-</div>
-</section>
-</div>
-
-<!-- CONFIGURACIÓN · ILUMINACIÓN RGB -->
-<div aria-hidden="true" class="startab-glass-dialog windows-rgb-config-modal" id="windows-rgb-config-modal" role="presentation">
-<div class="startab-glass-dialog-backdrop" id="windows-rgb-config-backdrop"></div>
-<section aria-labelledby="windows-rgb-config-title" aria-modal="true" class="startab-glass-dialog-card windows-rgb-config-card" role="dialog">
-<header class="windows-rgb-config-head">
-<div class="startab-glass-dialog-icon is-rgb" aria-hidden="true"><svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.65" viewBox="0 0 24 24"><path d="M9 18h6"></path><path d="M10 22h4"></path><path d="M8.1 14.7A7 7 0 1 1 15.9 14.7C14.7 15.6 14 16.7 14 18h-4c0-1.3-.7-2.4-1.9-3.3Z"></path></svg></div>
-<div class="startab-glass-dialog-copy">
-<span>StarTab · OPENRGB</span>
-<h3 id="windows-rgb-config-title">Configuración de iluminación</h3>
-<p>Ajusta todas las luces del PC desde un solo lugar.</p>
-</div>
-<button class="startab-glass-dialog-close" id="windows-rgb-config-close" type="button" aria-label="Cerrar">×</button>
-</header>
 <div class="windows-pc-rgb-panel" id="windows-pc-rgb-panel">
-<div class="windows-rgb-power-row">
-<div><strong>Iluminación</strong><small>Enciende o apaga todas las luces detectadas.</small></div>
-<button class="windows-rgb-modal-power" id="windows-rgb-modal-power" type="button" aria-pressed="false" disabled><i aria-hidden="true"></i><span id="windows-rgb-modal-power-label">Encender</span></button>
-</div>
 <div class="windows-pc-rgb-color-row">
 <label class="windows-pc-rgb-picker" title="Elegir color">
 <input id="windows-pc-rgb-color" type="color" value="#FFFFFF" aria-label="Color de las luces RGB">
@@ -445,7 +404,10 @@
 <button type="button" data-rgb-color="#FF00FF" style="--swatch:#FF00FF" aria-label="Magenta"></button>
 <button type="button" data-rgb-color="#FFFFFF" style="--swatch:#FFFFFF" aria-label="Blanco"></button>
 </div>
-<div class="windows-pc-rgb-foot">Se aplica a motherboard, RAM, GPU y cualquier otro dispositivo detectado por OpenRGB.</div>
+<div class="windows-pc-rgb-foot">Controla simultáneamente motherboard, RAM, GPU y demás dispositivos que OpenRGB detecte.</div>
+</div>
+</div>
+<div class="windows-pc-control-note" id="windows-pc-control-note" aria-live="polite">Los comandos se envían únicamente al PC Windows seleccionado en StarTab.</div>
 </div>
 </section>
 </div>
