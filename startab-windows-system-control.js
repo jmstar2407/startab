@@ -18,7 +18,9 @@
     open: false,
     deviceId: '',
     unsubscribeDevice: null,
+    unsubscribePresence: null,
     refreshTimer: 0,
+    statusTimer: 0,
     confirmAction: '',
     confirmTimer: 0,
     commandChain: Promise.resolve(),
@@ -26,6 +28,7 @@
     rgbBusy: false,
     rgbOptimistic: null,
     rgbOptimisticTimer: 0,
+    hotspotPendingEnabled: null,
   };
 
   const dom = {};
@@ -55,7 +58,14 @@
     dom.hotspot = $('windows-pc-hotspot');
     dom.hotspotState = $('windows-pc-hotspot-state');
     dom.hotspotNote = $('windows-pc-hotspot-note');
+    dom.hotspotConfirmModal = $('windows-hotspot-confirm-modal');
+    dom.hotspotConfirmBackdrop = $('windows-hotspot-confirm-backdrop');
+    dom.hotspotConfirmCancel = $('windows-hotspot-confirm-cancel');
+    dom.hotspotConfirmAction = $('windows-hotspot-confirm-action');
+    dom.hotspotConfirmTitle = $('windows-hotspot-confirm-title');
+    dom.hotspotConfirmCopy = $('windows-hotspot-confirm-copy');
     dom.rgb = $('windows-pc-rgb');
+    dom.rgbConfig = $('windows-pc-rgb-config');
     dom.rgbPower = $('windows-pc-rgb-power');
     dom.rgbState = $('windows-pc-rgb-state');
     dom.rgbNote = $('windows-pc-rgb-note');
@@ -64,6 +74,11 @@
     dom.rgbHex = $('windows-pc-rgb-hex');
     dom.rgbTransport = $('windows-pc-rgb-transport');
     dom.rgbSwatches = $('windows-pc-rgb-swatches');
+    dom.rgbConfigModal = $('windows-rgb-config-modal');
+    dom.rgbConfigBackdrop = $('windows-rgb-config-backdrop');
+    dom.rgbConfigClose = $('windows-rgb-config-close');
+    dom.rgbModalPower = $('windows-rgb-modal-power');
+    dom.rgbModalPowerLabel = $('windows-rgb-modal-power-label');
     dom.note = $('windows-pc-control-note');
     dom.deviceSelect = $('windows-device-select');
   }
@@ -97,10 +112,32 @@
     return true;
   }
 
-  function isOnline(device) {
-    if (!device?.online) return false;
+  function presenceStatus(device = state.lastDevice) {
+    if (!device) return { state:'offline', online:false, source:'none' };
+    const user = currentUser();
+    const adaptive = globalThis.StarTabPresence?.status?.(user?.uid || '', 'windows', device.deviceId || state.deviceId, device, {
+      localConnected: !!(state.open && globalThis.chrome?.runtime?.id && device.deviceId && localStorage.getItem('startab_windows_native_device_id_v1') === String(device.deviceId)),
+      aggressive: state.open && !document.hidden,
+    });
+    if (adaptive) return adaptive;
     const clientAt = Number(device.clientAt) || 0;
-    return clientAt > 0 && Date.now() - clientAt < DEVICE_STALE_MS;
+    const online = !!device.online && clientAt > 0 && Date.now() - clientAt < DEVICE_STALE_MS;
+    return { state: online ? 'online' : 'offline', online, source:'firestore' };
+  }
+
+  function isOnline(device) { return !!presenceStatus(device).online; }
+
+  function isStandaloneCloudDevice(device) {
+    if (!device) return false;
+    const bridge = String(device.bridge || '').toLowerCase();
+    return device.standalone === true || device.cloudLinked === true || bridge === 'standalonenative';
+  }
+
+  function canCommandDevice(device) {
+    if (!device) return false;
+    const presence = presenceStatus(device);
+    if (presence?.online || presence?.commandable) return true;
+    return isStandaloneCloudDevice(device);
   }
 
   function selectedDeviceId() {
@@ -167,7 +204,8 @@
     state.lastDevice = device || null;
     const loggedIn = !!state.user?.uid;
     const online = isOnline(device);
-    const supported = online && versionAtLeast(device?.agentVersion);
+    const commandable = canCommandDevice(device);
+    const supported = commandable && versionAtLeast(device?.agentVersion);
 
     if (dom.device) {
       dom.device.textContent = device
@@ -175,10 +213,15 @@
         : loggedIn ? 'No hay un PC Windows seleccionado.' : 'Inicia sesión con la misma cuenta del PC.';
     }
 
+    const pstatus = device ? presenceStatus(device) : { state:'offline', online:false };
     if (!loggedIn) setOnlineState('error', 'Sin sesión');
     else if (!device) setOnlineState('error', 'Sin PC');
-    else if (!online) setOnlineState('error', 'Offline');
+    else if (pstatus.state === 'unresponsive' && commandable) setOnlineState('warning', 'Reconectando');
+    else if (pstatus.state === 'unresponsive') setOnlineState('warning', 'Sin respuesta');
+    else if (!online && commandable) setOnlineState('warning', 'Confirmando');
+    else if (!online) setOnlineState('error', 'No disponible');
     else if (!supported) setOnlineState('warning', 'EXE antiguo');
+    else if (pstatus.state === 'standby') setOnlineState('warning', 'Standby');
     else setOnlineState('connected', 'En línea');
 
     dom.grid?.querySelectorAll('.windows-pc-action').forEach((button) => {
@@ -206,7 +249,7 @@
               : supported ? 'Consultando estado del PC…' : 'Requiere agente Windows v2.4.0';
     }
 
-    const rgbVersionOk = online && versionAtLeast(device?.agentVersion, RGB_REQUIRED_AGENT);
+    const rgbVersionOk = commandable && versionAtLeast(device?.agentVersion, RGB_REQUIRED_AGENT);
     const rgbAvailable = rgbVersionOk && device?.rgbAvailable !== false;
     const reportedRgbState = normalizeRgbState(device?.rgbState);
     const reportedRgbColor = normalizeRgbColor(device?.rgbColor || dom.rgbColor?.value || '#FFFFFF');
@@ -231,7 +274,16 @@
     if (dom.rgbPower) {
       dom.rgbPower.disabled = !rgbAvailable || state.rgbBusy;
       dom.rgbPower.setAttribute('aria-pressed', rgbState === 'on' ? 'true' : 'false');
+      const label = dom.rgbPower.querySelector('span');
+      if (label) label.textContent = rgbState === 'on' ? 'Apagar' : 'Encender';
     }
+    if (dom.rgbConfig) dom.rgbConfig.disabled = !rgbAvailable || state.rgbBusy;
+    if (dom.rgbModalPower) {
+      dom.rgbModalPower.disabled = !rgbAvailable || state.rgbBusy;
+      dom.rgbModalPower.setAttribute('aria-pressed', rgbState === 'on' ? 'true' : 'false');
+      dom.rgbModalPower.classList.toggle('is-on', rgbState === 'on');
+    }
+    if (dom.rgbModalPowerLabel) dom.rgbModalPowerLabel.textContent = rgbState === 'on' ? 'Apagar' : 'Encender';
     if (dom.rgbState) dom.rgbState.textContent = rgbState === 'on' ? 'ON' : rgbState === 'off' ? 'OFF' : '--';
     if (dom.rgbTransport) {
       const transport = String(device?.rgbTransport || '').toLowerCase();
@@ -255,7 +307,10 @@
     if (dom.note) {
       if (!loggedIn) dom.note.textContent = 'Inicia sesión en StarTab para controlar el PC seleccionado.';
       else if (!device) dom.note.textContent = 'Selecciona primero un PC en “Volumen del sistema”.';
-      else if (!online) dom.note.textContent = 'El PC seleccionado está desconectado.';
+      else if (pstatus.state === 'unresponsive' && commandable) dom.note.textContent = 'La presencia está reconectando; los comandos cloud siguen disponibles.';
+      else if (pstatus.state === 'unresponsive') dom.note.textContent = 'El PC dejó de responder recientemente; StarTab sigue comprobando su presencia.';
+      else if (!online && commandable) dom.note.textContent = 'Confirmando presencia del PC; el agente cloud sigue vinculado y acepta comandos.';
+      else if (!online) dom.note.textContent = 'El PC no está disponible: puede estar apagado, sin Internet o sin corriente.';
       else if (!supported) dom.note.textContent = `Estas acciones requieren StartabWindowsVolume.exe v2.4.0 o superior. Tu PC usa ${device.agentVersion || 'una versión anterior'}.`;
       else dom.note.textContent = 'Los comandos se envían únicamente al PC Windows seleccionado en StarTab.';
     }
@@ -264,6 +319,8 @@
   function stopDeviceListener() {
     state.unsubscribeDevice?.();
     state.unsubscribeDevice = null;
+    state.unsubscribePresence?.();
+    state.unsubscribePresence = null;
     state.deviceId = '';
     state.lastDevice = null;
   }
@@ -277,6 +334,11 @@
       return;
     }
     state.deviceId = deviceId;
+    if (globalThis.StarTabPresence?.watchType) {
+      state.unsubscribePresence = globalThis.StarTabPresence.watchType(state.user.uid, 'windows', () => {
+        if (state.open && state.lastDevice) render(state.lastDevice);
+      });
+    }
     state.unsubscribeDevice = state.db
       .collection('users').doc(state.user.uid)
       .collection('windowsDevices').doc(deviceId)
@@ -296,9 +358,36 @@
   async function writeCommand(action, extra = {}) {
     state.user = currentUser();
     const device = state.lastDevice;
-    if (!state.db || !state.user?.uid || !device?.deviceId || !isOnline(device) || !versionAtLeast(device.agentVersion)) return false;
+    if (!state.db || !state.user?.uid || !device?.deviceId || !canCommandDevice(device) || !versionAtLeast(device.agentVersion)) return false;
+    const realtimePayload = {
+      action,
+      issuedBy: state.user.uid,
+      issuedByClient: clientId,
+      clientAt: Date.now(),
+      ...extra,
+    };
+    const routePresence = presenceStatus(device);
+    const preferRealtime = globalThis.StarTabPresence?.isRealtimeConnected?.() === true
+      && routePresence?.commandable !== false;
+    let fallbackCommandId = '';
+    if (preferRealtime && globalThis.StarTabPresence?.sendWindowsCommand) {
+      try {
+        const realtimeResult = await globalThis.StarTabPresence.sendWindowsCommand(
+          state.user.uid,
+          device.deviceId,
+          realtimePayload,
+          20_000,
+          850,
+        );
+        if (realtimeResult?.ok === true && realtimeResult?.acknowledged === true) return true;
+        fallbackCommandId = String(realtimeResult?.id || '');
+      } catch (_) {}
+    }
+
+    // Firestore remains the compatibility fallback. Reusing the RTDB id makes
+    // monitor/hotspot/RGB/power actions safe even if both transports overlap.
     const command = {
-      id: `${Date.now().toString(36)}-${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}`,
+      id: fallbackCommandId || `${Date.now().toString(36)}-${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}`,
       action,
       issuedBy: state.user.uid,
       issuedByClient: clientId,
@@ -325,38 +414,48 @@
   }
 
   function scheduleRefresh() {
+    // No hacer polling escribiendo en `command`. El documento del dispositivo ya llega
+    // por snapshot/presencia. `getSystemState` se solicita solo al abrir, cambiar de PC
+    // o después de una acción explícita que necesite refresco.
     clearInterval(state.refreshTimer);
     state.refreshTimer = 0;
-    if (!state.open) return;
-    state.refreshTimer = window.setInterval(() => {
-      if (!state.open || !versionAtLeast(state.lastDevice?.agentVersion) || !isOnline(state.lastDevice)) return;
-      void sendCommand('getSystemState');
-    }, REFRESH_INTERVAL_MS);
   }
 
   async function openModal() {
     if (!dom.modal || state.open) return;
     state.open = true;
     clearConfirmation();
-    if (dom.modal.parentElement !== document.body) document.body.appendChild(dom.modal);
+    if (!dom.modal.classList.contains('startab-control-embedded') && dom.modal.parentElement !== document.body) document.body.appendChild(dom.modal);
     dom.modal.style.zIndex = '2147483647';
     dom.modal.classList.add('is-open');
     dom.modal.setAttribute('aria-hidden', 'false');
     document.body.classList.add('windows-pc-control-open');
     connectSelectedDevice();
+    const watchedId = selectedDeviceId();
+    if (watchedId && currentUser()?.uid) void globalThis.StarTabPresence?.setWatcher?.(currentUser().uid, 'windows', watchedId, !document.hidden, 'pc-system-control');
     globalThis.StartabHaptics?.pulse?.('pc-control-open', 7, 70);
     window.setTimeout(() => {
-      if (state.open && versionAtLeast(state.lastDevice?.agentVersion) && isOnline(state.lastDevice)) void sendCommand('getSystemState');
+      if (state.open && versionAtLeast(state.lastDevice?.agentVersion) && canCommandDevice(state.lastDevice)) void sendCommand('getSystemState');
     }, 120);
     scheduleRefresh();
+    clearInterval(state.statusTimer);
+    state.statusTimer = window.setInterval(() => {
+      if (state.open && state.lastDevice) render(state.lastDevice);
+    }, 1_000);
   }
 
   function closeModal() {
     if (!state.open) return;
+    closeHotspotConfirm();
+    closeRgbConfig();
     state.open = false;
     clearConfirmation();
     clearInterval(state.refreshTimer);
     state.refreshTimer = 0;
+    clearInterval(state.statusTimer);
+    state.statusTimer = 0;
+    const watchedId = state.deviceId || selectedDeviceId();
+    if (watchedId && currentUser()?.uid) void globalThis.StarTabPresence?.setWatcher?.(currentUser().uid, 'windows', watchedId, false, 'pc-system-control');
     stopDeviceListener();
     dom.modal?.classList.remove('is-open');
     dom.modal?.setAttribute('aria-hidden', 'true');
@@ -401,10 +500,36 @@
     }
   }
 
-  async function toggleHotspot() {
+  function closeHotspotConfirm() {
+    state.hotspotPendingEnabled = null;
+    dom.hotspotConfirmModal?.classList.remove('is-open');
+    dom.hotspotConfirmModal?.setAttribute('aria-hidden', 'true');
+  }
+
+  function openHotspotConfirm() {
+    if (!dom.hotspot || dom.hotspot.disabled) return;
+    const current = normalizeHotspotState(state.lastDevice?.hotspotState);
+    const enabled = current !== 'on';
+    state.hotspotPendingEnabled = enabled;
+    if (dom.hotspotConfirmTitle) dom.hotspotConfirmTitle.textContent = enabled ? '¿Encender Mobile Hotspot?' : '¿Apagar Mobile Hotspot?';
+    if (dom.hotspotConfirmCopy) {
+      dom.hotspotConfirmCopy.textContent = enabled
+        ? 'El PC seleccionado empezará a compartir su conexión de red mediante el hotspot de Windows.'
+        : 'Se detendrá el hotspot de Windows y los dispositivos conectados perderán esa conexión.';
+    }
+    if (dom.hotspotConfirmAction) {
+      dom.hotspotConfirmAction.textContent = enabled ? 'Encender hotspot' : 'Apagar hotspot';
+      dom.hotspotConfirmAction.classList.toggle('is-danger', !enabled);
+    }
+    dom.hotspotConfirmModal?.classList.add('is-open');
+    dom.hotspotConfirmModal?.setAttribute('aria-hidden', 'false');
+    globalThis.StartabHaptics?.pulse?.('pc-hotspot-confirm', enabled ? 10 : 8, 55);
+  }
+
+  async function toggleHotspot(desiredEnabled = null) {
     const device = state.lastDevice;
     const current = normalizeHotspotState(device?.hotspotState);
-    const enabled = current !== 'on';
+    const enabled = typeof desiredEnabled === 'boolean' ? desiredEnabled : current !== 'on';
     if (!dom.hotspot || dom.hotspot.disabled) return;
     dom.hotspot.classList.add('is-sending');
     dom.hotspot.disabled = true;
@@ -421,6 +546,18 @@
     window.setTimeout(() => {
       if (state.open) void sendCommand('getSystemState');
     }, 900);
+  }
+
+  function openRgbConfig() {
+    if (!dom.rgbConfig || dom.rgbConfig.disabled) return;
+    dom.rgbConfigModal?.classList.add('is-open');
+    dom.rgbConfigModal?.setAttribute('aria-hidden', 'false');
+    globalThis.StartabHaptics?.pulse?.('pc-rgb-config-open', 6, 45);
+  }
+
+  function closeRgbConfig() {
+    dom.rgbConfigModal?.classList.remove('is-open');
+    dom.rgbConfigModal?.setAttribute('aria-hidden', 'true');
   }
 
   async function tryLocalRgbFastPath(enabled, color, intent = 'power') {
@@ -463,7 +600,16 @@
       dom.rgb.style.setProperty('--active-rgb', normalized);
     }
     if (dom.rgbState) dom.rgbState.textContent = enabled ? 'ON' : 'OFF';
-    if (dom.rgbPower) dom.rgbPower.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+    if (dom.rgbPower) {
+      dom.rgbPower.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+      const label = dom.rgbPower.querySelector('span');
+      if (label) label.textContent = enabled ? 'Apagar' : 'Encender';
+    }
+    if (dom.rgbModalPower) {
+      dom.rgbModalPower.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+      dom.rgbModalPower.classList.toggle('is-on', enabled);
+    }
+    if (dom.rgbModalPowerLabel) dom.rgbModalPowerLabel.textContent = enabled ? 'Apagar' : 'Encender';
     if (dom.rgbNote) dom.rgbNote.textContent = enabled ? `Aplicando ${normalized}…` : 'Apagando todas las luces…';
   }
 
@@ -510,8 +656,19 @@
       if (!button || button.disabled) return;
       void runSystemAction(button);
     });
-    dom.hotspot?.addEventListener('click', () => void toggleHotspot());
+    dom.hotspot?.addEventListener('click', openHotspotConfirm);
+    dom.hotspotConfirmCancel?.addEventListener('click', closeHotspotConfirm);
+    dom.hotspotConfirmBackdrop?.addEventListener('click', closeHotspotConfirm);
+    dom.hotspotConfirmAction?.addEventListener('click', () => {
+      const enabled = state.hotspotPendingEnabled;
+      closeHotspotConfirm();
+      if (typeof enabled === 'boolean') void toggleHotspot(enabled);
+    });
+    dom.rgbConfig?.addEventListener('click', openRgbConfig);
+    dom.rgbConfigClose?.addEventListener('click', closeRgbConfig);
+    dom.rgbConfigBackdrop?.addEventListener('click', closeRgbConfig);
     dom.rgbPower?.addEventListener('click', toggleRgb);
+    dom.rgbModalPower?.addEventListener('click', toggleRgb);
     dom.rgbColor?.addEventListener('input', () => {
       const color = setRgbVisualColor(dom.rgbColor.value);
       if (dom.rgb) dom.rgb.style.setProperty('--active-rgb', color);
@@ -524,15 +681,36 @@
     });
     dom.deviceSelect?.addEventListener('change', () => {
       if (state.open) {
+        const previousId = state.deviceId;
+        if (previousId && currentUser()?.uid) void globalThis.StarTabPresence?.setWatcher?.(currentUser().uid, 'windows', previousId, false, 'pc-system-control');
         clearConfirmation();
         connectSelectedDevice();
+        const nextId = selectedDeviceId();
+        if (nextId && currentUser()?.uid) void globalThis.StarTabPresence?.setWatcher?.(currentUser().uid, 'windows', nextId, !document.hidden, 'pc-system-control');
         window.setTimeout(() => {
-          if (state.open && versionAtLeast(state.lastDevice?.agentVersion) && isOnline(state.lastDevice)) void sendCommand('getSystemState');
+          if (state.open && versionAtLeast(state.lastDevice?.agentVersion) && canCommandDevice(state.lastDevice)) void sendCommand('getSystemState');
         }, 120);
       }
     });
+    document.addEventListener('visibilitychange', () => {
+      if (!state.open) return;
+      const id = state.deviceId || selectedDeviceId();
+      if (id && currentUser()?.uid) void globalThis.StarTabPresence?.setWatcher?.(currentUser().uid, 'windows', id, !document.hidden, 'pc-system-control');
+    });
     document.addEventListener('keydown', (event) => {
       if (event.key !== 'Escape' || !state.open) return;
+      if (dom.hotspotConfirmModal?.classList.contains('is-open')) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        closeHotspotConfirm();
+        return;
+      }
+      if (dom.rgbConfigModal?.classList.contains('is-open')) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        closeRgbConfig();
+        return;
+      }
       event.preventDefault();
       event.stopImmediatePropagation();
       closeModal();

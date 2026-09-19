@@ -4,13 +4,16 @@
   const firebaseConfig = {
     apiKey: 'AIzaSyBU8DyN2kRcDq0fxB20qRUXWBHV0E-0d6A',
     authDomain: 'startab-44e48.firebaseapp.com',
+    databaseURL: 'https://startab-44e48-default-rtdb.firebaseio.com',
     projectId: 'startab-44e48',
     storageBucket: 'startab-44e48.firebasestorage.app',
     messagingSenderId: '874084877753',
     appId: '1:874084877753:web:cf9cbe9a344356dc9be268',
   };
 
-  const HEARTBEAT_MS = 25_000;
+  const PRESENCE_ACTIVE_MS = 3_000;
+  const PRESENCE_IDLE_MS = 45_000;
+  const PRESENCE_SCHEDULER_MS = 500;
   const COMMAND_MAX_AGE_MS = 20_000;
 
   const state = {
@@ -29,6 +32,12 @@
     bridgeKey: null,
     userTimer: 0,
     standaloneCloudOnline: false,
+    presenceRef: null,
+    presenceOnDisconnect: null,
+    presenceWatchersRef: null,
+    presenceWatchersHandler: null,
+    observerActiveUntil: 0,
+    lastPresenceHeartbeatAt: 0,
   };
 
   function readSavedUser() {
@@ -53,7 +62,95 @@
     return readSavedUser();
   }
 
+  function stopPresenceWatcherObserver() {
+    try {
+      if (state.presenceWatchersRef && state.presenceWatchersHandler) {
+        state.presenceWatchersRef.off('value', state.presenceWatchersHandler);
+      }
+    } catch (_) {}
+    state.presenceWatchersRef = null;
+    state.presenceWatchersHandler = null;
+    state.observerActiveUntil = 0;
+  }
+
+  function startPresenceWatcherObserver() {
+    stopPresenceWatcherObserver();
+    if (!state.user?.uid || !state.nativeState?.deviceId || typeof firebase.database !== 'function') return;
+    try {
+      const ref = firebase.database().ref(`startab/v2/users/${state.user.uid}/devices/windows/${state.nativeState.deviceId}/watchers`);
+      const handler = (snap) => {
+        const raw = snap.val() || {};
+        const now = Date.now();
+        let activeUntil = 0;
+        Object.values(raw).forEach((watcher) => {
+          if (!watcher || watcher.active !== true) return;
+          const expires = Number(watcher.expiresAtClient || 0);
+          if (expires > now) activeUntil = Math.max(activeUntil, expires + 2_000);
+        });
+        const wasActive = state.observerActiveUntil > now;
+        state.observerActiveUntil = activeUntil;
+        if (!wasActive && activeUntil > now) {
+          // Fuerza presencia inmediata al abrir el panel.
+          state.lastPresenceHeartbeatAt = Date.now();
+          void publishPresenceHeartbeat();
+        }
+      };
+      state.presenceWatchersRef = ref;
+      state.presenceWatchersHandler = handler;
+      ref.on('value', handler, () => {});
+    } catch (_) {}
+  }
+
+  function adaptivePresenceDelay() {
+    return Date.now() < state.observerActiveUntil ? PRESENCE_ACTIVE_MS : PRESENCE_IDLE_MS;
+  }
+
+  async function publishRealtimePresence(online = true) {
+    if (!state.user?.uid || !state.nativeState?.deviceId || state.standaloneCloudOnline) return false;
+    try {
+      if (typeof firebase.database !== 'function') return false;
+      const ref = firebase.database().ref(`startab/v2/users/${state.user.uid}/presence/windows/${state.nativeState.deviceId}`);
+      state.presenceRef = ref;
+      const payload = {
+        state: online ? 'online' : 'offline',
+        standby: false,
+        platform: 'windows',
+        transport: 'extension-offscreen',
+        clientAt: Date.now(),
+        lastSeen: firebase.database.ServerValue.TIMESTAMP,
+        deviceName: state.nativeState.deviceName || 'PC Windows',
+        agentVersion: state.nativeState.agentVersion || '2.0.0',
+      };
+      await ref.update(payload);
+      try {
+        const od = ref.onDisconnect();
+        state.presenceOnDisconnect = od;
+        await od.update({ state:'offline', clientAt:Date.now(), lastSeen:firebase.database.ServerValue.TIMESTAMP });
+      } catch (_) {}
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  async function publishPresenceHeartbeat() {
+    if (!state.nativeConnected || state.standaloneCloudOnline) return;
+    const realtimeOk = await publishRealtimePresence(true);
+    if (realtimeOk || !state.deviceRef) return;
+    try {
+      await state.deviceRef.set({
+        online: true,
+        clientAt: Date.now(),
+        presenceMode: 'firestore-fallback',
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      }, { merge:true });
+    } catch (_) {}
+  }
+
   async function markCurrentOffline() {
+    if (!state.standaloneCloudOnline) {
+      try { await publishRealtimePresence(false); } catch (_) {}
+    }
     if (!state.deviceRef) return;
     try {
       await state.deviceRef.set({
@@ -65,6 +162,7 @@
   }
 
   function stopDeviceListener() {
+    stopPresenceWatcherObserver();
     state.unsubscribeDevice?.();
     state.unsubscribeDevice = null;
     stopPointerSessionBridge();
@@ -90,6 +188,14 @@
     return data?.standalone === true && data?.cloudLinked === true && data?.online === true && at > 0 && Date.now() - at < 70_000;
   }
 
+  function nativeSupportsStandaloneCloud(native = state.nativeState) {
+    const match = /^(\d+)\.(\d+)/.exec(String(native?.agentVersion || '').trim());
+    if (!match) return false;
+    const major = Number(match[1]) || 0;
+    const minor = Number(match[2]) || 0;
+    return major > 2 || (major === 2 && minor >= 8);
+  }
+
   async function startDeviceBridge() {
     if (!state.db || !state.user?.uid || !state.nativeState?.deviceId) return;
     const deviceId = state.nativeState.deviceId;
@@ -110,12 +216,22 @@
       .doc(deviceId);
 
     await publishNativeState(true);
+    state.lastPresenceHeartbeatAt = Date.now();
+    void publishRealtimePresence(true);
+    startPresenceWatcherObserver();
 
     state.unsubscribeDevice = state.deviceRef.onSnapshot(
       (snapshot) => {
         if (!snapshot.exists) return;
         const data = snapshot.data() || {};
+        const wasStandalone = state.standaloneCloudOnline;
         state.standaloneCloudOnline = standaloneCloudActive(data);
+        if (!wasStandalone && state.standaloneCloudOnline) {
+          try { state.presenceOnDisconnect?.cancel?.(); } catch (_) {}
+          state.presenceOnDisconnect = null;
+        } else if (wasStandalone && !state.standaloneCloudOnline && state.nativeConnected) {
+          void publishRealtimePresence(true);
+        }
         // Incluso con el daemon cloud activo mantenemos el listener de sesiones
         // para poder responder la oferta WebRTC del móvil. El relay Firestore no
         // se ejecuta aquí mientras el daemon esté online, evitando doble cursor.
@@ -458,7 +574,7 @@
       deviceId: native.deviceId,
       deviceName: native.deviceName || 'PC Windows',
       platform: 'windows',
-      bridge: String(native.agentVersion || '').startsWith('2.8.') ? 'standaloneNative' : 'nativeMessaging',
+      bridge: nativeSupportsStandaloneCloud(native) ? 'standaloneNative' : 'nativeMessaging',
       agentVersion: native.agentVersion || '2.0.0',
       online: !!state.nativeConnected,
       clientAt: Date.now(),
@@ -495,7 +611,7 @@
       // v2.8+ tiene un daemon cloud independiente. Que Chrome pierda Native
       // Messaging no significa que el PC esté offline, por lo que no debemos
       // pisar el heartbeat del agente standalone con online=false.
-      if (!String(state.nativeState?.agentVersion || '').startsWith('2.8.')) {
+      if (!nativeSupportsStandaloneCloud(state.nativeState)) {
         await publishNativeState(false);
       }
       return;
@@ -574,8 +690,12 @@
   });
 
   state.heartbeat = window.setInterval(() => {
-    if (state.nativeConnected) void publishNativeState(false);
-  }, HEARTBEAT_MS);
+    if (!state.nativeConnected) return;
+    const now = Date.now();
+    if (state.lastPresenceHeartbeatAt && now - state.lastPresenceHeartbeatAt < adaptivePresenceDelay()) return;
+    state.lastPresenceHeartbeatAt = now;
+    void publishPresenceHeartbeat();
+  }, PRESENCE_SCHEDULER_MS);
 
   state.userTimer = window.setInterval(() => void syncUser(), 3_000);
 
@@ -815,16 +935,30 @@
     const userRoot = media.db.collection('users').doc(media.uid);
     media.boundDeviceId = deviceId;
     media.lastCommandId = restoreLastCommandId(deviceId);
+    const realtimeCommand = typeof firebase.database === 'function'
+      ? firebase.database().ref(`startab/v2/users/${media.uid}/mediaCommands/${deviceId}`)
+      : null;
     media.refs = {
       state: userRoot.collection('mediaRemote').doc(`state_${deviceId}`),
-      command: userRoot.collection('mediaRemote').doc(`command_${deviceId}`),
+      command: realtimeCommand || userRoot.collection('mediaRemote').doc(`command_${deviceId}`),
+      commandRealtime: !!realtimeCommand,
     };
 
-    media.unsubs.push(
-      media.refs.command.onSnapshot((snapshot) => {
-        void handleCommandSnapshot(snapshot);
-      }, (error) => console.warn('StarTab Media background: command listener:', error)),
-    );
+    if (media.refs.commandRealtime) {
+      const commandRef = media.refs.command;
+      const handler = (snapshot) => { void handleCommandData(snapshot?.val?.() || null); };
+      const errorHandler = (error) => console.warn('StarTab Media background: RTDB command listener:', error);
+      commandRef.on('value', handler, errorHandler);
+      media.unsubs.push(() => {
+        try { commandRef.off('value', handler); } catch (_) {}
+      });
+    } else {
+      media.unsubs.push(
+        media.refs.command.onSnapshot((snapshot) => {
+          void handleCommandSnapshot(snapshot);
+        }, (error) => console.warn('StarTab Media background: command listener:', error)),
+      );
+    }
 
     if (media.isLeader) {
       void refreshRegistry(true);
@@ -900,9 +1034,13 @@
   }
 
   async function handleCommandSnapshot(snapshot) {
+    if (!snapshot?.exists) return;
+    await handleCommandData(snapshot.data() || {});
+  }
+
+  async function handleCommandData(data) {
     const deviceId = media.boundDeviceId || mediaDeviceId();
-    if (!media.isLeader || !deviceId || !snapshot?.exists) return;
-    const data = snapshot.data() || {};
+    if (!media.isLeader || !deviceId || !data || typeof data !== 'object') return;
     const id = String(data.id || '');
     if (!id || id === media.lastCommandId) return;
     if (String(data.targetDeviceId || '') !== deviceId) return;

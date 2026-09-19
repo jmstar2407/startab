@@ -14112,3 +14112,1357 @@ html.startab-tv-modal-open{overflow:hidden!important}
 .startab-tv-brightness-wrap input[type=range]::-webkit-slider-thumb{
   transform:translateZ(0)!important;
 }
+
+/* ================================================================
+   StarTab v1.4.22 · CONTROL CENTER
+   Multimedia + PC + Google TV · desktop top nav / mobile bottom nav
+   ================================================================ */
+.startab-control-center-panel[data-control-mode="pc"],
+.startab-control-center-panel[data-control-mode="tv"],
+.startab-control-center-panel[data-control-mode="more"]{
+  grid-template-columns:minmax(0,1fr)!important;
+}
+.startab-control-center-panel[data-control-mode="pc"] .multimedia-sidebar,
+.startab-control-center-panel[data-control-mode="tv"] .multimedia-sidebar,
+.startab-control-center-panel[data-control-mode="more"] .multimedia-sidebar{
+  display:none!important;
+}
+.startab-control-center-main{
+  position:relative!important;
+}
+.startab-control-pane{
+  display:none;
+  min-width:0;
+  min-height:0;
+  grid-row:2;
+  overflow:hidden;
+  animation:startab-control-pane-in .2s cubic-bezier(.2,.8,.2,1) both;
+}
+.startab-control-pane.is-active{display:block}
+@keyframes startab-control-pane-in{from{opacity:.35;transform:translateY(5px)}to{opacity:1;transform:none}}
+
+.startab-control-pane-media.is-active{
+  display:grid;
+  grid-template-rows:minmax(0,1fr) auto;
+  height:100%;
+  min-height:0;
+  gap:10px;
+}
+.startab-control-pane-media>.multimedia-empty,
+.startab-control-pane-media>.multimedia-player{
+  grid-row:1!important;
+  min-height:0;
+}
+.startab-control-pane-media>.multimedia-empty{align-self:center;justify-self:center}
+.startab-control-pane-media>.multimedia-player{height:100%!important}
+
+/* mode navigation */
+.startab-control-nav{
+  display:flex;
+  align-items:center;
+  gap:5px;
+  padding:3px;
+  border:1px solid rgba(255,255,255,.075);
+  border-radius:14px;
+  background:rgba(255,255,255,.025);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.025);
+}
+.startab-control-mode{
+  position:relative;
+  min-width:42px;
+  height:36px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  padding:0 9px;
+  border:1px solid transparent;
+  border-radius:10px;
+  background:transparent;
+  color:rgba(233,239,249,.52);
+  cursor:pointer;
+  font:700 9px/1 inherit;
+  transition:background .16s ease,border-color .16s ease,color .16s ease,opacity .16s ease,box-shadow .16s ease;
+}
+.startab-control-mode:hover,.startab-control-mode:focus-visible{
+  color:rgba(255,255,255,.9);
+  background:rgba(255,255,255,.045);
+  border-color:rgba(255,255,255,.065);
+  outline:none;
+}
+.startab-control-mode.is-active{
+  color:#fff;
+  border-color:rgba(152,193,255,.18);
+  background:linear-gradient(135deg,rgba(91,157,255,.15),rgba(142,94,255,.11));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.045),0 7px 20px rgba(0,0,0,.12);
+}
+.startab-control-mode-icon{position:relative;display:grid;place-items:center;width:18px;height:18px;flex:0 0 auto}
+.startab-control-mode-icon svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.65;stroke-linecap:round;stroke-linejoin:round}
+.startab-control-mode-icon>i{
+  position:absolute;
+  right:-4px;
+  bottom:-3px;
+  width:6px;
+  height:6px;
+  border:2px solid #121620;
+  border-radius:50%;
+  background:#667184;
+  box-sizing:content-box;
+  transition:background .16s ease,box-shadow .16s ease,opacity .16s ease;
+}
+.startab-control-mode[data-mode="media"] .startab-control-mode-icon>i,
+.startab-control-mode[data-mode="more"] .startab-control-mode-icon>i{display:none}
+.startab-control-mode[data-availability="available"] .startab-control-mode-icon>i{background:#75e2aa;box-shadow:0 0 9px rgba(117,226,170,.38)}
+.startab-control-mode[data-availability="standby"] .startab-control-mode-icon>i{background:#9a85ff;box-shadow:0 0 9px rgba(154,133,255,.32)}
+.startab-control-mode[data-availability="unresponsive"] .startab-control-mode-icon>i{background:#f0c66f;box-shadow:0 0 9px rgba(240,198,111,.30)}
+.startab-control-mode[data-availability="offline"]{color:rgba(223,230,240,.25)}
+.startab-control-mode[data-availability="offline"] .startab-control-mode-icon>i{background:#596170;box-shadow:none}
+.startab-control-mode[data-availability="unknown"]{opacity:.62}
+.startab-control-mode-label{white-space:nowrap}
+
+/* Shared Windows volume context */
+.multimedia-system-volume-toggle{gap:9px!important}
+.startab-control-volume-meta{
+  min-width:0;
+  margin-left:auto;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  text-align:right;
+}
+.startab-control-volume-meta b{
+  max-width:145px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  color:rgba(236,241,250,.48);
+  font-size:8px;
+  font-weight:720;
+}
+.startab-control-volume-meta small{
+  min-width:34px;
+  color:#e9f3ff;
+  font-size:9px;
+  font-weight:850;
+}
+.multimedia-system-footer.is-pc-mode{
+  margin:0 0 12px!important;
+  border-radius:20px!important;
+  border:1px solid rgba(144,190,255,.10)!important;
+  background:linear-gradient(180deg,rgba(62,93,140,.08),rgba(255,255,255,.018))!important;
+}
+.multimedia-system-footer.is-pc-mode .multimedia-system-volume-toggle{
+  border-bottom-color:rgba(255,255,255,.05)!important;
+}
+
+/* PC dashboard */
+.startab-control-pane-pc.is-active{
+  height:100%;
+  min-height:0;
+  overflow:auto;
+  padding:2px 3px 12px;
+  scrollbar-width:thin;
+  scrollbar-color:rgba(255,255,255,.13) transparent;
+}
+.startab-control-dashboard-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  margin-bottom:12px;
+  padding:13px 14px;
+  border:1px solid rgba(255,255,255,.07);
+  border-radius:18px;
+  background:linear-gradient(145deg,rgba(255,255,255,.038),rgba(255,255,255,.016));
+}
+.startab-control-dashboard-copy{min-width:0;display:flex;flex-direction:column;gap:3px}
+.startab-control-dashboard-copy>span{color:#8ebcff;font-size:7px;font-weight:900;letter-spacing:.16em}
+.startab-control-dashboard-copy>strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#f5f8fd;font-size:14px;font-weight:780}
+.startab-control-dashboard-copy>small{color:rgba(225,233,245,.43);font-size:9px}
+.startab-control-dashboard-copy>small[data-state="online"]{color:#8ce4b4}
+.startab-control-dashboard-copy>small[data-state="standby"]{color:#ad9cff}
+.startab-control-dashboard-copy>small[data-state="unresponsive"]{color:#f0c66f}
+.startab-control-dashboard-copy>small[data-state="offline"]{color:#ff8796}
+.startab-control-quick-action{
+  height:42px;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:0 13px;
+  border:1px solid rgba(139,184,255,.13);
+  border-radius:13px;
+  color:#e8f1ff;
+  background:rgba(77,126,196,.075);
+  cursor:pointer;
+  font:780 9px/1 inherit;
+}
+.startab-control-quick-action:hover,.startab-control-quick-action:focus-visible{background:rgba(77,126,196,.12);border-color:rgba(139,184,255,.22);outline:none}
+.startab-control-quick-action svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.65;stroke-linecap:round;stroke-linejoin:round}
+.startab-control-volume-slot{min-height:0}
+.startab-control-pc-system-slot{min-height:0}
+
+/* Embed existing PC system modal without duplicating its controller/state. */
+.startab-control-pane-pc .windows-pc-control-modal.startab-control-embedded{
+  position:relative!important;
+  inset:auto!important;
+  z-index:auto!important;
+  display:block!important;
+  padding:0!important;
+  overflow:visible!important;
+  background:transparent!important;
+}
+.startab-control-pane-pc .windows-pc-control-modal.startab-control-embedded>.windows-pc-control-backdrop{display:none!important}
+.startab-control-pane-pc .windows-pc-control-modal.startab-control-embedded .windows-pc-control-card{
+  position:relative!important;
+  width:100%!important;
+  height:auto!important;
+  min-height:0!important;
+  max-height:none!important;
+  border:1px solid rgba(255,255,255,.065)!important;
+  border-radius:20px!important;
+  opacity:1!important;
+  transform:none!important;
+  box-shadow:none!important;
+  background:linear-gradient(180deg,rgba(255,255,255,.025),rgba(255,255,255,.012))!important;
+}
+.startab-control-pane-pc .windows-pc-control-modal.startab-control-embedded .windows-pc-control-header{padding:13px 15px 10px!important}
+.startab-control-pane-pc .windows-pc-control-modal.startab-control-embedded .windows-pc-control-heading>span{display:none!important}
+.startab-control-pane-pc .windows-pc-control-modal.startab-control-embedded .windows-pc-control-heading h3{font-size:12px!important;margin:0 0 3px!important}
+.startab-control-pane-pc .windows-pc-control-modal.startab-control-embedded .windows-pc-control-heading p{font-size:8px!important}
+.startab-control-pane-pc .windows-pc-control-modal.startab-control-embedded .windows-pc-control-close{display:none!important}
+.startab-control-pane-pc .windows-pc-control-modal.startab-control-embedded .windows-pc-control-body{padding:11px 14px 14px!important}
+body.windows-pc-control-open .startab-control-center-panel{overscroll-behavior:contain}
+
+/* TV embedded in the same Control Center. */
+.startab-control-pane-tv.is-active{height:100%;min-height:0;overflow:hidden}
+.startab-control-pane-tv .startab-tv-modal.startab-tv-embedded{
+  position:relative!important;
+  inset:auto!important;
+  z-index:auto!important;
+  width:100%!important;
+  height:100%!important;
+  min-height:0!important;
+  display:flex!important;
+  align-items:stretch!important;
+  justify-content:stretch!important;
+  isolation:auto!important;
+}
+.startab-control-pane-tv .startab-tv-modal.startab-tv-embedded>.startab-tv-backdrop{display:none!important}
+.startab-control-pane-tv .startab-tv-modal.startab-tv-embedded>.startab-tv-card.startab-tv-remote-shell{
+  position:relative!important;
+  z-index:auto!important;
+  width:100%!important;
+  height:100%!important;
+  min-height:0!important;
+  max-height:none!important;
+  border-radius:20px!important;
+  border:1px solid rgba(205,174,255,.09)!important;
+  box-shadow:none!important;
+}
+.startab-control-pane-tv .startab-tv-head.startab-tv-head-compact{padding:12px 14px 10px!important}
+.startab-control-pane-tv .startab-tv-close{display:none!important}
+.startab-control-pane-tv .startab-tv-body.startab-tv-remote-body{padding-bottom:12px!important}
+.startab-control-loading{height:100%;display:grid;place-content:center;justify-items:center;gap:7px;text-align:center;color:rgba(236,240,249,.55)}
+.startab-control-loading>span{width:26px;height:26px;border:2px solid rgba(255,255,255,.12);border-top-color:#b878ff;border-radius:50%;animation:startab-control-spin .75s linear infinite}
+.startab-control-loading strong{font-size:12px;color:rgba(246,248,252,.78)}
+.startab-control-loading small{font-size:9px}
+@keyframes startab-control-spin{to{transform:rotate(360deg)}}
+
+/* More / status */
+.startab-control-pane-more.is-active{height:100%;overflow:auto;padding:10px 4px 18px}
+.startab-control-more-head{max-width:620px;margin:0 auto 20px;text-align:center;padding-top:18px}
+.startab-control-more-head>span{color:#8ebcff;font-size:8px;font-weight:900;letter-spacing:.18em}
+.startab-control-more-head h3{margin:6px 0 5px;color:#f6f8fc;font-size:20px}
+.startab-control-more-head p{margin:0;color:rgba(229,235,245,.43);font-size:10px;line-height:1.5}
+.startab-control-more-grid{width:min(650px,100%);margin:0 auto;display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.startab-control-device-card{
+  min-height:78px;
+  display:grid;
+  grid-template-columns:42px minmax(0,1fr) 10px;
+  align-items:center;
+  gap:11px;
+  padding:11px 13px;
+  border:1px solid rgba(255,255,255,.07);
+  border-radius:17px;
+  color:#f2f5fa;
+  background:rgba(255,255,255,.025);
+  text-align:left;
+  cursor:pointer;
+}
+.startab-control-device-card:hover,.startab-control-device-card:focus-visible{border-color:rgba(139,184,255,.18);background:rgba(85,126,190,.06);outline:none}
+.startab-control-device-icon{width:42px;height:42px;display:grid;place-items:center;border-radius:13px;background:rgba(255,255,255,.04);color:#b9d4ff}
+.startab-control-device-icon svg{width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:1.65;stroke-linecap:round;stroke-linejoin:round}
+.startab-control-device-card>span:nth-child(2){min-width:0;display:flex;flex-direction:column;gap:3px}
+.startab-control-device-card strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px}
+.startab-control-device-card small{color:rgba(229,235,245,.4);font-size:8px}
+.startab-control-device-card>i{width:8px;height:8px;border-radius:50%;background:#586171}
+.startab-control-device-card>i[data-state="online"]{background:#75e2aa;box-shadow:0 0 10px rgba(117,226,170,.35)}
+.startab-control-device-card>i[data-state="standby"]{background:#9a85ff}
+.startab-control-device-card>i[data-state="unresponsive"]{background:#f0c66f}
+.startab-control-device-card>i[data-state="offline"]{background:#596170}
+
+/* Legacy entry points are now represented by Control Center mode icons. */
+.multimedia-topbar-actions>#multimedia-cursor-toggle,
+.multimedia-topbar-actions>#windows-pc-control-toggle-media,
+.multimedia-topbar-actions>#startab-tv-toggle{display:none!important}
+
+@media (max-width:760px), (hover:none) and (pointer:coarse){
+  .startab-control-center-panel{
+    padding-bottom:calc(68px + env(safe-area-inset-bottom))!important;
+  }
+  .startab-control-center-main{
+    padding-bottom:8px!important;
+  }
+  .startab-control-nav{
+    position:fixed!important;
+    left:0!important;
+    right:0!important;
+    bottom:0!important;
+    z-index:2147483450!important;
+    height:calc(62px + env(safe-area-inset-bottom))!important;
+    padding:6px max(10px,env(safe-area-inset-right)) env(safe-area-inset-bottom) max(10px,env(safe-area-inset-left))!important;
+    display:grid!important;
+    grid-template-columns:repeat(4,1fr)!important;
+    gap:4px!important;
+    border:0!important;
+    border-top:1px solid rgba(255,255,255,.075)!important;
+    border-radius:0!important;
+    background:rgba(9,11,16,.94)!important;
+    backdrop-filter:blur(20px)!important;
+    box-shadow:0 -12px 35px rgba(0,0,0,.24)!important;
+    box-sizing:border-box!important;
+  }
+  .startab-control-mode{
+    min-width:0!important;
+    height:50px!important;
+    flex-direction:column!important;
+    gap:3px!important;
+    padding:4px 2px!important;
+    border-radius:12px!important;
+    font-size:7px!important;
+  }
+  .startab-control-mode-icon{width:20px;height:20px}
+  .startab-control-mode-icon svg{width:20px;height:20px}
+  .startab-control-mode-label{display:block!important;font-size:7px!important;letter-spacing:.01em}
+  .startab-control-mode-icon>i{right:-4px;bottom:-2px;border-color:#0b0d12}
+  .startab-control-center-panel[data-control-mode="media"] .multimedia-sidebar{display:none!important}
+  .startab-control-center-panel{grid-template-columns:minmax(0,1fr)!important}
+  .startab-control-pane-media{gap:6px}
+  .startab-control-pane-pc.is-active{padding:0 0 8px!important}
+  .startab-control-dashboard-head{margin:0 0 8px;padding:9px 10px;border-radius:15px}
+  .startab-control-dashboard-copy>strong{font-size:12px}
+  .startab-control-quick-action{height:38px;padding:0 11px}
+  .startab-control-volume-meta b{max-width:88px;font-size:6.8px}
+  .startab-control-volume-meta small{font-size:8px}
+  .multimedia-system-footer.is-pc-mode{
+    margin-bottom:8px!important;
+    border-radius:17px!important;
+  }
+  .multimedia-system-footer.is-pc-mode .windows-system-volume{
+    max-height:min(430px,49dvh)!important;
+  }
+  .startab-control-pane-pc .windows-pc-control-modal.startab-control-embedded{
+    height:auto!important;
+    min-height:0!important;
+  }
+  .startab-control-pane-pc .windows-pc-control-modal.startab-control-embedded .windows-pc-control-card{
+    width:100%!important;
+    height:auto!important;
+    min-height:0!important;
+    max-height:none!important;
+    border-radius:17px!important;
+    padding:0!important;
+    transform:none!important;
+  }
+  .startab-control-pane-pc .windows-pc-control-modal.startab-control-embedded .windows-pc-control-header{padding:10px 11px 8px!important}
+  .startab-control-pane-pc .windows-pc-control-modal.startab-control-embedded .windows-pc-control-body{padding:9px 10px 11px!important;overflow:visible!important}
+  .startab-control-pane-tv .startab-tv-modal.startab-tv-embedded{
+    position:relative!important;
+    width:100%!important;
+    height:100%!important;
+    min-height:0!important;
+    display:flex!important;
+  }
+  .startab-control-pane-tv .startab-tv-modal.startab-tv-embedded>.startab-tv-card.startab-tv-remote-shell{
+    width:100%!important;
+    height:100%!important;
+    min-height:0!important;
+    max-height:none!important;
+    border-radius:0!important;
+    border:0!important;
+  }
+  .startab-control-pane-tv .startab-tv-head.startab-tv-head-compact{padding-top:8px!important}
+  .startab-control-more-grid{grid-template-columns:1fr}
+  .startab-control-more-head{padding-top:10px;margin-bottom:13px}
+  .startab-control-more-head h3{font-size:17px}
+  .multimedia-topbar-actions{gap:5px!important}
+  .multimedia-sync-pill{display:none!important}
+}
+
+@media (min-width:761px) and (hover:hover){
+  .startab-control-mode-label{display:none}
+  .startab-control-mode:hover .startab-control-mode-label,
+  .startab-control-mode.is-active .startab-control-mode-label{display:inline}
+}
+
+@media (prefers-reduced-motion:reduce){
+  .startab-control-pane,.startab-control-mode,.startab-control-mode-icon>i{animation:none!important;transition:none!important}
+}
+
+/* ========================================================================== 
+   StarTab · Control Center refinement v1.4.22b
+   Context header, media-only sources, embedded PC touchpad and shared volume sheet
+   ========================================================================== */
+
+/* The media session/source strip belongs to Multimedia only. */
+.startab-control-center-panel:not([data-control-mode="media"]) .multimedia-mobile-source-slot,
+.startab-control-center-panel:not([data-control-mode="media"]) .multimedia-source-list,
+.startab-control-center-panel:not([data-control-mode="media"]) .multimedia-sidebar{
+  display:none!important;
+}
+
+/* The current section title and global close action are always the top-most context. */
+.startab-control-center-panel .multimedia-topbar{
+  position:relative;
+  z-index:50;
+}
+.startab-control-center-panel .multimedia-topbar-copy strong{
+  font-weight:820;
+  letter-spacing:.01em;
+}
+.startab-control-center-panel .multimedia-close{
+  position:relative;
+  z-index:5;
+}
+
+/* PC context is intentionally quiet: keyboard/touchpad are the primary controls. */
+.startab-control-pc-context{
+  display:grid;
+  grid-template-columns:8px minmax(0,1fr) auto;
+  align-items:center;
+  gap:8px;
+  margin:0 2px 8px;
+  padding:4px 4px 6px;
+  color:rgba(233,239,248,.72);
+}
+.startab-control-pc-context-dot{
+  width:7px;height:7px;border-radius:50%;background:#596170;
+}
+.startab-control-pc-context-dot[data-state="online"]{background:#75e2aa;box-shadow:0 0 9px rgba(117,226,170,.34)}
+.startab-control-pc-context-dot[data-state="standby"]{background:#9a85ff;box-shadow:0 0 9px rgba(154,133,255,.28)}
+.startab-control-pc-context-dot[data-state="unresponsive"]{background:#f0c66f;box-shadow:0 0 9px rgba(240,198,111,.26)}
+.startab-control-pc-context-dot[data-state="offline"]{background:#596170;box-shadow:none}
+.startab-control-pc-context strong{
+  min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px;font-weight:780;
+}
+.startab-control-pc-context small{font-size:8px;color:rgba(225,233,245,.42)}
+.startab-control-pc-context small[data-state="online"]{color:#8ce4b4}
+.startab-control-pc-context small[data-state="standby"]{color:#ad9cff}
+.startab-control-pc-context small[data-state="unresponsive"]{color:#f0c66f}
+.startab-control-pc-context small[data-state="offline"]{color:#ff8796}
+
+.startab-control-pc-touchpad-slot{
+  width:100%;
+  min-height:0;
+  margin-bottom:10px;
+}
+
+/* Reuse the real Windows touchpad controller inline — no duplicated state/controller. */
+.startab-control-pane-pc .windows-touchpad-modal.startab-control-touchpad-embedded{
+  position:relative!important;
+  inset:auto!important;
+  z-index:auto!important;
+  display:block!important;
+  width:100%!important;
+  height:auto!important;
+  padding:0!important;
+  opacity:1!important;
+  visibility:visible!important;
+  pointer-events:auto!important;
+  background:transparent!important;
+}
+.startab-control-pane-pc .windows-touchpad-modal.startab-control-touchpad-embedded>.windows-touchpad-backdrop{display:none!important}
+.startab-control-pane-pc .windows-touchpad-modal.startab-control-touchpad-embedded>.windows-touchpad-card{
+  position:relative!important;
+  inset:auto!important;
+  width:100%!important;
+  max-width:none!important;
+  height:auto!important;
+  min-height:0!important;
+  max-height:none!important;
+  margin:0!important;
+  transform:none!important;
+  opacity:1!important;
+  border:1px solid rgba(139,184,255,.085)!important;
+  border-radius:20px!important;
+  background:linear-gradient(180deg,rgba(42,65,101,.07),rgba(255,255,255,.015))!important;
+  box-shadow:none!important;
+  overflow:hidden!important;
+}
+.startab-control-pane-pc .startab-control-touchpad-embedded .windows-touchpad-header{display:none!important}
+.startab-control-pane-pc .startab-control-touchpad-embedded .windows-touchpad-body{
+  padding:12px!important;
+  gap:10px!important;
+  overflow:visible!important;
+}
+.startab-control-pane-pc .startab-control-touchpad-embedded .windows-touchpad-keyboard{
+  order:-10;
+  margin:0!important;
+}
+.startab-control-pane-pc .startab-control-touchpad-embedded .windows-touchpad-main{
+  min-height:190px;
+}
+.startab-control-pane-pc .startab-control-touchpad-embedded .windows-touchpad-note{
+  margin-top:0!important;
+}
+
+/* Other PC actions remain below the touchpad. */
+.startab-control-pc-system-slot{margin-top:0;margin-bottom:10px}
+.startab-control-pane-pc .windows-pc-control-modal.startab-control-embedded .windows-pc-control-header{
+  border-bottom:1px solid rgba(255,255,255,.045)!important;
+}
+.startab-control-pane-pc .windows-pc-control-modal.startab-control-embedded .windows-pc-control-heading h3::before{
+  content:'Otras opciones · ';
+  color:rgba(142,188,255,.58);
+  font-weight:800;
+}
+
+/* In PC mode the exact same Windows volume UI becomes a compact bottom sheet. */
+.startab-control-volume-slot{
+  position:sticky;
+  bottom:0;
+  z-index:70;
+  width:100%;
+  margin-top:10px;
+}
+.startab-control-pane-pc .multimedia-system-footer.is-pc-mode{
+  display:flex!important;
+  flex-direction:column-reverse!important;
+  width:100%!important;
+  margin:0!important;
+  overflow:hidden!important;
+  border:1px solid rgba(177,121,255,.12)!important;
+  border-radius:18px!important;
+  background:rgba(10,12,18,.94)!important;
+  box-shadow:0 -10px 30px rgba(0,0,0,.20)!important;
+  backdrop-filter:blur(18px)!important;
+  -webkit-backdrop-filter:blur(18px)!important;
+}
+.startab-control-pane-pc .multimedia-system-footer.is-pc-mode .multimedia-system-volume-toggle{
+  display:grid!important;
+  width:100%!important;
+  min-height:52px!important;
+  grid-template-columns:32px minmax(0,1fr) auto 20px!important;
+  padding:8px 12px!important;
+  border:0!important;
+  background:transparent!important;
+  cursor:pointer!important;
+}
+.startab-control-pane-pc .multimedia-system-footer.is-pc-mode .windows-system-volume{
+  display:block!important;
+  width:100%!important;
+  max-height:0!important;
+  padding:0 13px!important;
+  overflow:hidden!important;
+  opacity:0!important;
+  transform:translateY(10px)!important;
+  pointer-events:none!important;
+  border:0!important;
+  background:transparent!important;
+  box-shadow:none!important;
+  transition:max-height .32s cubic-bezier(.2,.8,.2,1),padding .32s cubic-bezier(.2,.8,.2,1),opacity .2s ease,transform .32s cubic-bezier(.2,.8,.2,1)!important;
+}
+.startab-control-pane-pc .multimedia-system-footer.is-pc-mode.is-expanded .windows-system-volume{
+  max-height:min(440px,58dvh)!important;
+  padding-top:12px!important;
+  padding-bottom:10px!important;
+  opacity:1!important;
+  transform:none!important;
+  pointer-events:auto!important;
+}
+/* Because the sheet is visually reversed, the chevron points toward the opening direction. */
+.startab-control-pane-pc .multimedia-system-footer.is-pc-mode .multimedia-system-volume-chevron{transform:rotate(0deg)!important}
+.startab-control-pane-pc .multimedia-system-footer.is-pc-mode.is-expanded .multimedia-system-volume-chevron{transform:rotate(180deg)!important}
+
+@media (max-width:760px), (hover:none) and (pointer:coarse){
+  /* Title first, sessions beneath it only in Multimedia. */
+  .startab-control-center-panel .multimedia-topbar{
+    grid-template-areas:"copy actions" "sources sources"!important;
+    grid-template-columns:minmax(0,1fr) auto!important;
+    gap:7px 9px!important;
+  }
+  .startab-control-center-panel:not([data-control-mode="media"]) .multimedia-topbar{
+    grid-template-areas:"copy actions"!important;
+  }
+  .startab-control-center-panel[data-control-mode="media"] .multimedia-mobile-source-slot{
+    display:block!important;
+    margin-top:2px;
+  }
+  .startab-control-center-panel .multimedia-topbar-copy strong{
+    font-size:13px!important;
+  }
+  .startab-control-center-panel .multimedia-close{
+    width:34px!important;height:34px!important;flex:0 0 34px!important;
+  }
+
+  .startab-control-pane-pc.is-active{
+    padding:0 0 5px!important;
+    overflow:auto!important;
+  }
+  .startab-control-pc-context{margin:0 7px 7px;padding-top:2px}
+  .startab-control-pc-touchpad-slot{margin-bottom:8px}
+  .startab-control-pane-pc .startab-control-touchpad-embedded>.windows-touchpad-card{
+    border-radius:17px!important;
+  }
+  .startab-control-pane-pc .startab-control-touchpad-embedded .windows-touchpad-body{
+    padding:9px 10px 10px!important;
+    gap:8px!important;
+  }
+  .startab-control-pane-pc .startab-control-touchpad-embedded .windows-touchpad-keyboard-shell{
+    min-height:43px!important;
+  }
+  .startab-control-pane-pc .startab-control-touchpad-embedded .windows-touchpad-main{
+    min-height:155px!important;
+  }
+  .startab-control-pane-pc .startab-control-touchpad-embedded .windows-touchpad-click{
+    min-height:49px!important;
+  }
+  .startab-control-pane-pc .startab-control-touchpad-embedded .windows-touchpad-note{
+    display:none!important;
+  }
+  .startab-control-pc-system-slot{margin-bottom:7px}
+
+  .startab-control-volume-slot{
+    bottom:calc(0px + env(safe-area-inset-bottom));
+    margin-top:7px;
+  }
+  .startab-control-pane-pc .multimedia-system-footer.is-pc-mode{
+    border-radius:17px 17px 14px 14px!important;
+    box-shadow:0 -16px 38px rgba(0,0,0,.28)!important;
+  }
+  .startab-control-pane-pc .multimedia-system-footer.is-pc-mode .multimedia-system-volume-toggle{
+    min-height:54px!important;
+    padding:8px max(13px,env(safe-area-inset-right)) 8px max(13px,env(safe-area-inset-left))!important;
+  }
+  .startab-control-pane-pc .multimedia-system-footer.is-pc-mode.is-expanded .windows-system-volume{
+    max-height:min(430px,52dvh)!important;
+  }
+}
+
+/* ========================================================================== 
+   StarTab · Control Center refinement v1.4.23
+   Header estable desktop · volumen click-outside · hotspot confirm · RGB modal · TV keyboard bar
+   ========================================================================== */
+
+/* En desktop el navegador queda puramente iconográfico: evita el salto de ancho/texto al cambiar de modo. */
+@media (min-width:761px){
+  .startab-control-nav .startab-control-mode-label{display:none!important}
+  .startab-control-nav .startab-control-mode,
+  .startab-control-nav .startab-control-mode:hover,
+  .startab-control-nav .startab-control-mode.is-active{min-width:42px!important;width:42px!important;padding:0!important;gap:0!important}
+}
+
+/* RGB: tarjeta principal limpia con solo Configuración + Encender/Apagar. */
+.windows-pc-rgb{
+  padding:10px 11px!important;
+  display:grid!important;
+  grid-template-columns:minmax(0,1fr) auto!important;
+  align-items:center!important;
+  gap:12px!important;
+  overflow:hidden!important;
+}
+.windows-pc-rgb-main{
+  min-width:0;
+  display:grid;
+  grid-template-columns:40px minmax(0,1fr) auto;
+  align-items:center;
+  gap:10px;
+}
+.windows-pc-rgb-actions{display:flex;align-items:center;gap:7px;flex:0 0 auto}
+.windows-pc-rgb-config,
+.windows-pc-rgb .windows-pc-rgb-power{
+  width:auto!important;
+  min-width:0!important;
+  min-height:36px!important;
+  height:36px!important;
+  display:inline-flex!important;
+  grid-template-columns:none!important;
+  align-items:center!important;
+  justify-content:center!important;
+  gap:7px!important;
+  padding:0 11px!important;
+  border:1px solid rgba(255,255,255,.085)!important;
+  border-radius:11px!important;
+  color:rgba(238,243,251,.72)!important;
+  background:rgba(255,255,255,.035)!important;
+  font:780 8px/1 inherit!important;
+  white-space:nowrap!important;
+  cursor:pointer!important;
+  transition:background .16s ease,border-color .16s ease,color .16s ease,transform .14s ease,box-shadow .16s ease!important;
+}
+.windows-pc-rgb-config svg,
+.windows-pc-rgb .windows-pc-rgb-power svg{width:15px;height:15px;flex:0 0 auto}
+.windows-pc-rgb-config:not(:disabled):hover,
+.windows-pc-rgb .windows-pc-rgb-power:not(:disabled):hover{transform:translateY(-1px);background:rgba(255,255,255,.065)!important;border-color:rgba(190,210,245,.16)!important;color:#fff!important}
+.windows-pc-rgb .windows-pc-rgb-power[aria-pressed="true"]{color:#adf2ce!important;border-color:rgba(121,225,176,.20)!important;background:rgba(58,131,97,.105)!important;box-shadow:0 0 20px rgba(72,183,126,.08)!important}
+.windows-pc-rgb-config:disabled,
+.windows-pc-rgb .windows-pc-rgb-power:disabled{opacity:.42!important;cursor:not-allowed!important;transform:none!important}
+
+/* Submodales glass compartidos. Se mantienen montados para animar tanto entrada como cierre. */
+.startab-glass-dialog{
+  position:fixed;
+  inset:0;
+  z-index:2147483620;
+  display:grid;
+  place-items:center;
+  padding:20px;
+  opacity:0;
+  visibility:hidden;
+  pointer-events:none;
+  transition:opacity .22s ease,visibility 0s linear .26s;
+}
+.startab-glass-dialog.is-open{opacity:1;visibility:visible;pointer-events:auto;transition-delay:0s}
+.startab-glass-dialog-backdrop{
+  position:absolute;
+  inset:0;
+  background:rgba(3,6,12,.54);
+  backdrop-filter:blur(20px) saturate(125%);
+  -webkit-backdrop-filter:blur(20px) saturate(125%);
+  opacity:0;
+  transition:opacity .24s ease;
+}
+.startab-glass-dialog.is-open .startab-glass-dialog-backdrop{opacity:1}
+.startab-glass-dialog-card{
+  position:relative;
+  z-index:1;
+  width:min(430px,calc(100vw - 34px));
+  padding:20px;
+  overflow:hidden;
+  border:1px solid rgba(255,255,255,.13);
+  border-radius:24px;
+  color:#f5f7fb;
+  background:
+    radial-gradient(circle at 15% -10%,rgba(120,177,255,.16),transparent 42%),
+    linear-gradient(145deg,rgba(23,28,39,.92),rgba(10,13,20,.90));
+  box-shadow:0 34px 100px rgba(0,0,0,.58),inset 0 1px 0 rgba(255,255,255,.07);
+  backdrop-filter:blur(26px) saturate(135%);
+  -webkit-backdrop-filter:blur(26px) saturate(135%);
+  opacity:0;
+  transform:translateY(16px) scale(.965);
+  transition:transform .32s cubic-bezier(.2,.85,.2,1),opacity .20s ease;
+}
+.startab-glass-dialog.is-open .startab-glass-dialog-card{opacity:1;transform:none}
+.startab-glass-dialog-icon{
+  width:46px;height:46px;display:grid;place-items:center;border-radius:15px;
+  color:#bad8ff;background:rgba(112,165,239,.10);border:1px solid rgba(151,197,255,.12);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05);
+}
+.startab-glass-dialog-icon.is-rgb{color:#d3b8ff;background:rgba(154,101,236,.11);border-color:rgba(190,148,255,.14)}
+.startab-glass-dialog-icon svg{width:23px;height:23px}
+.startab-glass-dialog-copy{min-width:0}
+.startab-glass-dialog-copy>span{display:block;margin-bottom:5px;color:rgba(170,202,245,.62);font-size:7px;font-weight:900;letter-spacing:.15em;text-transform:uppercase}
+.startab-glass-dialog-copy h3{margin:0;color:#f7f9fd;font-size:16px;font-weight:820;letter-spacing:-.015em}
+.startab-glass-dialog-copy p{margin:7px 0 0;color:rgba(225,232,243,.48);font-size:10px;line-height:1.52}
+.windows-hotspot-confirm-card{display:grid;grid-template-columns:46px minmax(0,1fr);gap:13px 14px;align-items:start}
+.startab-glass-dialog-actions{grid-column:1/-1;display:flex;justify-content:flex-end;gap:8px;margin-top:4px}
+.startab-glass-dialog-actions button{
+  min-height:39px;padding:0 14px;border-radius:12px;border:1px solid rgba(255,255,255,.09);
+  color:rgba(240,244,250,.72);background:rgba(255,255,255,.045);font:780 9px/1 inherit;cursor:pointer;
+  transition:.16s ease;
+}
+.startab-glass-dialog-actions button:hover{transform:translateY(-1px);background:rgba(255,255,255,.075);color:#fff}
+.startab-glass-dialog-actions .is-primary{color:#dcecff;border-color:rgba(123,184,255,.20);background:rgba(78,143,225,.13)}
+.startab-glass-dialog-actions .is-primary.is-danger{color:#ffcbd1;border-color:rgba(255,115,134,.20);background:rgba(184,63,81,.13)}
+
+.windows-rgb-config-card{width:min(470px,calc(100vw - 34px));padding:0}
+.windows-rgb-config-head{display:grid;grid-template-columns:46px minmax(0,1fr) 34px;align-items:center;gap:13px;padding:18px 18px 14px;border-bottom:1px solid rgba(255,255,255,.07)}
+.startab-glass-dialog-close{width:34px;height:34px;display:grid;place-items:center;border:1px solid rgba(255,255,255,.07);border-radius:11px;color:rgba(235,240,248,.5);background:rgba(255,255,255,.03);font-size:22px;line-height:1;cursor:pointer}
+.startab-glass-dialog-close:hover{color:#fff;background:rgba(255,255,255,.07)}
+.windows-rgb-config-modal .windows-pc-rgb-panel{padding:14px 18px 18px!important;border-top:0!important}
+.windows-rgb-power-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:3px 0 13px;margin-bottom:2px;border-bottom:1px solid rgba(255,255,255,.055)}
+.windows-rgb-power-row>div{min-width:0;display:flex;flex-direction:column;gap:3px}
+.windows-rgb-power-row strong{font-size:10px;font-weight:820;color:rgba(246,248,252,.88)}
+.windows-rgb-power-row small{font-size:8px;color:rgba(224,231,243,.40)}
+.windows-rgb-modal-power{height:36px;display:inline-flex;align-items:center;gap:8px;padding:0 12px;border:1px solid rgba(255,255,255,.085);border-radius:999px;color:rgba(235,240,248,.58);background:rgba(255,255,255,.035);font:820 8px/1 inherit;cursor:pointer;transition:.16s ease}
+.windows-rgb-modal-power i{width:8px;height:8px;border-radius:50%;background:#6f7887;box-shadow:none;transition:.16s ease}
+.windows-rgb-modal-power.is-on{color:#b7f2d2;border-color:rgba(121,225,176,.20);background:rgba(58,131,97,.10)}
+.windows-rgb-modal-power.is-on i{background:#75e2aa;box-shadow:0 0 10px rgba(117,226,170,.38)}
+.windows-rgb-modal-power:disabled{opacity:.42;cursor:not-allowed}
+.windows-rgb-config-modal .windows-pc-rgb-color-row{padding:11px 0 9px}
+.windows-rgb-config-modal .windows-pc-rgb-swatches{padding:8px 0 12px}
+.windows-rgb-config-modal .windows-pc-rgb-swatches button{min-height:38px}
+.windows-rgb-config-modal .windows-pc-rgb-foot{font-size:7.5px;line-height:1.45}
+
+/* TV: teclado remoto visible y accesible exactamente arriba del control. */
+.startab-tv-keyboard-bar{margin:0 0 11px!important;position:relative;z-index:6}
+.startab-tv-keyboard-bar .windows-touchpad-keyboard-shell{min-height:46px!important;border-color:rgba(192,151,255,.105)!important;background:linear-gradient(180deg,rgba(178,125,255,.055),rgba(255,255,255,.018))!important}
+.startab-tv-keyboard-bar .windows-touchpad-keyboard-shell:focus-within{border-color:rgba(190,143,255,.28)!important;background:linear-gradient(180deg,rgba(164,103,247,.095),rgba(255,255,255,.025))!important;box-shadow:0 0 0 3px rgba(157,94,240,.055),inset 0 1px 0 rgba(255,255,255,.035)!important}
+#startab-tv-keyboard-input{width:100%;min-width:0;height:34px;padding:0 2px;border:0;outline:0;color:rgba(248,250,255,.92);background:transparent;font:inherit;font-size:14px;caret-color:#d0adff}
+#startab-tv-keyboard-input::placeholder{color:rgba(232,238,249,.31)}
+.startab-tv-keyboard-bar .windows-touchpad-keyboard-icon{color:rgba(215,188,255,.72);background:rgba(167,105,243,.065)}
+.startab-tv-keyboard-bar .windows-touchpad-keyboard-state{color:rgba(205,176,244,.54);border-color:rgba(194,151,255,.10);background:rgba(159,103,230,.045)}
+
+@media (max-width:760px){
+  .windows-pc-rgb{grid-template-columns:1fr!important;gap:8px!important;padding:9px!important}
+  .windows-pc-rgb-main{grid-template-columns:36px minmax(0,1fr) auto;gap:8px}
+  .windows-pc-rgb-main .windows-pc-rgb-icon{width:36px;height:36px}
+  .windows-pc-rgb-actions{width:100%;display:grid;grid-template-columns:1fr 1fr;gap:7px}
+  .windows-pc-rgb-config,.windows-pc-rgb .windows-pc-rgb-power{width:100%!important;height:38px!important}
+  .startab-glass-dialog{padding:12px;align-items:center}
+  .startab-glass-dialog-card{width:min(430px,calc(100vw - 24px));border-radius:21px}
+  .windows-rgb-config-card{width:min(470px,calc(100vw - 24px))}
+  .windows-rgb-config-head{padding:15px 14px 12px}
+  .windows-rgb-config-modal .windows-pc-rgb-panel{padding:12px 14px 15px!important}
+  .startab-tv-keyboard-bar{margin:0 0 9px!important}
+  .startab-tv-keyboard-bar .windows-touchpad-keyboard-shell{min-height:43px!important}
+  .startab-tv-keyboard-bar .windows-touchpad-keyboard-state{font-size:6.6px;padding:0 7px}
+}
+
+@media (prefers-reduced-motion:reduce){
+  .startab-glass-dialog,.startab-glass-dialog-backdrop,.startab-glass-dialog-card{transition:none!important}
+}
+
+
+/* ========================================================================== 
+   StarTab v1.4.25 · Header estable + selector global + edge-to-edge
+   ========================================================================== */
+
+/* El header es la única fuente visual de selección de dispositivo. */
+.startab-control-center-panel .multimedia-topbar-copy strong{
+  white-space:nowrap!important;
+  overflow:hidden!important;
+  text-overflow:ellipsis!important;
+}
+.startab-control-header-device{
+  min-width:0;
+  max-width:min(320px,36vw);
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  margin-left:auto;
+}
+.startab-control-header-device[hidden],
+.startab-control-header-select-shell[hidden]{display:none!important}
+.startab-control-header-select-shell{
+  width:100%;
+  min-width:150px;
+  height:38px;
+  display:grid;
+  grid-template-columns:30px minmax(0,1fr);
+  align-items:center;
+  gap:7px;
+  padding:3px 5px 3px 4px;
+  border:1px solid rgba(255,255,255,.085);
+  border-radius:13px;
+  background:linear-gradient(145deg,rgba(255,255,255,.046),rgba(255,255,255,.018));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.035),0 8px 24px rgba(0,0,0,.10);
+  box-sizing:border-box;
+}
+.startab-control-header-device-icon{
+  position:relative;
+  width:30px;height:30px;
+  display:grid;place-items:center;
+  border-radius:10px;
+  color:#b9d5ff;
+  background:rgba(92,151,235,.085);
+  border:1px solid rgba(140,190,255,.08);
+}
+.startab-control-header-device-icon.is-tv{color:#d4b7ff;background:rgba(157,102,234,.085);border-color:rgba(199,157,255,.09)}
+.startab-control-header-device-icon svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.65;stroke-linecap:round;stroke-linejoin:round}
+.startab-control-header-device-icon>i{
+  position:absolute;right:2px;bottom:2px;width:6px;height:6px;border:2px solid #151923;border-radius:50%;background:#596170;box-sizing:content-box
+}
+.startab-control-header-device-icon>i[data-state="online"]{background:#75e2aa;box-shadow:0 0 8px rgba(117,226,170,.38)}
+.startab-control-header-device-icon>i[data-state="standby"]{background:#9a85ff;box-shadow:0 0 8px rgba(154,133,255,.30)}
+.startab-control-header-device-icon>i[data-state="unresponsive"]{background:#f0c66f;box-shadow:0 0 8px rgba(240,198,111,.26)}
+.startab-control-header-select-slot{min-width:0;width:100%}
+.startab-control-header-select-slot select{
+  width:100%!important;
+  max-width:none!important;
+  min-width:0!important;
+  height:30px!important;
+  margin:0!important;
+  padding:0 27px 0 8px!important;
+  border:0!important;
+  border-radius:9px!important;
+  outline:0!important;
+  appearance:auto!important;
+  color:rgba(242,246,252,.82)!important;
+  background:rgba(255,255,255,.025)!important;
+  font:750 9px/1 inherit!important;
+  text-overflow:ellipsis!important;
+  white-space:nowrap!important;
+  overflow:hidden!important;
+  color-scheme:dark;
+}
+.startab-control-header-select-slot select:focus-visible{box-shadow:0 0 0 2px rgba(130,181,255,.16)!important}
+.startab-tv-device-select-head.startab-control-device-wrap-without-select{display:none!important}
+
+/* Sin gutters laterales: el contenido de cada modo ocupa el ancho real del modal. */
+.startab-control-center-main{
+  padding-left:0!important;
+  padding-right:0!important;
+}
+.startab-control-center-panel .multimedia-topbar{
+  padding-left:14px!important;
+  padding-right:14px!important;
+  box-sizing:border-box!important;
+}
+.startab-control-pane,
+.startab-control-pane-media,
+.startab-control-pane-pc,
+.startab-control-pane-tv,
+.startab-control-pane-more{
+  width:100%!important;
+  margin-left:0!important;
+  margin-right:0!important;
+  padding-left:0!important;
+  padding-right:0!important;
+  box-sizing:border-box!important;
+}
+.startab-control-pane-media>.multimedia-player,
+.startab-control-pane-media>.multimedia-empty{margin-left:0!important;margin-right:0!important}
+.startab-control-pane-pc .startab-control-touchpad-embedded>.windows-touchpad-card,
+.startab-control-pane-pc .windows-pc-control-modal.startab-control-embedded .windows-pc-control-card,
+.startab-control-pane-tv .startab-tv-modal.startab-tv-embedded>.startab-tv-card.startab-tv-remote-shell{
+  width:100%!important;
+  max-width:none!important;
+  margin-left:0!important;
+  margin-right:0!important;
+}
+.startab-control-pane-tv .startab-tv-body.startab-tv-remote-body{
+  padding-left:0!important;
+  padding-right:0!important;
+}
+.startab-control-pane-tv .startab-tv-remote-content{
+  width:100%!important;
+  max-width:none!important;
+  margin-left:0!important;
+  margin-right:0!important;
+}
+.startab-control-pane-pc .startab-control-pc-context{margin-left:0!important;margin-right:0!important;padding-left:12px!important;padding-right:12px!important}
+.startab-control-pane-pc .startab-control-pc-touchpad-slot,
+.startab-control-pane-pc .startab-control-pc-system-slot,
+.startab-control-pane-pc .startab-control-volume-slot{margin-left:0!important;margin-right:0!important}
+
+@media (min-width:761px){
+  .startab-control-center-panel .multimedia-topbar{
+    display:grid!important;
+    grid-template-columns:minmax(150px,1fr) minmax(180px,320px) auto!important;
+    gap:10px!important;
+    align-items:center!important;
+  }
+  .startab-control-header-device{grid-column:2;justify-self:stretch;max-width:none;width:100%}
+  .multimedia-topbar-actions{grid-column:3}
+}
+
+@media (max-width:760px), (hover:none) and (pointer:coarse){
+  .startab-control-center-main{
+    padding-left:0!important;
+    padding-right:0!important;
+  }
+  .startab-control-center-panel .multimedia-topbar{
+    padding-left:max(9px,env(safe-area-inset-left))!important;
+    padding-right:max(9px,env(safe-area-inset-right))!important;
+    grid-template-areas:"copy actions" "device device" "sources sources"!important;
+    grid-template-columns:minmax(0,1fr) auto!important;
+    gap:7px 8px!important;
+  }
+  .startab-control-center-panel:not([data-control-mode="media"]) .multimedia-topbar{
+    grid-template-areas:"copy actions" "device device"!important;
+  }
+  .startab-control-header-device{
+    grid-area:device!important;
+    width:100%!important;
+    max-width:none!important;
+    margin:0!important;
+    justify-content:stretch!important;
+  }
+  .startab-control-header-select-shell{width:100%!important;min-width:0!important;height:40px!important;border-radius:12px!important}
+  .startab-control-header-select-slot select{height:32px!important;font-size:10px!important}
+  .startab-control-center-panel .multimedia-topbar-copy strong{font-size:13px!important}
+  .startab-control-center-panel .multimedia-topbar-copy span{display:none!important}
+  .startab-control-pane-media>.multimedia-player{padding-left:0!important;padding-right:0!important}
+  .startab-control-pane-pc.is-active{padding-left:0!important;padding-right:0!important}
+  .startab-control-pane-pc .startab-control-pc-context{margin-left:0!important;margin-right:0!important}
+  .startab-control-pane-tv .startab-tv-head.startab-tv-head-compact{
+    padding-left:0!important;padding-right:0!important;
+  }
+  .startab-control-pane-tv .startab-tv-head-brand{padding-left:10px!important}
+  .startab-control-pane-tv .startab-tv-head-actions{padding-right:10px!important}
+  .startab-control-pane-tv .startab-tv-remote-content{padding-left:0!important;padding-right:0!important}
+  .startab-control-pane-tv .startab-tv-keyboard-bar,
+  .startab-control-pane-tv .startab-tv-navigation-stage,
+  .startab-control-pane-tv .startab-tv-actions,
+  .startab-control-pane-tv .startab-tv-control-card,
+  .startab-control-pane-tv .startab-tv-quick-apps,
+  .startab-control-pane-tv .startab-tv-learnable-keys{margin-left:0!important;margin-right:0!important}
+}
+
+
+/* ========================================================================== 
+   StarTab v1.4.26 · Header móvil limpio + conexión real + controles depurados
+   ========================================================================== */
+
+/* Ya no se muestran bloques redundantes dentro del modo PC. */
+.startab-control-pc-context,
+.windows-pc-control-header,
+.windows-pc-control-note,
+.startab-pc-control-internal-close{display:none!important}
+.startab-control-pane-pc .windows-pc-control-body{padding-top:0!important}
+
+/* El badge de la barra de escritura ahora representa el transporte real. */
+#windows-touchpad-keyboard-state[data-transport="direct"]{
+  color:#93e7b7!important;border-color:rgba(117,226,170,.14)!important;background:rgba(72,166,111,.07)!important
+}
+#windows-touchpad-keyboard-state[data-transport="firebase"]{
+  color:#c7adff!important;border-color:rgba(177,129,255,.15)!important;background:rgba(139,89,221,.07)!important
+}
+#windows-touchpad-keyboard-state[data-transport="connecting"]{color:#e8c978!important}
+#windows-touchpad-keyboard-state[data-transport="error"]{color:#ff9ca7!important}
+
+/* El encabezado interno del TV queda sin copia/título redundante. */
+.startab-tv-status-data{display:none!important}
+.startab-tv-head.startab-tv-head-compact{justify-content:flex-end!important}
+.startab-tv-head .startab-tv-head-actions{width:100%!important;justify-content:flex-end!important}
+
+@media (max-width:760px), (hover:none) and (pointer:coarse){
+  /* En móvil: primera fila = selector + X. La navegación permanece abajo. */
+  .startab-control-center-panel .multimedia-topbar,
+  .startab-control-center-panel:not([data-control-mode="media"]) .multimedia-topbar{
+    display:grid!important;
+    grid-template-areas:"device close" "sources sources"!important;
+    grid-template-columns:minmax(0,1fr) 38px!important;
+    align-items:center!important;
+    gap:7px!important;
+    padding-top:max(8px,env(safe-area-inset-top))!important;
+    padding-left:max(9px,env(safe-area-inset-left))!important;
+    padding-right:max(9px,env(safe-area-inset-right))!important;
+  }
+  .startab-control-center-panel .multimedia-topbar-copy{display:none!important}
+  .startab-control-header-device{
+    grid-area:device!important;width:100%!important;max-width:none!important;margin:0!important;min-width:0!important
+  }
+  .startab-control-header-select-shell{
+    width:100%!important;height:40px!important;min-width:0!important;
+    grid-template-columns:30px minmax(0,1fr)!important;
+    gap:7px!important;padding:3px 5px 3px 4px!important
+  }
+  .startab-control-header-device-icon{
+    display:grid!important;width:30px!important;height:30px!important;flex:0 0 30px!important
+  }
+  .startab-control-header-device-icon>i{display:block!important}
+  .startab-control-header-select-slot select{
+    height:32px!important;padding-left:8px!important;padding-right:28px!important;font-size:10px!important
+  }
+  .startab-control-center-panel .multimedia-topbar-actions{
+    grid-area:close!important;display:flex!important;align-items:center!important;justify-content:flex-end!important;
+    width:38px!important;min-width:38px!important;gap:0!important
+  }
+  .startab-control-center-panel .multimedia-topbar-actions>#multimedia-sync-pill{display:none!important}
+  .startab-control-center-panel .multimedia-topbar-actions>.multimedia-close{
+    display:grid!important;place-items:center!important;width:36px!important;height:36px!important;flex:0 0 36px!important;margin:0!important
+  }
+  /* El nav conserva su función pero vive exclusivamente como barra inferior. */
+  .startab-control-center-panel .multimedia-topbar-actions>.startab-control-nav{
+    display:grid!important;position:fixed!important;width:auto!important;min-width:0!important
+  }
+  .startab-control-center-panel .multimedia-mobile-source-slot{grid-area:sources!important}
+  .startab-control-center-panel:not([data-control-mode="media"]) .multimedia-mobile-source-slot{display:none!important}
+
+  /* El header propio del remoto TV no compite con el header global del Centro. */
+  .startab-control-pane-tv .startab-tv-head.startab-tv-head-compact{display:none!important}
+}
+
+@media (max-width:760px), (hover:none) and (pointer:coarse){
+  .startab-control-center-panel .multimedia-topbar,
+  .startab-control-center-panel:not([data-control-mode="media"]) .multimedia-topbar{
+    grid-template-areas:"device close"!important;
+  }
+  .startab-control-pane-media>.multimedia-mobile-source-slot{
+    display:block!important;width:100%!important;margin:0!important;padding:5px max(9px,env(safe-area-inset-right)) 3px max(9px,env(safe-area-inset-left))!important;box-sizing:border-box!important
+  }
+  .startab-control-pane-media:not(.is-active)>.multimedia-mobile-source-slot{display:none!important}
+}
+
+/* ========================================================================== 
+   StarTab v1.4.27 · Multimedia móvil remaquetado
+   Orden estable: sesiones arriba · reproductor centro · volumen PC abajo
+   ========================================================================== */
+@media (max-width:760px), (hover:none) and (pointer:coarse){
+  /* El panel multimedia es ahora una rejilla real de tres niveles. */
+  .startab-control-pane-media.is-active{
+    display:grid!important;
+    grid-template-rows:auto minmax(0,1fr) auto!important;
+    grid-template-columns:minmax(0,1fr)!important;
+    gap:0!important;
+    width:100%!important;
+    height:100%!important;
+    min-height:0!important;
+    overflow:hidden!important;
+    padding:0!important;
+  }
+
+  /* Sesiones/pestañas siempre inmediatamente debajo del header global. */
+  .startab-control-pane-media>.multimedia-mobile-source-slot{
+    grid-row:1!important;
+    grid-column:1!important;
+    position:relative!important;
+    z-index:5!important;
+    display:block!important;
+    width:100%!important;
+    min-width:0!important;
+    min-height:56px!important;
+    margin:0!important;
+    padding:7px max(9px,env(safe-area-inset-right)) 7px max(9px,env(safe-area-inset-left))!important;
+    border-bottom:1px solid rgba(255,255,255,.05)!important;
+    background:linear-gradient(180deg,rgba(16,19,27,.96),rgba(11,13,19,.82))!important;
+    box-sizing:border-box!important;
+    overflow:hidden!important;
+  }
+  .startab-control-pane-media>.multimedia-mobile-source-slot:empty{
+    display:none!important;
+    min-height:0!important;
+    padding:0!important;
+    border:0!important;
+  }
+  .startab-control-pane-media .multimedia-mobile-source-slot .multimedia-source-list{
+    display:flex!important;
+    align-items:stretch!important;
+    width:100%!important;
+    min-width:0!important;
+    gap:7px!important;
+    margin:0!important;
+    padding:0 1px 1px!important;
+    overflow-x:auto!important;
+    overflow-y:hidden!important;
+    scroll-snap-type:x proximity!important;
+    scrollbar-width:none!important;
+    overscroll-behavior-x:contain!important;
+    -webkit-overflow-scrolling:touch!important;
+  }
+  .startab-control-pane-media .multimedia-mobile-source-slot .multimedia-source-list::-webkit-scrollbar{display:none!important}
+  .startab-control-pane-media .multimedia-mobile-source-slot .multimedia-source-item{
+    flex:0 0 clamp(142px,43vw,174px)!important;
+    width:clamp(142px,43vw,174px)!important;
+    min-width:142px!important;
+    margin:0!important;
+    scroll-snap-align:start!important;
+  }
+  .startab-control-pane-media .multimedia-mobile-source-slot .multimedia-source-item .multimedia-source{
+    width:100%!important;
+    min-width:0!important;
+    min-height:43px!important;
+    padding:6px 31px 6px 7px!important;
+    border-radius:12px!important;
+    box-sizing:border-box!important;
+  }
+
+  /* El reproductor ocupa únicamente el espacio central disponible. */
+  .startab-control-pane-media>.multimedia-empty,
+  .startab-control-pane-media>.multimedia-player{
+    grid-row:2!important;
+    grid-column:1!important;
+    width:100%!important;
+    min-width:0!important;
+    min-height:0!important;
+    max-height:none!important;
+    margin:0!important;
+    box-sizing:border-box!important;
+  }
+  .startab-control-pane-media>.multimedia-player,
+  .startab-control-pane-media>.multimedia-player[data-height-mode="compact"],
+  .startab-control-pane-media>.multimedia-player[data-height-mode="tight"]{
+    height:100%!important;
+    padding:10px max(10px,env(safe-area-inset-right)) 11px max(10px,env(safe-area-inset-left))!important;
+    overflow-x:hidden!important;
+    overflow-y:auto!important;
+    overscroll-behavior:contain!important;
+  }
+  .startab-control-pane-media>.multimedia-empty{
+    align-self:stretch!important;
+    justify-self:stretch!important;
+    display:flex!important;
+    flex-direction:column!important;
+    align-items:center!important;
+    justify-content:center!important;
+    padding:18px 16px!important;
+  }
+  .startab-control-pane-media>.multimedia-empty[hidden],
+  .startab-control-pane-media>.multimedia-player[hidden]{display:none!important}
+
+  /* El volumen del PC es una barra inferior propia del modo Multimedia. */
+  .startab-control-pane-media>.multimedia-system-footer{
+    grid-row:3!important;
+    grid-column:1!important;
+    position:relative!important;
+    z-index:8!important;
+    display:block!important;
+    width:100%!important;
+    min-width:0!important;
+    max-width:none!important;
+    margin:0!important;
+    border:0!important;
+    border-top:1px solid rgba(255,255,255,.065)!important;
+    border-radius:18px 18px 0 0!important;
+    background:linear-gradient(180deg,rgba(18,20,28,.99),rgba(9,10,15,.998))!important;
+    box-shadow:0 -12px 32px rgba(0,0,0,.22)!important;
+    overflow:hidden!important;
+    box-sizing:border-box!important;
+  }
+  .startab-control-pane-media>.multimedia-system-footer .multimedia-system-volume-toggle{
+    width:100%!important;
+    min-height:48px!important;
+    grid-template-columns:30px minmax(0,1fr) auto 18px!important;
+    gap:8px!important;
+    padding:7px max(11px,env(safe-area-inset-right)) 7px max(11px,env(safe-area-inset-left))!important;
+    touch-action:manipulation!important;
+    box-sizing:border-box!important;
+  }
+  .startab-control-pane-media>.multimedia-system-footer .multimedia-system-volume-toggle-icon{
+    width:29px!important;
+    height:29px!important;
+    border-radius:9px!important;
+  }
+  .startab-control-pane-media>.multimedia-system-footer .multimedia-system-volume-toggle>span:nth-of-type(2){
+    min-width:0!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+    white-space:nowrap!important;
+    font-size:10px!important;
+  }
+  .startab-control-pane-media>.multimedia-system-footer .startab-control-volume-meta{
+    margin-left:0!important;
+    gap:6px!important;
+    justify-self:end!important;
+  }
+  .startab-control-pane-media>.multimedia-system-footer .startab-control-volume-meta b{
+    display:none!important;
+  }
+  .startab-control-pane-media>.multimedia-system-footer .startab-control-volume-meta small{
+    min-width:32px!important;
+    font-size:9px!important;
+    text-align:right!important;
+  }
+  .startab-control-pane-media>.multimedia-system-footer .multimedia-system-volume-chevron{
+    width:16px!important;
+    height:16px!important;
+    justify-self:end!important;
+  }
+
+  /* El selector del PC ya vive en el header; no se reserva espacio dentro del sheet. */
+  .startab-control-pane-media>.multimedia-system-footer .windows-volume-head{
+    display:none!important;
+  }
+  .startab-control-pane-media>.multimedia-system-footer .windows-system-volume{
+    width:100%!important;
+    max-width:none!important;
+    margin:0!important;
+    padding-left:max(11px,env(safe-area-inset-left))!important;
+    padding-right:max(11px,env(safe-area-inset-right))!important;
+    box-sizing:border-box!important;
+  }
+  .startab-control-pane-media>.multimedia-system-footer:not(.is-expanded) .windows-system-volume{
+    max-height:0!important;
+    padding-top:0!important;
+    padding-bottom:0!important;
+    opacity:0!important;
+    pointer-events:none!important;
+    transform:translateY(6px)!important;
+  }
+  .startab-control-pane-media>.multimedia-system-footer.is-expanded .windows-system-volume{
+    max-height:min(390px,50dvh)!important;
+    padding-top:7px!important;
+    padding-bottom:calc(10px + env(safe-area-inset-bottom))!important;
+    opacity:1!important;
+    pointer-events:auto!important;
+    transform:none!important;
+    overflow-y:auto!important;
+    overscroll-behavior:contain!important;
+  }
+
+  /* Dial compacto y centrado: no invade el reproductor ni la barra inferior. */
+  .startab-control-pane-media .windows-volume-dial-panel{
+    width:100%!important;
+    max-width:360px!important;
+    margin:0 auto!important;
+    padding:2px 0 0!important;
+    gap:4px!important;
+  }
+  .startab-control-pane-media .windows-volume-dial-stage{
+    width:min(310px,92vw)!important;
+    grid-template-columns:42px minmax(0,auto) 42px!important;
+    gap:clamp(10px,3.5vw,16px)!important;
+  }
+  .startab-control-pane-media .windows-volume-dial{
+    width:clamp(138px,40vw,174px)!important;
+  }
+  .startab-control-pane-media .windows-volume-dial-step{
+    width:38px!important;
+    height:38px!important;
+    margin-bottom:clamp(18px,5vw,28px)!important;
+    border-radius:12px!important;
+    font-size:21px!important;
+  }
+  .startab-control-pane-media .windows-volume-dial-readout strong{font-size:14px!important}
+  .startab-control-pane-media .windows-volume-dial-readout span{font-size:6px!important}
+  .startab-control-pane-media .windows-volume-hint{display:none!important}
+  .startab-control-pane-media .windows-volume-spectrum{
+    width:min(260px,78vw)!important;
+    height:25px!important;
+    margin:5px auto 0!important;
+  }
+
+  /* El header global ya solo ocupa la fila selector + cerrar; las sesiones viven en el pane. */
+  .startab-control-center-panel[data-control-mode="media"] .multimedia-topbar{
+    grid-template-areas:"device close"!important;
+    grid-template-columns:minmax(0,1fr) 38px!important;
+    gap:7px!important;
+    padding-bottom:7px!important;
+    border-bottom:1px solid rgba(255,255,255,.05)!important;
+  }
+}
+
+@media (max-width:420px), (max-height:700px) and (pointer:coarse){
+  .startab-control-pane-media .multimedia-mobile-source-slot .multimedia-source-item{
+    flex-basis:136px!important;
+    width:136px!important;
+    min-width:136px!important;
+  }
+  .startab-control-pane-media>.multimedia-player,
+  .startab-control-pane-media>.multimedia-player[data-height-mode="compact"],
+  .startab-control-pane-media>.multimedia-player[data-height-mode="tight"]{
+    padding-top:7px!important;
+    padding-bottom:8px!important;
+  }
+  .startab-control-pane-media>.multimedia-system-footer.is-expanded .windows-system-volume{
+    max-height:min(330px,46dvh)!important;
+  }
+  .startab-control-pane-media .windows-volume-dial{width:136px!important}
+  .startab-control-pane-media .windows-volume-spectrum{display:none!important}
+}
+@media (max-width:760px), (hover:none) and (pointer:coarse){
+  .startab-control-center-panel[data-control-mode="media"]:not(.has-sources) .startab-control-pane-media>.multimedia-mobile-source-slot{
+    display:none!important;
+    min-height:0!important;
+    padding:0!important;
+    border:0!important;
+  }
+}
+
+
+/* ========================================================================== 
+   StarTab v1.4.28 · Header móvil con icono/LED + presencia TV robusta
+   ========================================================================== */
+@media (max-width:760px), (hover:none) and (pointer:coarse){
+  .startab-control-center-panel .startab-control-header-select-shell{
+    grid-template-columns:30px minmax(0,1fr)!important;
+    gap:7px!important;
+    padding:3px 5px 3px 4px!important;
+  }
+  .startab-control-center-panel .startab-control-header-device-icon{
+    display:grid!important;
+    width:30px!important;height:30px!important;
+  }
+  .startab-control-center-panel .startab-control-header-device-icon>i{display:block!important}
+}
