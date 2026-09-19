@@ -750,6 +750,8 @@
     lastPublishedSessions: [],
     lastPublishedAt: 0,
     lastCommandId: '',
+    commandSequence: 0,
+    latestVolumeSequence: new Map(),
   };
 
   function readSavedUser() {
@@ -946,7 +948,7 @@
 
     if (media.refs.commandRealtime) {
       const commandRef = media.refs.command;
-      const handler = (snapshot) => { void handleCommandData(snapshot?.val?.() || null); };
+      const handler = (snapshot) => { const sequence = ++media.commandSequence; void handleCommandData(snapshot?.val?.() || null, sequence); };
       const errorHandler = (error) => console.warn('StarTab Media background: RTDB command listener:', error);
       commandRef.on('value', handler, errorHandler);
       media.unsubs.push(() => {
@@ -1035,10 +1037,11 @@
 
   async function handleCommandSnapshot(snapshot) {
     if (!snapshot?.exists) return;
-    await handleCommandData(snapshot.data() || {});
+    const sequence = ++media.commandSequence;
+    await handleCommandData(snapshot.data() || {}, sequence);
   }
 
-  async function handleCommandData(data) {
+  async function handleCommandData(data, arrivalSequence = ++media.commandSequence) {
     const deviceId = media.boundDeviceId || mediaDeviceId();
     if (!media.isLeader || !deviceId || !data || typeof data !== 'object') return;
     const id = String(data.id || '');
@@ -1056,6 +1059,14 @@
     const command = data.command || {};
     const action = String(command.action || '');
     const tabId = Number(target.tabId);
+    const frameId = Number(target.frameId) || 0;
+
+    if (action === 'volume') {
+      const volumeKey = `${tabId}:${frameId}`;
+      const latestSequence = Number(media.latestVolumeSequence.get(volumeKey)) || 0;
+      if (arrivalSequence < latestSequence) return;
+      media.latestVolumeSequence.set(volumeKey, arrivalSequence);
+    }
 
     try {
       if (action === 'openTab') {
@@ -1077,7 +1088,7 @@
           type: 'STARTAB_MEDIA_CONTROL',
           target: {
             tabId,
-            frameId: Number(target.frameId) || 0,
+            frameId,
           },
           command: {
             action,
@@ -1087,6 +1098,16 @@
       }
     } catch (error) {
       console.warn('StarTab Media background: no se pudo ejecutar el comando remoto:', action, error);
+    }
+
+    if (action === 'volume') {
+      // The background registry update arrives immediately after the media command.
+      // Let bursts collapse into the newest value instead of blocking this RTDB
+      // listener on a full registry round-trip for every slider movement.
+      window.setTimeout(() => {
+        void refreshRegistry(false).then(() => schedulePublish(true));
+      }, 18);
+      return;
     }
 
     await refreshRegistry(false);

@@ -264,6 +264,19 @@
     return sendDeviceCommand(uid, 'tv', deviceId, payload, ttlMs);
   }
 
+  async function sendWindowsCommandFast(uid, deviceId, payload, ttlMs = 12_000) {
+    const db = ensure();
+    if (!db || !uid || !deviceId) return { ok: false, acknowledged: false, written: false, id: '' };
+
+    const envelope = commandEnvelope(payload, ttlMs);
+    try {
+      await db.ref(`${base(uid)}/devices/windows/${deviceId}/command`).set(envelope);
+      return { ok: true, acknowledged: false, written: true, id: envelope.id };
+    } catch (_) {
+      return { ok: false, acknowledged: false, written: false, id: envelope.id, reason: 'write-failed' };
+    }
+  }
+
   async function sendWindowsCommand(uid, deviceId, payload, ttlMs = 20_000, ackTimeoutMs = 900) {
     const db = ensure();
     if (!db || !uid || !deviceId) return { ok: false, acknowledged: false, written: false, id: '' };
@@ -382,6 +395,7 @@
     status,
     sendTvCommand,
     sendWindowsCommand,
+    sendWindowsCommandFast,
     setWatcher,
     stopAllWatchers,
     isRealtimeConnected: () => connected === true,

@@ -200,6 +200,24 @@
     dom.spectrum.setAttribute('aria-label', active ? 'Windows está reproduciendo audio' : 'Sin actividad de audio en Windows');
   }
 
+  function currentAudioState(device = selectedDevice()) {
+    const nativeSelected = !!(
+      device?.deviceId
+      && state.native.connected
+      && state.native.deviceId
+      && String(device.deviceId) === String(state.native.deviceId)
+    );
+    return {
+      volume: nativeSelected && Number.isFinite(Number(state.native.volume))
+        ? clamp(state.native.volume, 0, 100)
+        : clamp(device?.volume, 0, 100),
+      muted: nativeSelected && typeof state.native.muted === 'boolean'
+        ? state.native.muted
+        : !!device?.muted,
+      nativeSelected,
+    };
+  }
+
   function clearOptimisticState() {
     state.optimisticVolume = null;
     state.optimisticMuted = null;
@@ -254,10 +272,11 @@
     // briefly publish the previous value after a local +/- press (for example
     // target 7 while the last remote snapshot still says 6). Accepting a ±1
     // difference here caused the visible 7 -> 6 -> 7 bounce.
+    const actual = currentAudioState(device);
     const volumeMatches = state.optimisticVolume == null
-      || Math.round(clamp(device.volume, 0, 100)) === Math.round(state.optimisticVolume);
+      || Math.round(actual.volume) === Math.round(state.optimisticVolume);
     const muteMatches = state.optimisticMuted == null
-      || !!device.muted === state.optimisticMuted;
+      || actual.muted === state.optimisticMuted;
 
     // While a volume command is queued or in flight, the latest local value is
     // authoritative for the UI. Only release it once Firestore/Windows reports
@@ -267,7 +286,7 @@
 
   function effectiveMuted(device = selectedDevice()) {
     if (Date.now() < state.optimisticUntil && typeof state.optimisticMuted === 'boolean') return state.optimisticMuted;
-    return !!device?.muted;
+    return currentAudioState(device).muted;
   }
 
   function buildDialSegments() {
@@ -527,8 +546,9 @@
     const pstatus = devicePresenceStatus(device);
     const online = !!pstatus.online;
     reconcileOptimisticState(device);
-    const rawVolume = device ? clamp(device.volume, 0, 100) : 0;
-    const rawMuted = !!device?.muted;
+    const actualAudio = device ? currentAudioState(device) : { volume: 0, muted: false, nativeSelected: false };
+    const rawVolume = actualAudio.volume;
+    const rawMuted = actualAudio.muted;
     const optimisticActive = Date.now() < state.optimisticUntil;
     const volume = optimisticActive && state.optimisticVolume != null ? state.optimisticVolume : rawVolume;
     const muted = optimisticActive && typeof state.optimisticMuted === 'boolean' ? state.optimisticMuted : rawMuted;
@@ -735,6 +755,23 @@
     const preferRealtime = globalThis.StarTabPresence?.isRealtimeConnected?.() === true
       && (routePresence?.commandable !== false || isStandaloneCloudDevice?.(device));
     let fallbackCommandId = '';
+
+    // High-frequency volume updates use a write-confirmed RTDB path and do not
+    // wait for the cloud acknowledgement before allowing the next value through.
+    // The Windows agent applies last-write-wins semantics, while Firestore remains
+    // a fallback only when the RTDB write itself fails.
+    if (action === 'setVolume' && preferRealtime && globalThis.StarTabPresence?.sendWindowsCommandFast) {
+      try {
+        const fastResult = await globalThis.StarTabPresence.sendWindowsCommandFast(
+          state.user.uid,
+          device.deviceId,
+          realtimePayload,
+          12_000,
+        );
+        if (fastResult?.ok === true && fastResult?.written === true) return true;
+      } catch (_) {}
+    }
+
     if (preferRealtime && globalThis.StarTabPresence?.sendWindowsCommand) {
       try {
         const realtimeResult = await globalThis.StarTabPresence.sendWindowsCommand(
@@ -814,9 +851,11 @@
       return;
     }
 
-    // Small coalescing window keeps rapid +/- presses fluid locally while
-    // reducing Firestore traffic. The UI itself is updated synchronously.
-    state.commandTimer = window.setTimeout(pumpVolumeCommand, 55);
+    // Keep the UI synchronous and coalesce only a very small burst. Local Native
+    // Messaging can absorb a tighter cadence; remote RTDB still gets enough
+    // coalescing to avoid flooding while feeling immediate.
+    const delay = isLocalNativeTarget(selectedDevice()) ? 12 : 32;
+    state.commandTimer = window.setTimeout(pumpVolumeCommand, delay);
   }
 
   function applyNativeStatus(payload) {
