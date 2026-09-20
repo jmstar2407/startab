@@ -533,18 +533,23 @@
     const volume = optimisticActive && state.optimisticVolume != null ? state.optimisticVolume : rawVolume;
     const muted = optimisticActive && typeof state.optimisticMuted === 'boolean' ? state.optimisticMuted : rawMuted;
 
+    const livePresence = device ? globalThis.StarTabPresence?.presenceFor?.(state.user?.uid || '', 'windows', device.deviceId) : null;
+    const lastConnectionAt = Math.max(
+      Number(livePresence?.lastSeen || livePresence?.clientAt || 0),
+      Number(device?.clientAt || 0)
+    );
+    dom.card.dataset.lastConnectionAt = lastConnectionAt > 0 ? String(lastConnectionAt) : '';
+    dom.card.dataset.presenceState = String(pstatus?.state || 'offline');
     dom.card.dataset.state = !loggedIn
       ? 'signed-out'
       : !device
         ? 'empty'
         : online
           ? 'online'
-          : canControlDevice(device)
-            ? 'syncing'
-            : 'offline';
+          : 'offline';
     const commandable = canControlDevice(device);
-    dom.status?.classList.toggle('is-online', online || commandable);
-    dom.status?.classList.toggle('is-offline', !!device && !commandable);
+    dom.status?.classList.toggle('is-online', online);
+    dom.status?.classList.toggle('is-offline', !!device && !online);
 
     if (dom.statusText) {
       dom.statusText.textContent = !loggedIn
@@ -555,17 +560,9 @@
           ? state.native.connected
             ? 'Agente conectado · registrando este PC en StarTab'
             : 'No hay PCs Windows vinculados'
-          : pstatus.state === 'reconnecting'
-            ? 'PC reconectando · comandos disponibles por Firebase'
-            : pstatus.state === 'unresponsive'
-              ? 'PC sin respuesta · comprobando presencia'
-              : pstatus.state === 'standby'
-              ? 'PC en Standby · presencia activa'
-              : online
-                ? (pstatus.source === 'lan' ? 'PC disponible por conexión local' : 'Volumen maestro sincronizado en tiempo real')
-                : canControlDevice(device)
-                  ? 'Agente cloud vinculado · confirmando presencia del PC'
-                  : 'PC no disponible · apagado, sin Internet o sin corriente';
+          : online
+            ? (pstatus.source === 'lan' ? 'PC disponible por conexión local' : 'Volumen maestro sincronizado en tiempo real')
+            : 'PC no disponible · apagado, sin Internet o sin corriente';
     }
 
     if (dom.range && !dom.range.matches(':active')) dom.range.value = String(volume);

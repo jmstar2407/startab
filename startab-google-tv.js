@@ -23,7 +23,6 @@
     pointerId: null, startX: 0, startY: 0, lastX: 0, lastY: 0, moved: false, downAt: 0,
     longPressTimer: 0, longPressSent: false, navDirection: '', navStrength: 0, navRepeatTimer: 0, navLastSentAt: 0,
     navRaf: 0, navVisualX: 0, navVisualY: 0, navVisualStrength: 0, navTargetX: 0, navTargetY: 0, navTargetStrength: 0,
-    captureSlot: '', captureMessage: '', captureMessageKind: 'idle', captureTimer: 0, lastCaptureAt: 0,
     editingAppPackage: '', editingBackground: '', contextAppPackage: '', appEditHoldTimer: 0,
     cameraStream: null, scannerActive: false, scanTimer: 0, scanBusy: false, barcodeDetector: null,
     availableApps: [], appSearch: '', wsKeepAlive: 0, firebaseSessionTimer: 0, modalOpen: false, keyboardBuffer: '', keyboardTimer: 0,
@@ -143,21 +142,7 @@
                 <button id="startab-tv-settings" type="button" data-tv-control aria-label="Configuración" title="Configuración">${ICONS.settings}</button>
               </div>
 
-              <section class="startab-tv-native-tests startab-tv-learnable-keys" aria-label="Botones aprendibles del control físico">
-                <div class="startab-tv-native-tests-head"><b>Botones aprendibles</b><span>Mantén pulsado uno y luego pulsa la tecla física del control.</span></div>
-                <div class="startab-tv-native-tests-row">
-                  <button type="button" data-tv-control data-capture-slot="M1" data-native-command="menuVariant" data-native-variant="quick" title="M1 · Mantén pulsado para aprender"><b>M1</b><small>Quick</small></button>
-                  <button type="button" data-tv-control data-capture-slot="M2" data-native-command="menuVariant" data-native-variant="notifications" title="M2 · Mantén pulsado para aprender"><b>M2</b><small>Panel</small></button>
-                  <button type="button" data-tv-control data-capture-slot="M3" data-native-command="menuVariant" data-native-variant="menu36" title="M3 · Mantén pulsado para aprender"><b>M3</b><small>Menu</small></button>
-                  <button type="button" data-tv-control data-capture-slot="M4" data-native-command="menuVariant" data-native-variant="oem" title="M4 · Mantén pulsado para aprender"><b>M4</b><small>OEM</small></button>
-                  <button type="button" data-tv-control data-capture-slot="M5" data-native-command="menuVariant" data-native-variant="settings" title="M5 · Mantén pulsado para aprender"><b>M5</b><small>Ajustes</small></button>
-                  <button type="button" data-tv-control data-capture-slot="I1" data-native-command="inputVariant" data-native-variant="aosp" title="I1 · Mantén pulsado para aprender"><b>I1</b><small>AOSP</small></button>
-                  <button type="button" data-tv-control data-capture-slot="I2" data-native-command="inputVariant" data-native-variant="sony" title="I2 · Mantén pulsado para aprender"><b>I2</b><small>Sony</small></button>
-                  <button type="button" data-tv-control data-capture-slot="I3" data-native-command="inputVariant" data-native-variant="launcher" title="I3 · Mantén pulsado para aprender"><b>I3</b><small>Launcher</small></button>
-                  <button type="button" data-tv-control data-capture-slot="I4" data-native-command="inputVariant" data-native-variant="discover" title="I4 · Mantén pulsado para aprender"><b>I4</b><small>Detectar</small></button>
-                </div>
-                <div class="startab-tv-capture-status" id="startab-tv-capture-status" data-state="idle">Mantén pulsado un botón para aprender una tecla del control físico.</div>
-              </section>
+
 
               <div class="startab-tv-app-row startab-tv-quick-apps" id="startab-tv-quick-apps"></div>
 
@@ -246,7 +231,7 @@
   function cacheDom() {
     const ids = [
       'toggle','modal','backdrop','close','led','status-title','status-note','device-select','empty','remote-content',
-      'power','input','keyboard','back','menu','home','assistant','settings','nav-touch','nav-knob','nav-hint','capture-status','quick-apps',
+      'power','input','keyboard','back','menu','home','assistant','settings','nav-touch','nav-knob','nav-hint','quick-apps',
       'mute','volume','volume-value','volume-fill','vol-down','vol-up','brightness','brightness-value',
       'add','add-layer','add-close','scan-btn','pair-ip','pair-pin','pair-btn',
       'apps-layer','apps-close','app-search','apps-list',
@@ -297,9 +282,6 @@
       const remoteBrightness = Math.round(clamp(Number(data.brightnessLevel), 0, 10));
       const matchesLocal = state.optimisticBrightness != null && remoteBrightness === Math.round(state.optimisticBrightness);
       if (matchesLocal || state.optimisticBrightness == null || now >= state.brightnessHoldUntil) state.optimisticBrightness = remoteBrightness;
-    }
-    if (data.remoteKeyBindings && typeof data.remoteKeyBindings === 'object') {
-      const d = selectedDevice(); if (d) d.remoteKeyBindings = data.remoteKeyBindings;
     }
   }
 
@@ -468,206 +450,6 @@
     });
   }
 
-  function captureBindingFor(slot) {
-    const bindings = selectedDevice()?.remoteKeyBindings;
-    return bindings && typeof bindings === 'object' ? bindings[slot] || null : null;
-  }
-
-  function setCaptureMessage(text, kind = 'idle') {
-    state.captureMessage = String(text || '');
-    state.captureMessageKind = kind;
-    if (dom.captureStatus) {
-      dom.captureStatus.textContent = state.captureMessage || 'Mantén pulsado un botón para aprender una tecla del control físico.';
-      dom.captureStatus.dataset.state = kind;
-    }
-  }
-
-  function renderCaptureButtons() {
-    const buttons = document.querySelectorAll('.startab-tv-learnable-keys [data-capture-slot]');
-    buttons.forEach(btn => {
-      const slot = String(btn.dataset.captureSlot || '').toUpperCase();
-      const binding = captureBindingFor(slot);
-      const label = btn.querySelector('small');
-      if (!btn.dataset.defaultLabel && label) btn.dataset.defaultLabel = label.textContent || 'Prueba';
-      const capturing = state.captureSlot === slot;
-      btn.classList.toggle('is-capturing', capturing);
-      btn.classList.toggle('is-bound', !!binding && !capturing);
-      if (capturing) {
-        if (label) label.textContent = 'Pulsa en TV…';
-        btn.title = `${slot} · esperando una tecla física del control`;
-      } else if (binding) {
-        const friendly = String(binding.friendlyName || binding.keyName || `Tecla ${binding.keyCode || ''}`).trim();
-        if (label) label.textContent = friendly;
-        btn.title = `${slot} · ${friendly} · ${binding.keyName || ''} (${binding.keyCode ?? '?'}) · mantén pulsado para volver a aprender`;
-      } else {
-        if (label) label.textContent = btn.dataset.defaultLabel || 'Prueba';
-        btn.title = `${slot} · toque: prueba actual · mantén pulsado: aprender del control físico`;
-      }
-    });
-    if (dom.captureStatus) {
-      const fallback = state.captureSlot
-        ? `${state.captureSlot}: pulsa ahora el botón físico del control del TV.`
-        : 'Mantén pulsado un botón para aprender una tecla del control físico.';
-      dom.captureStatus.textContent = state.captureMessage || fallback;
-      dom.captureStatus.dataset.state = state.captureMessageKind || (state.captureSlot ? 'capture' : 'idle');
-    }
-  }
-
-  function handleKeyCaptureEvent(data = {}) {
-    const d = selectedDevice();
-    if (d && data.remoteKeyBindings && typeof data.remoteKeyBindings === 'object') d.remoteKeyBindings = data.remoteKeyBindings;
-    if (d && data.binding && data.slot) {
-      if (!d.remoteKeyBindings || typeof d.remoteKeyBindings !== 'object') d.remoteKeyBindings = {};
-      d.remoteKeyBindings[data.slot] = data.binding;
-    }
-    const event = String(data.event || data.keyCaptureEvent || '');
-    const slot = String(data.slot || data.keyCaptureSlot || state.captureSlot || '');
-    if (event === 'captured') {
-      state.captureSlot = '';
-      clearTimeout(state.captureTimer); state.captureTimer = 0;
-      const b = data.binding || d?.lastCapturedKey || captureBindingFor(slot);
-      const friendly = b?.friendlyName || b?.keyName || `Tecla ${b?.keyCode ?? ''}`;
-      setCaptureMessage(`${slot} aprendido: ${friendly}${b?.keyName ? ` · ${b.keyName} (${b.keyCode})` : ''}`, 'success');
-      try { navigator.vibrate?.([22,35,45]); } catch (_) {}
-    } else if (event === 'timeout') {
-      state.captureSlot = '';
-      clearTimeout(state.captureTimer); state.captureTimer = 0;
-      setCaptureMessage(`${slot || 'Captura'}: no se detectó ninguna tecla. Mantén pulsado e inténtalo de nuevo.`, 'warn');
-    } else if (event === 'cancelled') {
-      state.captureSlot = '';
-      clearTimeout(state.captureTimer); state.captureTimer = 0;
-      setCaptureMessage('Captura cancelada.', 'idle');
-    } else if (event === 'started' && slot) {
-      state.captureSlot = slot;
-      setCaptureMessage(`${slot}: pulsa ahora el botón físico del control del TV.`, 'capture');
-    }
-    renderCaptureButtons();
-  }
-
-  function syncCaptureFromDevice(d) {
-    if (!d) return;
-    const at = Number(d.keyCaptureAt || 0);
-    if (!at || at <= state.lastCaptureAt) return;
-    state.lastCaptureAt = at;
-    handleKeyCaptureEvent({
-      event: d.keyCaptureEvent,
-      slot: d.keyCaptureSlot,
-      binding: d.lastCapturedKey,
-      remoteKeyBindings: d.remoteKeyBindings
-    });
-  }
-
-  function beginLearnKey(slot) {
-    if (!selectedDevice() || !slot) return;
-    state.captureSlot = slot;
-    setCaptureMessage(`${slot}: pulsa ahora el botón físico del control del TV. StarTab guardará su código y nombre.`, 'capture');
-    renderCaptureButtons();
-    try { navigator.vibrate?.([18,28,18]); } catch (_) {}
-    sendAction('captureKeyStart', { slot }, false);
-    clearTimeout(state.captureTimer);
-    state.captureTimer = setTimeout(() => {
-      if (state.captureSlot !== slot) return;
-      state.captureSlot = '';
-      setCaptureMessage(`${slot}: tiempo agotado. Mantén pulsado para intentarlo otra vez.`, 'warn');
-      renderCaptureButtons();
-    }, 16_500);
-  }
-
-  function capturedBindingFallback(binding = {}) {
-    const code = Number(binding.keyCode);
-    const label = `${binding.keyName || ''} ${binding.friendlyName || ''}`.toUpperCase();
-    const has = (...parts) => parts.some(part => label.includes(part));
-
-    if (code === 19 || has('DPAD_UP', 'ARRIBA')) return { type:'dpad', extra:{ direction:'up' } };
-    if (code === 20 || has('DPAD_DOWN', 'ABAJO')) return { type:'dpad', extra:{ direction:'down' } };
-    if (code === 21 || has('DPAD_LEFT', 'IZQUIERDA')) return { type:'dpad', extra:{ direction:'left' } };
-    if (code === 22 || has('DPAD_RIGHT', 'DERECHA')) return { type:'dpad', extra:{ direction:'right' } };
-    if (code === 23 || code === 66 || has('DPAD_CENTER', 'ENTER', ' OK')) return { type:'ok', extra:{} };
-    if (code === 4 || has('KEYCODE_BACK', 'ATRÁS', 'BACK')) return { type:'back', extra:{} };
-    if (code === 3 || has('KEYCODE_HOME', 'HOME', 'INICIO')) return { type:'home', extra:{} };
-    if (code === 82 || has('KEYCODE_MENU', 'MENÚ', 'MENU')) return { type:'menu', extra:{} };
-    if (code === 178 || has('TV_INPUT', 'SOURCE', 'FUENTE', 'INPUT')) return { type:'input', extra:{} };
-    if (code === 176 || has('SETTINGS', 'CONFIGURACIÓN', 'AJUSTES')) return { type:'settings', extra:{} };
-    if (code === 219 || has('ASSIST', 'ASISTENTE', 'VOICE', 'MIC')) return { type:'assistant', extra:{} };
-    if (code === 26 || has('KEYCODE_POWER', 'POWER', 'ENCEND')) return { type:'power', extra:{} };
-    if (code === 24 || has('VOLUME_UP', 'VOL+', 'SUBIR VOLUMEN')) return { type:'volumeUp', extra:{} };
-    if (code === 25 || has('VOLUME_DOWN', 'VOL-', 'BAJAR VOLUMEN')) return { type:'volumeDown', extra:{} };
-    if (code === 164 || has('VOLUME_MUTE', 'MUTE', 'SILENC')) return { type:'mute', extra:{} };
-    return null;
-  }
-
-  function replayCapturedKey(slot, binding) {
-    if (!binding) return false;
-    const fallback = capturedBindingFallback(binding);
-    if (fallback) {
-      if (fallback.type === 'back') { sendBack(); return true; }
-      if (fallback.type === 'volumeUp') { setVolume((state.optimisticVolume ?? Number(selectedDevice()?.volume || 0)) + 1); return true; }
-      if (fallback.type === 'volumeDown') { setVolume((state.optimisticVolume ?? Number(selectedDevice()?.volume || 0)) - 1); return true; }
-      if (fallback.type === 'mute') { toggleMute(); return true; }
-      sendAction(fallback.type, fallback.extra || {});
-      return true;
-    }
-
-    // Enviar también los datos completos aprendidos. Las versiones nuevas del TV pueden
-    // reproducir la tecla por keyCode/scanCode aunque el slot local se haya desincronizado.
-    const payload = {
-      slot,
-      binding: {
-        keyCode: Number.isFinite(Number(binding.keyCode)) ? Number(binding.keyCode) : null,
-        scanCode: Number.isFinite(Number(binding.scanCode)) ? Number(binding.scanCode) : null,
-        keyName: String(binding.keyName || ''),
-        friendlyName: String(binding.friendlyName || ''),
-        source: Number.isFinite(Number(binding.source)) ? Number(binding.source) : binding.source ?? null,
-        deviceId: Number.isFinite(Number(binding.deviceId)) ? Number(binding.deviceId) : binding.deviceId ?? null,
-        inputDeviceName: String(binding.inputDeviceName || ''),
-        inputDeviceDescriptor: String(binding.inputDeviceDescriptor || ''),
-        observedPackageName: String(binding.observedPackageName || ''),
-        observedClassName: String(binding.observedClassName || ''),
-        observedAt: Number.isFinite(Number(binding.observedAt)) ? Number(binding.observedAt) : 0,
-      }
-    };
-    if (Number.isFinite(Number(binding.keyCode))) payload.keyCode = Number(binding.keyCode);
-    if (Number.isFinite(Number(binding.scanCode))) payload.scanCode = Number(binding.scanCode);
-    if (binding.keyName) payload.keyName = String(binding.keyName);
-    if (binding.observedPackageName) payload.observedPackageName = String(binding.observedPackageName);
-    if (binding.observedClassName) payload.observedClassName = String(binding.observedClassName);
-    sendAction('runCapturedKey', payload);
-    return true;
-  }
-
-  function bindLearnableButtons() {
-    document.querySelectorAll('.startab-tv-learnable-keys [data-capture-slot]').forEach(btn => {
-      let holdTimer = 0;
-      let held = false;
-      const stop = () => { clearTimeout(holdTimer); holdTimer = 0; };
-      btn.addEventListener('pointerdown', e => {
-        if (btn.disabled) return;
-        held = false;
-        stop();
-        try { btn.setPointerCapture?.(e.pointerId); } catch (_) {}
-        holdTimer = setTimeout(() => {
-          held = true;
-          btn.dataset.suppressClick = '1';
-          beginLearnKey(String(btn.dataset.captureSlot || '').toUpperCase());
-        }, 620);
-      });
-      btn.addEventListener('pointerup', stop);
-      btn.addEventListener('pointercancel', stop);
-      btn.addEventListener('contextmenu', e => e.preventDefault());
-      btn.addEventListener('click', e => {
-        if (held || btn.dataset.suppressClick === '1') {
-          e.preventDefault(); e.stopPropagation();
-          held = false; delete btn.dataset.suppressClick;
-          return;
-        }
-        const slot = String(btn.dataset.captureSlot || '').toUpperCase();
-        const binding = captureBindingFor(slot);
-        if (binding) replayCapturedKey(slot, binding);
-        else sendAction(btn.dataset.nativeCommand, { variant: btn.dataset.nativeVariant || '' });
-      });
-    });
-  }
-
   const controlPaint = { volume: null, brightness: null, muted: null, powerOn: null };
 
   function paintTvControls(force = false) {
@@ -747,9 +529,7 @@
     dom.empty?.classList.toggle('is-visible', !d);
     dom.remoteContent?.classList.toggle('is-hidden', !d);
     dom.modal?.querySelectorAll('[data-tv-control]').forEach(el => { el.disabled = !d; });
-    syncCaptureFromDevice(d);
     renderQuickApps();
-    renderCaptureButtons();
 
     const pstatus = d ? presenceStatus(d) : { state:'offline', online:false, source:'none' };
     if (!uid()) setStatus('error','Sin sesión','Inicia sesión en StarTab.');
@@ -868,9 +648,6 @@
       'assistant-unavailable':'Google Assistant no está disponible o está deshabilitado en este TV.',
       'menu-unavailable':'La app actual no expuso una acción de menú compatible.',
       'text-field-unavailable':'Selecciona primero un campo de texto en el Google TV y vuelve a escribir.',
-      'capture-invalid-slot':'Ese botón no se puede usar para aprendizaje.',
-      'captured-key-missing':'Mantén pulsado este botón y aprende primero una tecla del control físico.',
-      'captured-key-replay-blocked':'La tecla quedó identificada y guardada, pero Android bloqueó reproducirla directamente. El nombre/código quedó visible para poder crear su acceso específico.'
     };
     return map[reason] || `El TV rechazó la orden (${reason || 'error'}).`;
   }
@@ -920,15 +697,10 @@
         if (data.type === 'state' && data.ok) {
           clearTimeout(timer); state.wsReady = true; state.wsConnecting = false; applyRemoteState(data); startWsKeepAlive(); render();
         }
-        if (data.type === 'keyCapture') {
-          handleKeyCaptureEvent(data);
-          return;
-        }
         if (data.type === 'ack') {
           const pending = directPending.get(data.id); if (pending) { clearTimeout(pending.timer); directPending.delete(data.id); }
           if (data.ok === false) { showCommandError(data.reason || 'error'); return; }
           if (Array.isArray(data.apps)) { state.availableApps = data.apps; renderAppsList(); }
-          if (data.remoteKeyBindings && typeof data.remoteKeyBindings === 'object') applyRemoteState(data, true);
           const hasState = Number.isFinite(Number(data.volume)) || Number.isFinite(Number(data.brightnessLevel)) || typeof data.muted === 'boolean' || typeof data.powerOn === 'boolean';
           if (hasState) { applyRemoteState(data); render(); }
         }
@@ -1474,7 +1246,6 @@
     dom.keyboardInput?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();sendKeyboardEnter();} });
     dom.back?.addEventListener('click',sendBack);
     dom.menu?.addEventListener('click',()=>sendAction('menu'));
-    bindLearnableButtons();
     dom.home?.addEventListener('click',()=>sendAction('home'));
     dom.assistant?.addEventListener('click',()=>sendAction('assistant'));
     dom.settings?.addEventListener('click',()=>sendAction('settings'));

@@ -103,8 +103,13 @@
       const url = `${RTDB}/${ROOT}/${encodeURIComponent(uid)}/devices/${type}/${encodeURIComponent(deviceId)}/commands/${encodeURIComponent(item.id)}.json?auth=${encodeURIComponent(token)}`;
       // REST avoids the SDK's offline write queue replaying physical actions later.
       const written = await request(url, null, item);
-      let result = ack.current() || (written ? await ack.wait(850) : null);
+      const fastSetter = !!setterKey(item.payload || {});
+      let result = ack.current() || (written ? await ack.wait(fastSetter ? 120 : 850) : null);
       if (result) return result;
+      // Volume/mute are idempotent state setters. A successful RTDB write is
+      // enough to release the lane immediately; waiting seconds for Firestore
+      // fallback made +/- feel broken and could roll optimistic UI backwards.
+      if (written && fastSetter) return { ok:true, acknowledged:false, written:true, id:item.id, reason:'queued-rtdb' };
       const data = type === 'windows'
         ? { command: { ...item.payload, ...item, payload: item.payload } }
         : { command: item };

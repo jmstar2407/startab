@@ -26,6 +26,8 @@
     globalPresenceWindowsUnsub: null,
     globalPresenceTvUnsub: null,
     mobileMql: null,
+    sourcePlacementObserver: null,
+    sourcePlacementGuard: false,
   };
 
   const $ = (id) => document.getElementById(id);
@@ -111,7 +113,7 @@
     button.dataset.availability = mode === 'media' || mode === 'more' ? 'available' : 'unknown';
     button.setAttribute('aria-label', label);
     button.title = label;
-    button.innerHTML = `<span class="startab-control-mode-icon">${icon}<i aria-hidden="true"></i></span><span class="startab-control-mode-label">${label}</span>`;
+    button.innerHTML = `<span class="startab-control-mode-icon">${icon}<i aria-hidden="true"></i></span><span class="startab-control-mode-label">${label}</span>${mode === 'pc' ? '<small class="startab-control-mode-meta" id="startab-control-pc-last-connection" hidden></small>' : ''}`;
     return button;
   }
 
@@ -139,17 +141,56 @@
   }
 
   function syncNavPlacement() {
-    const nav = state.nav || $('startab-control-nav');
-    const panel = state.panel || document.querySelector('.multimedia-modal-panel');
-    const actions = document.querySelector('.multimedia-topbar-actions');
-    if (!nav || !panel || !actions) return;
-    const mobile = state.mobileMql?.matches ?? window.matchMedia(MOBILE_QUERY).matches;
-    if (mobile) {
-      if (nav.parentElement !== panel) panel.appendChild(nav);
-    } else if (nav.parentElement !== actions) {
-      const sync = $('multimedia-sync-pill');
-      actions.insertBefore(nav, sync && sync.parentElement === actions ? sync : actions.firstChild);
+    if (state.sourcePlacementGuard) return;
+    state.sourcePlacementGuard = true;
+    try {
+      const nav = state.nav || $('startab-control-nav');
+      const panel = state.panel || document.querySelector('.multimedia-modal-panel');
+      const actions = document.querySelector('.multimedia-topbar-actions');
+      if (!nav || !panel || !actions) return;
+      const mobile = state.mobileMql?.matches ?? window.matchMedia(MOBILE_QUERY).matches;
+      const sourceList = $('multimedia-source-list');
+      const mobileSourceSlot = $('multimedia-mobile-source-slot');
+      const desktopSourceAnchor = $('multimedia-source-desktop-anchor');
+      if (mobile) {
+        if (nav.parentElement !== panel) panel.appendChild(nav);
+        // En móvil la lista original (no una copia) vive SIEMPRE debajo del header.
+        // Esto conserva clicks, cerrar pestaña y selección, y evita que el sidebar
+        // oculto de escritorio se quede con las sesiones en Safari/iPhone.
+        if (sourceList && mobileSourceSlot && sourceList.parentElement !== mobileSourceSlot) {
+          mobileSourceSlot.appendChild(sourceList);
+        }
+      } else {
+        if (nav.parentElement !== actions) {
+          const sync = $('multimedia-sync-pill');
+          actions.insertBefore(nav, sync && sync.parentElement === actions ? sync : actions.firstChild);
+        }
+        if (sourceList && desktopSourceAnchor && sourceList.previousElementSibling !== desktopSourceAnchor) {
+          desktopSourceAnchor.after(sourceList);
+        }
+      }
+    } finally {
+      state.sourcePlacementGuard = false;
     }
+  }
+
+  function protectMediaSourcePlacement() {
+    try { state.sourcePlacementObserver?.disconnect?.(); } catch (_) {}
+    const sidebar = document.querySelector('.multimedia-sidebar');
+    const mobileSourceSlot = $('multimedia-mobile-source-slot');
+    const mediaPane = $('startab-control-pane-media');
+    const targets = [sidebar, mobileSourceSlot, mediaPane].filter(Boolean);
+    if (!targets.length || typeof MutationObserver !== 'function') return;
+    let queued = false;
+    state.sourcePlacementObserver = new MutationObserver(() => {
+      if (queued || state.sourcePlacementGuard) return;
+      queued = true;
+      requestAnimationFrame(() => {
+        queued = false;
+        syncNavPlacement();
+      });
+    });
+    targets.forEach((target) => state.sourcePlacementObserver.observe(target, { childList: true }));
   }
 
   function buildHeaderDeviceHost() {
@@ -270,6 +311,7 @@
     if (state.footer && pcVolumeSlot && state.footer.parentElement !== pcVolumeSlot) pcVolumeSlot.appendChild(state.footer);
     state.footer?.classList.add('is-pc-mode');
     syncNavPlacement();
+    protectMediaSourcePlacement();
 
   }
 
@@ -413,16 +455,19 @@
 
   function pcStatus() {
     const card = $('windows-system-volume');
-    const statusText = $('windows-volume-status-text')?.textContent || '';
     const data = card?.dataset.state || 'empty';
-    if (/reconectando/i.test(statusText)) return { key: 'unresponsive', text: 'Reconectando' };
-    if (/sin respuesta/i.test(statusText)) return { key: 'unresponsive', text: 'Sin respuesta' };
-    if (/standby/i.test(statusText)) return { key: 'standby', text: 'Standby' };
-    if (data === 'syncing' || /confirmando presencia|agente cloud vinculado/i.test(statusText)) return { key: 'unresponsive', text: 'Firebase' };
     if (data === 'online') return { key: 'online', text: 'En línea' };
     if (data === 'signed-out') return { key: 'offline', text: 'Sin sesión' };
     if (data === 'empty') return { key: 'offline', text: 'Sin PC seleccionado' };
     return { key: 'offline', text: 'No disponible' };
+  }
+
+  function formatLastConnection(timestamp) {
+    const at = Number(timestamp || 0);
+    if (!at) return '';
+    try {
+      return new Intl.DateTimeFormat('es-DO', { day:'2-digit', month:'2-digit', year:'numeric', hour:'numeric', minute:'2-digit', hour12:true }).format(new Date(at));
+    } catch (_) { return new Date(at).toLocaleString(); }
   }
 
   function tvStatus() {
@@ -465,6 +510,13 @@
     const tvName = selectedTvLabel();
     paintModeStatus('pc', pc, pcName);
     paintModeStatus('tv', tv, tvName);
+    const pcLast = $('startab-control-pc-last-connection');
+    if (pcLast) {
+      const at = Number($('windows-system-volume')?.dataset.lastConnectionAt || 0);
+      const text = pc.key === 'online' ? '' : formatLastConnection(at);
+      pcLast.hidden = !text;
+      pcLast.textContent = text ? `Últ. conexión ${text}` : '';
+    }
     const headerPcDot = $('startab-control-header-pc-dot');
     const headerTvDot = $('startab-control-header-tv-dot');
     if (headerPcDot) headerPcDot.dataset.state = pc.key;
@@ -491,6 +543,8 @@
 
     updateTopbar();
     updateHeaderDeviceSelector(state.mode);
+    // Recupera las pestañas si algún módulo antiguo intentó devolverlas al sidebar.
+    if ($('multimedia-modal')?.classList.contains('is-open')) syncNavPlacement();
   }
 
   function handleModalVisibility() {
@@ -560,7 +614,7 @@
   function boot() {
     relabel();
     state.mobileMql = window.matchMedia(MOBILE_QUERY);
-    state.mobileMql.addEventListener?.('change', syncNavPlacement);
+    state.mobileMql.addEventListener?.('change', () => { syncNavPlacement(); protectMediaSourcePlacement(); });
     buildNav();
     buildHeaderDeviceHost();
     buildPanes();

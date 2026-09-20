@@ -4,10 +4,12 @@
   const ROOT = 'startab/v2';
   const ACTIVE_WATCH_REFRESH_MS = 12_000;
   const WATCH_TTL_MS = 34_000;
-  const ONLINE_FRESH_MS = 75_000;
-  const ACTIVE_ONLINE_FRESH_MS = 75_000;
-  const UNRESPONSIVE_MS = 3 * 60_000;
-  const ACTIVE_UNRESPONSIVE_MS = 3 * 60_000;
+  // RTDB is the live source of truth. Agents publish every ~2-8 s; after
+  // 20 s without a server-timestamped heartbeat we consider the device gone.
+  const ONLINE_FRESH_MS = 20_000;
+  const ACTIVE_ONLINE_FRESH_MS = 12_000;
+  const UNRESPONSIVE_MS = 20_000;
+  const ACTIVE_UNRESPONSIVE_MS = 12_000;
   const FIRESTORE_FALLBACK_STALE_MS = 90_000;
   const FIRESTORE_FALLBACK_WHEN_RTDB_DOWN_MS = 90_000;
   const SUBSCRIPTION_BOOTSTRAP_MS = 12_000;
@@ -143,100 +145,60 @@
     const localState = String(options.localState || '').toLowerCase();
     const isTv = type === 'tv';
 
-    if (options.localConnected || localState === 'online' || localState === 'direct') {
-      return result('online', true, true, 'lan', Number(options.localAge || 0), { direct: true });
-    }
-
     const subscription = typeSubscriptions.get(typeKey(uid, type)) || null;
     const live = presenceFor(uid, type, deviceId);
     const liveAt = Number(live?.lastSeen || live?.clientAt || 0);
-    const fsAt = Number(firestoreDevice?.clientAt || 0);
     const liveAge = liveAt ? Math.max(0, now - liveAt) : Number.POSITIVE_INFINITY;
-    const fsAge = fsAt ? Math.max(0, now - fsAt) : Number.POSITIVE_INFINITY;
+    const liveState = String(live?.state || '').toLowerCase();
+    const liveStandby = isTv && (live?.standby === true || liveState === 'standby');
     const freshMs = options.aggressive ? ACTIVE_ONLINE_FRESH_MS : ONLINE_FRESH_MS;
-    const unresponsiveMs = options.aggressive ? ACTIVE_UNRESPONSIVE_MS : UNRESPONSIVE_MS;
+
+    // Once this client has received the first RTDB snapshot, RTDB is the ONLY
+    // source used for visual presence. This prevents desktop/mobile from
+    // disagreeing because one happened to read a newer Firestore document.
+    if (subscription?.hasSnapshot && connected === true) {
+      if (!live || !liveAt) return result('offline', false, false, 'rtdb', Number.POSITIVE_INFINITY, { authoritative: true });
+      if (liveState === 'offline') return result('offline', false, false, 'rtdb', liveAge, { authoritative: true, explicitOffline: true });
+      if (liveAge > freshMs) return result('offline', false, false, 'rtdb', liveAge, { authoritative: true, stale: true });
+      if (liveStandby) return result('standby', true, true, 'rtdb', liveAge, { authoritative: true });
+      return result('online', true, true, 'rtdb', liveAge, { authoritative: true });
+    }
+
+    // Direct/native is a command transport, not a separate visual truth. Use it
+    // only while the shared RTDB source itself is unavailable/bootstrapping.
+    // Once RTDB has a snapshot, every phone/browser sees the same state.
+    if ((options.localConnected || localState === 'online' || localState === 'direct')
+      && (connected === false || !subscription || !subscription.hasSnapshot)) {
+      return result('online', true, true, 'lan', Number(options.localAge || 0), { direct: true, fallback: true });
+    }
+
+    // Before the first RTDB snapshot (or if RTDB itself is unavailable), keep
+    // Firestore only as a compatibility fallback. It must never override a
+    // current RTDB snapshot.
+    const fsAt = Number(firestoreDevice?.clientAt || 0);
+    const fsAge = fsAt ? Math.max(0, now - fsAt) : Number.POSITIVE_INFINITY;
+    const fsStandby = isTv && firestoreDevice?.powerOn === false;
+    const fsOnline = firestoreDevice?.online === true;
     const standalone = isStandalone(firestoreDevice);
 
-    const bootstrapWaiting = !!subscription && !subscription.hasSnapshot && !subscription.failed
-      && now - Number(subscription.startedAt || now) <= SUBSCRIPTION_BOOTSTRAP_MS;
-
-    const liveState = String(live?.state || '').toLowerCase();
-    const livePositive = !!liveAt && liveState !== 'offline';
-    const liveStandby = !!live?.standby || liveState === 'standby';
-    const fsExplicitOnline = firestoreDevice?.online === true;
-    const fsExplicitOffline = firestoreDevice?.online === false;
-    const fsStandby = isTv && firestoreDevice?.powerOn === false;
-
-    // Standby is a first-class reachable state. Android/Google TV can briefly
-    // drop its process/network while the panel is off, but the device is still
-    // a valid wake target. Preserve that state instead of flashing "offline".
-    const standbyAt = Math.max(
-      liveStandby ? liveAt : 0,
-      fsStandby ? fsAt : 0,
-    );
-    const newestExplicitOnlineAt = Math.max(livePositive && !liveStandby ? liveAt : 0, fsExplicitOnline && !fsStandby ? fsAt : 0);
-    if (isTv && standbyAt > 0 && now - standbyAt <= STANDBY_MEMORY_MS && newestExplicitOnlineAt <= standbyAt + SIGNAL_SKEW_MS && Math.max(liveState === 'offline' ? liveAt : 0, fsExplicitOffline ? fsAt : 0) <= standbyAt + SIGNAL_SKEW_MS) {
-      return result('standby', now - standbyAt <= freshMs, true, liveStandby && liveAt >= fsAt ? 'rtdb' : 'firestore', now - standbyAt);
-    }
-
-    // Choose the newest positive signal. RTDB normally wins, but a newer
-    // Firestore state update must be allowed to supersede a stale RTDB event.
-    let positive = null;
-    if (livePositive) positive = { at: liveAt, state: liveStandby ? 'standby' : 'online', source: 'rtdb' };
-    if (fsExplicitOnline && (!positive || fsAt > positive.at + SIGNAL_SKEW_MS)) {
-      positive = { at: fsAt, state: fsStandby ? 'standby' : 'online', source: 'firestore' };
-    }
-
-    let negative = null;
-    if (liveAt && liveState === 'offline') negative = { at: liveAt, source: 'rtdb' };
-    if (fsExplicitOffline && (!negative || fsAt > negative.at + SIGNAL_SKEW_MS)) negative = { at: fsAt, source: 'firestore' };
-
-    // Newer positive evidence always wins over an older disconnect marker.
-    if (positive && (!negative || positive.at + SIGNAL_SKEW_MS >= negative.at)) {
-      const age = now - positive.at;
-      if (age <= freshMs) return result(positive.state, true, true, positive.source, age);
-      if (age <= unresponsiveMs) return result('unresponsive', false, true, positive.source, age);
-      if (standalone && age <= COMMANDABLE_GRACE_MS) return result('reconnecting', false, true, positive.source, age);
-    }
-
-    // A fresh explicit offline event is authoritative, except for TV standby
-    // handled above. Do not let an ancient `online:false` poison a reinstalled
-    // standalone agent forever.
-    if (negative) {
-      const age = now - negative.at;
-      if (age <= freshMs) return result('offline', false, false, negative.source, age, { explicitOffline: true });
-      if (positive && positive.at > negative.at) {
-        const positiveAge = now - positive.at;
-        if (positiveAge <= unresponsiveMs) return result('unresponsive', false, true, positive.source, positiveAge);
+    if (connected === false || subscription?.failed) {
+      if (fsOnline && fsAge <= FIRESTORE_FALLBACK_WHEN_RTDB_DOWN_MS) {
+        return result(fsStandby ? 'standby' : 'online', true, true, 'firestore', fsAge, { fallback: true });
       }
+      return result('offline', false, standalone && fsAge <= COMMANDABLE_GRACE_MS, 'firestore', fsAge, { fallback: true });
     }
 
-    // Initial page load: keep a known standalone target usable while the first
-    // RTDB snapshot arrives. This adds no writes and prevents false offline UI.
-    if (!liveAt && bootstrapWaiting && standalone && fsAge <= BOOTSTRAP_FIRESTORE_MAX_AGE_MS) {
-      return result('reconnecting', false, true, 'bootstrap', fsAge);
+    if (subscription && !subscription.hasSnapshot && !subscription.failed
+      && now - Number(subscription.startedAt || now) <= SUBSCRIPTION_BOOTSTRAP_MS) {
+      // Unknown is intentionally rendered as offline/grey until the shared RTDB
+      // snapshot arrives. No yellow/reconnecting guess states.
+      return result('offline', false, false, 'bootstrap', fsAge, { bootstrap: true });
     }
 
-    // If RTDB is unavailable, Firestore remains a compatibility/fallback signal.
-    const firestoreGrace = connected === false || subscription?.failed
-      ? FIRESTORE_FALLBACK_WHEN_RTDB_DOWN_MS
-      : FIRESTORE_FALLBACK_STALE_MS;
-    if (fsExplicitOnline && fsAge <= firestoreGrace) {
-      return result(fsStandby ? 'standby' : 'online', true, true, 'firestore', fsAge);
+    if (fsOnline && fsAge <= FIRESTORE_FALLBACK_STALE_MS) {
+      return result(fsStandby ? 'standby' : 'online', true, true, 'firestore', fsAge, { fallback: true });
     }
-
-    // LAN failure is diagnostic only; it must not erase fresher cloud evidence.
-    const newestAge = Math.min(liveAge, fsAge);
-    if (localState === 'unresponsive' && newestAge > freshMs) {
-      return result('unresponsive', false, standalone || isTv, 'lan', Number(options.localAge || newestAge));
-    }
-    if (newestAge <= unresponsiveMs) {
-      return result('unresponsive', false, standalone || isTv, liveAt >= fsAt ? 'rtdb' : 'firestore', newestAge);
-    }
-    if (standalone && newestAge <= COMMANDABLE_GRACE_MS) {
-      return result('reconnecting', false, true, liveAt >= fsAt ? 'rtdb' : 'firestore', newestAge);
-    }
-    return result('offline', false, false, localState === 'offline' ? 'lan' : (liveAt >= fsAt ? 'rtdb' : 'firestore'), newestAge);
+    return result('offline', false, false, 'none', Math.min(liveAge, fsAge));
   }
 
   function commandEnvelope(payload, ttlMs = 15_000) {
