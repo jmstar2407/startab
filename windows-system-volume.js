@@ -12,6 +12,7 @@
     db: null,
     auth: null,
     user: null,
+    authReadyUid: '',
     devices: new Map(),
     realtimeStates: new Map(),
     unsubscribeDevices: null,
@@ -125,11 +126,15 @@
     }
   }
 
-  function syncUser() {
-    const next = currentFirebaseUser() || readSavedUser();
+  function syncUser(force = false) {
+    const firebaseUser = currentFirebaseUser();
+    const next = firebaseUser || readSavedUser();
     const nextUid = next?.uid || null;
-    if ((state.user?.uid || null) === nextUid) return;
+    const readyUid = firebaseUser?.uid || '';
+    const authPhaseChanged = String(state.authReadyUid || '') !== String(readyUid || '');
+    if (!force && !authPhaseChanged && (state.user?.uid || null) === nextUid) return;
     state.user = next;
+    state.authReadyUid = readyUid;
     connectDeviceListener();
     render();
   }
@@ -626,6 +631,18 @@
       return;
     }
 
+    // A cached UID is useful for selecting the last PC, but protected RTDB/
+    // Firestore listeners must wait for Firebase Auth to restore a real token.
+    // Starting them earlier causes permission_denied and those SDK listeners are
+    // detached permanently unless we rebuild them.
+    let authenticatedUid = '';
+    try { authenticatedUid = String(state.auth?.currentUser?.uid || firebase.auth?.()?.currentUser?.uid || ''); } catch (_) {}
+    if (!authenticatedUid || authenticatedUid !== String(state.user.uid)) {
+      renderDevices();
+      render();
+      return;
+    }
+
     if (globalThis.StarTabPresence?.watchType) {
       state.unsubscribePresence = globalThis.StarTabPresence.watchType(state.user.uid, 'windows', () => {
         renderDevices();
@@ -699,9 +716,8 @@
       if (state.db) return;
       state.db = firebase.firestore();
       state.auth = firebase.auth();
-      state.auth.onAuthStateChanged(() => syncUser());
-      syncUser();
-      connectDeviceListener();
+      state.auth.onAuthStateChanged(() => syncUser(true));
+      syncUser(true);
     } catch (error) {
       console.error('StarTab Windows Volume: Firebase no disponible:', error);
     }

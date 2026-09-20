@@ -98,6 +98,10 @@
 
   function bindSelectedFallbackDocs(uid) {
     if (!uid || !globalThis.firebase?.firestore) return;
+    // Never start protected Firestore listeners with only the cached UID. On
+    // mobile Firebase Auth can still be restoring the token; a permission error
+    // detaches onSnapshot and used to leave the PC indicator permanently stale.
+    try { if (String(firebase.auth()?.currentUser?.uid || '') !== String(uid)) return; } catch (_) { return; }
     const db = firebase.firestore();
     const pcId = selectedWindowsDeviceId();
     const tvId = selectedTvDeviceId();
@@ -553,6 +557,7 @@
   function statusToControlState(status, emptyText = 'No disponible') {
     if (!status) return { key: 'offline', text: emptyText, source: 'none' };
     if (status.state === 'standby') return { key: 'standby', text: 'Standby', source: status.source || 'firebase' };
+    if (status.state === 'syncing') return { key: 'unresponsive', text: 'Conectando…', source: status.source || 'firebase' };
     if (status.online || status.state === 'online') {
       const via = status.source === 'lan' ? 'Directo' : 'En línea';
       return { key: 'online', text: via, source: status.source || 'firebase' };
@@ -698,6 +703,16 @@
     $('startab-tv-device-select')?.addEventListener('change', () => { ensureGlobalPresenceSubscriptions(); setTimeout(updateStatuses, 30); });
     window.addEventListener('startab-device-selection-change', () => setTimeout(updateStatuses, 30));
     window.addEventListener('startab-presence-connection', updateStatuses);
+    window.addEventListener('startab-presence-auth', () => {
+      ensureGlobalPresenceSubscriptions();
+      setTimeout(updateStatuses, 20);
+    });
+    try {
+      firebase.auth?.().onAuthStateChanged?.(() => {
+        ensureGlobalPresenceSubscriptions();
+        setTimeout(updateStatuses, 20);
+      });
+    } catch (_) {}
     document.addEventListener('visibilitychange', () => {
       ensureGlobalPresenceSubscriptions();
       const uid = String(currentUser()?.uid || '');

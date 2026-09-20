@@ -339,6 +339,12 @@
       return;
     }
     state.deviceId = deviceId;
+    let authenticatedUid = '';
+    try { authenticatedUid = String(state.auth?.currentUser?.uid || firebase.auth?.()?.currentUser?.uid || ''); } catch (_) {}
+    if (!authenticatedUid || authenticatedUid !== String(state.user.uid)) {
+      render(state.lastDevice);
+      return;
+    }
     if (globalThis.StarTabPresence?.watchType) {
       state.unsubscribePresence = globalThis.StarTabPresence.watchType(state.user.uid, 'windows', () => {
         if (state.open && state.lastDevice) render(state.lastDevice);

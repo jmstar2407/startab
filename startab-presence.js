@@ -26,6 +26,8 @@
   let connected = null;
   let serverTimeOffsetMs = 0;
   let connectionBound = false;
+  let authBound = false;
+  let authUid = '';
 
   const clientId = (() => {
     try {
@@ -53,12 +55,30 @@
         }, () => {});
         rtdb.ref('.info/connected').on('value', (snap) => {
           connected = snap.val() === true;
-          if (connected) for (const session of watcherSessions.values()) void session.tick?.();
+          if (connected) {
+            for (const session of watcherSessions.values()) void session.tick?.();
+            for (const entry of typeSubscriptions.values()) entry.scheduleAttach?.(0, 'rtdb-connected');
+          }
           globalThis.dispatchEvent?.(new CustomEvent('startab-presence-connection', { detail: { connected } }));
         }, () => {
           connected = false;
           globalThis.dispatchEvent?.(new CustomEvent('startab-presence-connection', { detail: { connected } }));
         });
+      }
+      if (!authBound && typeof firebase.auth === 'function') {
+        authBound = true;
+        try {
+          firebase.auth().onAuthStateChanged((user) => {
+            const nextUid = String(user?.uid || '');
+            const changed = nextUid !== authUid;
+            authUid = nextUid;
+            if (changed || nextUid) {
+              for (const entry of typeSubscriptions.values()) entry.scheduleAttach?.(0, 'auth-state');
+              globalThis.dispatchEvent?.(new CustomEvent('startab-presence-auth', { detail: { uid: nextUid } }));
+            }
+          });
+          authUid = String(firebase.auth().currentUser?.uid || '');
+        } catch (_) {}
       }
       return rtdb;
     } catch (_) {
@@ -91,7 +111,46 @@
       const listeners = new Set();
       const ref = db.ref(`${base(uid)}/presence/${type}`);
       const healthRef = db.ref(`${base(uid)}/devices/${type}`);
-      const onValue = (snap) => {
+      entry = {
+        uid, type, ref, healthRef, listeners,
+        lastMap: new Map(), healthMap: new Map(), failed: false, healthFailed: false,
+        hasSnapshot: false, hasHealthSnapshot: false, startedAt: Date.now(), lastSuccessAt: 0, lastErrorAt: 0,
+        attached: false, retryTimer: 0, retryAttempt: 0, destroyed: false,
+      };
+
+      const notify = () => listeners.forEach((fn) => { try { fn(entry.lastMap || new Map()); } catch (_) {} });
+      const detach = () => {
+        try { ref.off('value', entry.onValue); } catch (_) {}
+        try { healthRef.off('value', entry.onHealth); } catch (_) {}
+        entry.attached = false;
+      };
+      const scheduleAttach = (delay = 0, reason = '') => {
+        if (entry.destroyed) return;
+        clearTimeout(entry.retryTimer);
+        entry.retryTimer = window.setTimeout(() => {
+          entry.retryTimer = 0;
+          const currentUid = String(globalThis.firebase?.auth?.()?.currentUser?.uid || authUid || '');
+          if (!currentUid || currentUid !== uid) {
+            entry.retryAttempt = Math.min(entry.retryAttempt + 1, 6);
+            scheduleAttach(Math.min(5000, 450 * Math.pow(1.7, entry.retryAttempt)), 'waiting-auth');
+            return;
+          }
+          detach();
+          entry.failed = false;
+          entry.healthFailed = false;
+          entry.startedAt = Date.now();
+          try {
+            ref.on('value', entry.onValue, entry.onError);
+            healthRef.on('value', entry.onHealth, entry.onHealthError);
+            entry.attached = true;
+          } catch (_) {
+            entry.retryAttempt = Math.min(entry.retryAttempt + 1, 6);
+            scheduleAttach(Math.min(5000, 500 * Math.pow(1.8, entry.retryAttempt)), 'attach-exception');
+          }
+        }, Math.max(0, Number(delay) || 0));
+      };
+
+      entry.onValue = (snap) => {
         const raw = snap.val() || {};
         const next = new Map();
         Object.entries(raw).forEach(([deviceId, value]) => {
@@ -108,14 +167,20 @@
         entry.hasSnapshot = true;
         entry.failed = false;
         entry.lastSuccessAt = Date.now();
-        listeners.forEach((fn) => { try { fn(next); } catch (_) {} });
+        entry.retryAttempt = 0;
+        notify();
       };
-      const onError = () => {
+      entry.onError = () => {
+        // Permission errors are common during the few ms where Firebase Auth is
+        // restoring a mobile session. RTDB removes that listener permanently,
+        // therefore we MUST rebuild it instead of leaving StarTab frozen offline.
         entry.failed = true;
         entry.lastErrorAt = Date.now();
-        listeners.forEach((fn) => { try { fn(entry.lastMap || new Map()); } catch (_) {} });
+        entry.retryAttempt = Math.min(entry.retryAttempt + 1, 7);
+        notify();
+        scheduleAttach(Math.min(6000, 550 * Math.pow(1.65, entry.retryAttempt)), 'presence-error');
       };
-      const onHealth = (snap) => {
+      entry.onHealth = (snap) => {
         const raw = snap.val() || {};
         const health = new Map();
         Object.entries(raw).forEach(([deviceId, node]) => {
@@ -125,27 +190,30 @@
         });
         entry.healthMap = health;
         entry.hasHealthSnapshot = true;
-        listeners.forEach((fn) => { try { fn(entry.lastMap || new Map()); } catch (_) {} });
+        entry.healthFailed = false;
+        entry.retryAttempt = 0;
+        notify();
       };
-      const onHealthError = () => { entry.healthFailed = true; };
-      entry = {
-        ref, healthRef, listeners, onValue, onError, onHealth, onHealthError,
-        lastMap: new Map(), healthMap: new Map(), failed: false, healthFailed: false,
-        hasSnapshot: false, hasHealthSnapshot: false, startedAt: Date.now(), lastSuccessAt: 0, lastErrorAt: 0,
+      entry.onHealthError = () => {
+        entry.healthFailed = true;
+        entry.retryAttempt = Math.min(entry.retryAttempt + 1, 7);
+        scheduleAttach(Math.min(6000, 550 * Math.pow(1.65, entry.retryAttempt)), 'health-error');
       };
+      entry.scheduleAttach = scheduleAttach;
+      entry.detach = detach;
       typeSubscriptions.set(key, entry);
-      ref.on('value', onValue, onError);
-      healthRef.on('value', onHealth, onHealthError);
+      scheduleAttach(0, 'initial');
     }
     if (typeof callback === 'function') {
       entry.listeners.add(callback);
-      if (entry.hasSnapshot) queueMicrotask(() => callback(entry.lastMap));
+      if (entry.hasSnapshot || entry.lastMap.size) queueMicrotask(() => callback(entry.lastMap));
     }
     return () => {
       if (typeof callback === 'function') entry.listeners.delete(callback);
       if (entry.listeners.size) return;
-      try { entry.ref.off('value', entry.onValue); } catch (_) {}
-      try { entry.healthRef?.off('value', entry.onHealth); } catch (_) {}
+      entry.destroyed = true;
+      clearTimeout(entry.retryTimer);
+      entry.detach?.();
       typeSubscriptions.delete(key);
     };
   }
@@ -240,10 +308,10 @@
 
     if (subscription && !subscription.hasSnapshot && !subscription.failed
       && now - Number(subscription.startedAt || now) <= SUBSCRIPTION_BOOTSTRAP_MS) {
-      if (fsOnline && fsAge <= 35_000) {
+      if (fsOnline && fsAge <= FIRESTORE_FALLBACK_STALE_MS) {
         return result(fsStandby ? 'standby' : 'online', true, true, 'firestore', fsAge, { fallback: true, bootstrap: true });
       }
-      return result('offline', false, false, 'bootstrap', fsAge, { bootstrap: true });
+      return result('syncing', false, isStandalone(firestoreDevice), 'bootstrap', fsAge, { bootstrap: true });
     }
 
     if (fsOnline && fsAge <= FIRESTORE_FALLBACK_STALE_MS) {
