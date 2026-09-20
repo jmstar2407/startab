@@ -101,19 +101,35 @@
       if (!token) return fail('authentication-unavailable');
       if (Date.now() >= item.expiresAtClient) return fail('expired');
       const url = `${RTDB}/${ROOT}/${encodeURIComponent(uid)}/devices/${type}/${encodeURIComponent(deviceId)}/commands/${encodeURIComponent(item.id)}.json?auth=${encodeURIComponent(token)}`;
-      // REST avoids the SDK's offline write queue replaying physical actions later.
-      const written = await request(url, null, item);
       const fastSetter = !!setterKey(item.payload || {});
-      let result = ack.current() || (written ? await ack.wait(fastSetter ? 120 : 850) : null);
-      if (result) return result;
-      // Volume/mute are idempotent state setters. A successful RTDB write is
-      // enough to release the lane immediately; waiting seconds for Firestore
-      // fallback made +/- feel broken and could roll optimistic UI backwards.
-      if (written && fastSetter) return { ok:true, acknowledged:false, written:true, id:item.id, reason:'queued-rtdb' };
       const data = type === 'windows'
         ? { command: { ...item.payload, ...item, payload: item.payload } }
         : { command: item };
-      const fallbackWritten = await patch(uid, type, deviceId, data, token);
+
+      // For Windows volume/mute, delivery is intentionally redundant. RTDB is
+      // normally the fastest path, while Firestore is an independent live
+      // listener in the Windows daemon. Both carry the SAME immutable command
+      // id, so RemoteCommands deduplicates them and Windows executes it once.
+      // This removes the failure window where RTDB accepted the write while its
+      // SSE listener on the PC happened to be reconnecting.
+      let written = false, fallbackWritten = false;
+      if (type === 'windows' && fastSetter) {
+        [written, fallbackWritten] = await Promise.all([
+          request(url, null, item, 'PUT', 1200),
+          patch(uid, type, deviceId, data, token),
+        ]);
+        let result = ack.current() || ((written || fallbackWritten) ? await ack.wait(420) : null);
+        if (result) return result;
+        if (written || fallbackWritten) return { ok:true, acknowledged:false, written:true, id:item.id, reason:'queued-redundant' };
+        return fail('transport-unavailable');
+      }
+
+      // REST avoids the SDK's offline write queue replaying physical actions later.
+      written = await request(url, null, item);
+      let result = ack.current() || (written ? await ack.wait(fastSetter ? 120 : 850) : null);
+      if (result) return result;
+      if (written && fastSetter) return { ok:true, acknowledged:false, written:true, id:item.id, reason:'queued-rtdb' };
+      fallbackWritten = await patch(uid, type, deviceId, data, token);
       result = ack.current() || (fallbackWritten ? await ack.wait(type === 'tv' ? 6500 : 2400) : null);
       return result || fail(written || fallbackWritten ? 'confirmation-timeout' : 'transport-unavailable');
     } finally { ack.close(); }

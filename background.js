@@ -6,13 +6,15 @@ const MENU_ROOT='startab-add-root';const MENU_PREFIX='startab-add-category-';con
   const HOST = 'com.startab.windows_volume';
   const OFFSCREEN_PATH = 'windows-volume-offscreen.html';
   const IS_WINDOWS = /Windows/i.test(navigator.userAgent || '');
-  const RECONNECT_MS = 30_000;
+  const RECONNECT_MIN_MS = 900;
+  const RECONNECT_MAX_MS = 5_000;
 
   const nativeRequests = new Map();
   let nativePort = null;
   let nativeConnected = false;
   let nativeState = null;
   let reconnectTimer = null;
+  let reconnectAttempt = 0;
   let creatingOffscreen = null;
 
   async function ensureOffscreen() {
@@ -67,7 +69,8 @@ const MENU_ROOT='startab-add-root';const MENU_PREFIX='startab-add-category-';con
 
   function scheduleReconnect() {
     clearTimeout(reconnectTimer);
-    reconnectTimer = setTimeout(connectNative, RECONNECT_MS);
+    const delay = Math.min(RECONNECT_MAX_MS, RECONNECT_MIN_MS * Math.pow(1.65, reconnectAttempt++));
+    reconnectTimer = setTimeout(connectNative, delay);
   }
 
   function connectNative() {
@@ -89,6 +92,7 @@ const MENU_ROOT='startab-add-root';const MENU_PREFIX='startab-add-category-';con
       if (message.type === 'remoteCommandResult') nativeRequests.get(message.id)?.(message);
       if (message.type === 'hello' || message.type === 'state' || message.type === 'meter' || message.type === 'systemState' || message.type === 'rgbState' || message.type === 'cloudState') {
         nativeConnected = true;
+        reconnectAttempt = 0;
         nativeState = { ...(nativeState || {}), ...message };
       }
       emitToOffscreen({ kind: 'message', message });

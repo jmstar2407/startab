@@ -15,6 +15,7 @@
     devices: new Map(),
     unsubscribeDevices: null,
     unsubscribePresence: null,
+    unsubscribeRealtimeState: null,
     selectedDeviceId: null,
     firebaseRetry: 0,
     commandTimer: 0,
@@ -614,6 +615,8 @@
     state.unsubscribeDevices = null;
     state.unsubscribePresence?.();
     state.unsubscribePresence = null;
+    state.unsubscribeRealtimeState?.();
+    state.unsubscribeRealtimeState = null;
     state.devices.clear();
 
     if (!state.user?.uid || !state.db) {
@@ -628,6 +631,33 @@
         render();
       });
     }
+
+    // Fast state plane: volume/mute are mirrored by the Windows agent to RTDB.
+    // This listener updates the same device objects used by the UI, so mobile sees
+    // the real Windows value immediately and Firestore remains durable fallback.
+    try {
+      const ref = firebase.database().ref(`startab/v2/users/${state.user.uid}/devices/windows`);
+      const fn = (snap) => {
+        const all = snap.val() || {};
+        let changed = false;
+        for (const [deviceId, node] of Object.entries(all)) {
+          const live = node?.state;
+          if (!live || typeof live !== 'object') continue;
+          const current = state.devices.get(deviceId) || { deviceId };
+          const next = { ...current };
+          if (Number.isFinite(Number(live.volume))) next.volume = Number(live.volume);
+          if (typeof live.muted === 'boolean') next.muted = live.muted;
+          if (typeof live.audioActive === 'boolean') next.audioActive = live.audioActive;
+          if (live.deviceName) next.deviceName = live.deviceName;
+          if (live.agentVersion) next.agentVersion = live.agentVersion;
+          if (live.updatedAt) next.realtimeStateAt = Number(live.updatedAt);
+          state.devices.set(deviceId, next); changed = true;
+        }
+        if (changed) { renderDevices(); render(); }
+      };
+      ref.on('value', fn, () => {});
+      state.unsubscribeRealtimeState = () => ref.off('value', fn);
+    } catch (_) {}
 
     state.unsubscribeDevices = state.db
       .collection('users')
@@ -703,8 +733,24 @@
 
   async function sendCommand(action, value = null, options = {}) {
     const device = selectedDevice();
-    if (!state.user?.uid || !device) return false;
+    if (!device) return false;
 
+    // IMPORTANT: when StarTab is running on the PC it controls, do not send the
+    // volume through WebRTC/RTDB/Firestore. Native Messaging is the shortest and
+    // most reliable path to the Windows Core Audio endpoint and works even if
+    // Firebase is reconnecting.
+    if (isLocalNativeTarget(device)) {
+      const native = nativeCommandFor(action, value, options);
+      if (native) {
+        const ok = await sendNativeCommand(native);
+        if (ok) return true;
+        // Native host can be restarting after sleep/update. Ask the extension to
+        // reconnect once, then fall through to cloud so the click is not lost.
+        try { await chrome.runtime.sendMessage({ type: 'STARTAB_WINDOWS_NATIVE_RECONNECT' }); } catch (_) {}
+      }
+    }
+
+    if (!state.user?.uid) return false;
     const payload = { action, issuedBy: state.user.uid, issuedByClient: clientId };
     if (value != null && Number.isFinite(Number(value))) payload.value = Number(value);
     if (action === 'setMute') payload.muted = !!options.muted;
