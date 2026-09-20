@@ -25,6 +25,7 @@
     globalPresenceUid: '',
     globalPresenceWindowsUnsub: null,
     globalPresenceTvUnsub: null,
+    mobileMql: null,
   };
 
   const $ = (id) => document.getElementById(id);
@@ -137,6 +138,20 @@
     state.nav = nav;
   }
 
+  function syncNavPlacement() {
+    const nav = state.nav || $('startab-control-nav');
+    const panel = state.panel || document.querySelector('.multimedia-modal-panel');
+    const actions = document.querySelector('.multimedia-topbar-actions');
+    if (!nav || !panel || !actions) return;
+    const mobile = state.mobileMql?.matches ?? window.matchMedia(MOBILE_QUERY).matches;
+    if (mobile) {
+      if (nav.parentElement !== panel) panel.appendChild(nav);
+    } else if (nav.parentElement !== actions) {
+      const sync = $('multimedia-sync-pill');
+      actions.insertBefore(nav, sync && sync.parentElement === actions ? sync : actions.firstChild);
+    }
+  }
+
   function buildHeaderDeviceHost() {
     const topbar = document.querySelector('.multimedia-topbar');
     const actions = document.querySelector('.multimedia-topbar-actions');
@@ -239,7 +254,6 @@
     const movable = [
       $('multimedia-empty'),
       $('multimedia-player'),
-      $('multimedia-system-footer'),
     ].filter(Boolean);
     movable.forEach((node) => mediaPane.appendChild(node));
     const mobileSourceSlot = $('multimedia-mobile-source-slot');
@@ -252,6 +266,10 @@
     state.morePane = morePane;
     state.mediaHome = mediaPane;
     state.footer = $('multimedia-system-footer');
+    const pcVolumeSlot = $('startab-control-pc-volume-slot');
+    if (state.footer && pcVolumeSlot && state.footer.parentElement !== pcVolumeSlot) pcVolumeSlot.appendChild(state.footer);
+    state.footer?.classList.add('is-pc-mode');
+    syncNavPlacement();
 
   }
 
@@ -296,16 +314,21 @@
   function setVolumeHome(mode) {
     if (!state.footer) state.footer = $('multimedia-system-footer');
     const footer = state.footer;
-    if (!footer) return;
-    const wasPcMode = footer.classList.contains('is-pc-mode');
-    const destination = mode === 'pc' ? $('startab-control-pc-volume-slot') : state.mediaPane;
-    if (destination && footer.parentElement !== destination) destination.appendChild(footer);
-    footer.classList.toggle('is-pc-mode', mode === 'pc');
-    const toggle = $('multimedia-system-volume-toggle');
-    // PC uses the same compact bottom bar as Multimedia. Never force it open.
-    if (wasPcMode !== (mode === 'pc') && toggle?.getAttribute('aria-expanded') === 'true') toggle.click();
-  }
+    const destination = $('startab-control-pc-volume-slot');
+    if (!footer || !destination) return;
 
+    // El volumen maestro de Windows pertenece exclusivamente a la sección PC.
+    // Mantener una sola instancia evita listeners duplicados, estados divergentes
+    // y saltos visuales al alternar entre Multimedia/PC/TV.
+    if (footer.parentElement !== destination) destination.appendChild(footer);
+    footer.classList.add('is-pc-mode');
+    footer.hidden = mode !== 'pc';
+
+    if (mode !== 'pc') {
+      const toggle = $('multimedia-system-volume-toggle');
+      if (footer.classList.contains('is-expanded') && toggle?.getAttribute('aria-expanded') === 'true') toggle.click();
+    }
+  }
 
   function activateTouchpad(active) {
     const modal = $('windows-touchpad-modal');
@@ -358,6 +381,7 @@
     state.mode = mode;
     state.panel?.setAttribute('data-control-mode', mode);
     document.documentElement.dataset.startabControlMode = mode;
+    syncNavPlacement();
 
     document.querySelectorAll('[data-control-pane]').forEach((pane) => pane.classList.toggle('is-active', pane.dataset.controlPane === mode));
     state.nav?.querySelectorAll('[data-mode]').forEach((button) => {
@@ -535,6 +559,8 @@
 
   function boot() {
     relabel();
+    state.mobileMql = window.matchMedia(MOBILE_QUERY);
+    state.mobileMql.addEventListener?.('change', syncNavPlacement);
     buildNav();
     buildHeaderDeviceHost();
     buildPanes();
@@ -551,6 +577,16 @@
     bindGlobalEvents();
     switchMode('media');
   }
+
+  function syncVisualViewportHeight() {
+    const height = Math.round(window.visualViewport?.height || window.innerHeight || document.documentElement.clientHeight || 0);
+    if (height > 0) document.documentElement.style.setProperty('--startab-visual-height', `${height}px`);
+  }
+  syncVisualViewportHeight();
+  window.visualViewport?.addEventListener('resize', syncVisualViewportHeight, { passive: true });
+  window.visualViewport?.addEventListener('scroll', syncVisualViewportHeight, { passive: true });
+  window.addEventListener('orientationchange', () => setTimeout(syncVisualViewportHeight, 80), { passive: true });
+  window.addEventListener('resize', syncVisualViewportHeight, { passive: true });
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once: true });
   else boot();
