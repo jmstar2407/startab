@@ -6,12 +6,13 @@
   const WATCH_TTL_MS = 34_000;
   // RTDB is the live source of truth. Agents publish every ~2-8 s; after
   // 20 s without a server-timestamped heartbeat we consider the device gone.
-  const ONLINE_FRESH_MS = 30_000;
-  const ACTIVE_ONLINE_FRESH_MS = 22_000;
+  const ONLINE_FRESH_MS = 75_000;
+  const ACTIVE_ONLINE_FRESH_MS = 55_000;
   const UNRESPONSIVE_MS = 20_000;
   const ACTIVE_UNRESPONSIVE_MS = 12_000;
-  const FIRESTORE_FALLBACK_STALE_MS = 90_000;
-  const FIRESTORE_FALLBACK_WHEN_RTDB_DOWN_MS = 90_000;
+  const FIRESTORE_FALLBACK_STALE_MS = 120_000;
+  const FIRESTORE_FALLBACK_WHEN_RTDB_DOWN_MS = 120_000;
+  const RTDB_HEALTH_FRESH_MS = 75_000;
   const SUBSCRIPTION_BOOTSTRAP_MS = 12_000;
   const BOOTSTRAP_FIRESTORE_MAX_AGE_MS = 24 * 60 * 60_000;
   const STANDBY_MEMORY_MS = 8 * 60 * 60_000;
@@ -89,6 +90,7 @@
     if (!entry) {
       const listeners = new Set();
       const ref = db.ref(`${base(uid)}/presence/${type}`);
+      const healthRef = db.ref(`${base(uid)}/devices/${type}`);
       const onValue = (snap) => {
         const raw = snap.val() || {};
         const next = new Map();
@@ -113,12 +115,27 @@
         entry.lastErrorAt = Date.now();
         listeners.forEach((fn) => { try { fn(entry.lastMap || new Map()); } catch (_) {} });
       };
+      const onHealth = (snap) => {
+        const raw = snap.val() || {};
+        const health = new Map();
+        Object.entries(raw).forEach(([deviceId, node]) => {
+          const stateNode = node?.state && typeof node.state === 'object' ? node.state : null;
+          const at = Number(stateNode?.aliveAt || stateNode?.updatedAt || node?.aliveAt || 0);
+          if (at > 0) health.set(deviceId, at);
+        });
+        entry.healthMap = health;
+        entry.hasHealthSnapshot = true;
+        listeners.forEach((fn) => { try { fn(entry.lastMap || new Map()); } catch (_) {} });
+      };
+      const onHealthError = () => { entry.healthFailed = true; };
       entry = {
-        ref, listeners, onValue, onError, lastMap: new Map(), failed: false,
-        hasSnapshot: false, startedAt: Date.now(), lastSuccessAt: 0, lastErrorAt: 0,
+        ref, healthRef, listeners, onValue, onError, onHealth, onHealthError,
+        lastMap: new Map(), healthMap: new Map(), failed: false, healthFailed: false,
+        hasSnapshot: false, hasHealthSnapshot: false, startedAt: Date.now(), lastSuccessAt: 0, lastErrorAt: 0,
       };
       typeSubscriptions.set(key, entry);
       ref.on('value', onValue, onError);
+      healthRef.on('value', onHealth, onHealthError);
     }
     if (typeof callback === 'function') {
       entry.listeners.add(callback);
@@ -128,6 +145,7 @@
       if (typeof callback === 'function') entry.listeners.delete(callback);
       if (entry.listeners.size) return;
       try { entry.ref.off('value', entry.onValue); } catch (_) {}
+      try { entry.healthRef?.off('value', entry.onHealth); } catch (_) {}
       typeSubscriptions.delete(key);
     };
   }
@@ -157,26 +175,43 @@
     const liveState = String(live?.state || '').toLowerCase();
     const liveStandby = isTv && (live?.standby === true || liveState === 'standby');
     const freshMs = options.aggressive ? ACTIVE_ONLINE_FRESH_MS : ONLINE_FRESH_MS;
+    const healthAt = Number(subscription?.healthMap?.get?.(deviceId) || firestoreDevice?.realtimeStateAt || 0);
+    const healthAge = healthAt ? Math.max(0, now - healthAt) : Number.POSITIVE_INFINITY;
+    const fsAtAny = Number(firestoreDevice?.clientAt || 0);
+    const fsAgeAny = fsAtAny ? Math.max(0, now - fsAtAny) : Number.POSITIVE_INFINITY;
+    const directAlive = options.localConnected === true || localState === 'online' || localState === 'direct';
+    const secondaryAlive = healthAge <= RTDB_HEALTH_FRESH_MS || (firestoreDevice?.online === true && fsAgeAny <= FIRESTORE_FALLBACK_STALE_MS) || directAlive;
 
     // Once this client has received the first RTDB snapshot, RTDB is the ONLY
     // source used for visual presence. This prevents desktop/mobile from
     // disagreeing because one happened to read a newer Firestore document.
     if (subscription?.hasSnapshot && connected === true && live && liveAt) {
-      if (liveState === 'offline') return result('offline', false, false, 'rtdb', liveAge, { authoritative: true, explicitOffline: true });
-      if (liveAge <= freshMs) {
+      // Never let one stale channel create a false offline while another agent-owned
+      // signal is fresh. Explicit offline wins only when it is newer than every
+      // secondary heartbeat (health/state, Firestore or direct LAN).
+      const secondaryAt = Math.max(healthAt || 0, fsAtAny || 0);
+      if (liveState === 'offline' && !directAlive && liveAt >= secondaryAt - SIGNAL_SKEW_MS) {
+        return result('offline', false, false, 'rtdb', liveAge, { authoritative: true, explicitOffline: true });
+      }
+      if (liveAge <= freshMs && liveState !== 'offline') {
         if (liveStandby) return result('standby', true, true, 'rtdb', liveAge, { authoritative: true });
         return result('online', true, true, 'rtdb', liveAge, { authoritative: true });
       }
-      // A stale RTDB heartbeat is meaningful, but before declaring the device
-      // offline let a very recent Firestore heartbeat rescue it. This covers
-      // short RTDB reconnects without letting old Firestore data override RTDB.
-      const fsAtQuick = Number(firestoreDevice?.clientAt || 0);
-      const fsAgeQuick = fsAtQuick ? Math.max(0, now - fsAtQuick) : Number.POSITIVE_INFINITY;
-      if (firestoreDevice?.online === true && fsAgeQuick <= 35_000) {
+      if (secondaryAlive) {
         const fsStandbyQuick = isTv && firestoreDevice?.powerOn === false;
-        return result(fsStandbyQuick ? 'standby' : 'online', true, true, 'firestore', fsAgeQuick, { fallback: true, rtdbStale: true });
+        const source = directAlive ? 'lan' : (healthAge <= RTDB_HEALTH_FRESH_MS ? 'rtdb-health' : 'firestore');
+        const age = directAlive ? Number(options.localAge || 0) : Math.min(healthAge, fsAgeAny);
+        return result(fsStandbyQuick ? 'standby' : 'online', true, true, source, age, { fallback: true, rtdbStale: liveAge > freshMs });
       }
       return result('offline', false, false, 'rtdb', liveAge, { authoritative: true, stale: true });
+    }
+
+    // The presence collection can be briefly empty after auth reconnect while the
+    // separate RTDB health/state plane is already alive. Treat that health signal
+    // as authoritative liveness instead of showing "No disponible".
+    if (connected === true && healthAge <= RTDB_HEALTH_FRESH_MS) {
+      const standby = isTv && firestoreDevice?.powerOn === false;
+      return result(standby ? 'standby' : 'online', true, true, 'rtdb-health', healthAge, { fallback: true });
     }
 
     // Direct/native is a command transport, not a separate visual truth. Use it

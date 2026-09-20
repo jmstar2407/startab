@@ -19,6 +19,8 @@
     deviceId: '',
     unsubscribeDevice: null,
     unsubscribePresence: null,
+    unsubscribeRealtimeState: null,
+    realtimeState: null,
     refreshTimer: 0,
     statusTimer: 0,
     confirmAction: '',
@@ -321,6 +323,9 @@
     state.unsubscribeDevice = null;
     state.unsubscribePresence?.();
     state.unsubscribePresence = null;
+    state.unsubscribeRealtimeState?.();
+    state.unsubscribeRealtimeState = null;
+    state.realtimeState = null;
     state.deviceId = '';
     state.lastDevice = null;
   }
@@ -339,16 +344,31 @@
         if (state.open && state.lastDevice) render(state.lastDevice);
       });
     }
+    try {
+      const stateRef = firebase.database().ref(`startab/v2/users/${state.user.uid}/devices/windows/${deviceId}/state`);
+      const stateFn = (snap) => {
+        const live = snap.val();
+        state.realtimeState = live && typeof live === 'object' ? {
+          ...live,
+          realtimeStateAt: Number(live.aliveAt || live.updatedAt || 0),
+        } : null;
+        if (state.lastDevice || state.realtimeState) render({ ...(state.lastDevice || {}), ...(state.realtimeState || {}), deviceId });
+      };
+      stateRef.on('value', stateFn, () => {});
+      state.unsubscribeRealtimeState = () => stateRef.off('value', stateFn);
+    } catch (_) {}
+
     state.unsubscribeDevice = state.db
       .collection('users').doc(state.user.uid)
       .collection('windowsDevices').doc(deviceId)
       .onSnapshot((snapshot) => {
         if (!snapshot.exists) {
-          render(null);
+          if (state.realtimeState) render({ ...state.realtimeState, deviceId });
+          else render(null);
           return;
         }
         const data = snapshot.data() || {};
-        render({ ...data, deviceId: data.deviceId || snapshot.id });
+        render({ ...data, ...(state.realtimeState || {}), deviceId: data.deviceId || snapshot.id });
       }, (error) => {
         console.warn('StarTab System Control: no se pudo leer el PC:', error);
         render(null);

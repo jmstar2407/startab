@@ -13,6 +13,7 @@
     auth: null,
     user: null,
     devices: new Map(),
+    realtimeStates: new Map(),
     unsubscribeDevices: null,
     unsubscribePresence: null,
     unsubscribeRealtimeState: null,
@@ -650,7 +651,8 @@
           if (typeof live.audioActive === 'boolean') next.audioActive = live.audioActive;
           if (live.deviceName) next.deviceName = live.deviceName;
           if (live.agentVersion) next.agentVersion = live.agentVersion;
-          if (live.updatedAt) next.realtimeStateAt = Number(live.updatedAt);
+          if (live.aliveAt || live.updatedAt) next.realtimeStateAt = Number(live.aliveAt || live.updatedAt);
+          state.realtimeStates.set(deviceId, { ...live, realtimeStateAt: Number(live.aliveAt || live.updatedAt || 0) });
           state.devices.set(deviceId, next); changed = true;
         }
         if (changed) { renderDevices(); render(); }
@@ -668,7 +670,13 @@
           state.devices.clear();
           snapshot.forEach((doc) => {
             const data = doc.data() || {};
-            state.devices.set(doc.id, { ...data, deviceId: data.deviceId || doc.id });
+            const live = state.realtimeStates.get(doc.id) || {};
+            state.devices.set(doc.id, { ...data, ...live, deviceId: data.deviceId || doc.id });
+          });
+          // A brand-new RTDB device can appear a fraction before its Firestore document.
+          // Keep it selectable/online instead of dropping it during that race.
+          state.realtimeStates.forEach((live, deviceId) => {
+            if (!state.devices.has(deviceId)) state.devices.set(deviceId, { ...live, deviceId });
           });
           renderDevices();
           render();
