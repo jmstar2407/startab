@@ -7,9 +7,6 @@
   const SELECTED_DEVICE_KEY = 'startab_windows_volume_selected_device_v2';
   const CLIENT_ID_KEY = 'startab_windows_volume_client_id_v2';
   const NATIVE_DEVICE_KEY = 'startab_windows_native_device_id_v1';
-  const REALTIME_REST_ROOT = 'https://startab-44e48-default-rtdb.firebaseio.com/startab/v2/users';
-  const REMOTE_FAST_WRITE_TIMEOUT_MS = 420;
-  const REMOTE_REST_TIMEOUT_MS = 1100;
 
   const state = {
     db: null,
@@ -141,7 +138,7 @@
 
   function devicePresenceStatus(device) {
     if (!device) return { state:'offline', online:false, source:'none' };
-    const localConnected = !!(state.native.connected && state.native.deviceId && state.native.deviceId === device.deviceId);
+    const localConnected = !!(state.native.connected && state.native.deviceId && state.native.deviceId === device.deviceId) || globalThis.StarTabDirectPC?.isConnected?.(state.user?.uid,device.deviceId) === true;
     const adaptive = globalThis.StarTabPresence?.status?.(state.user?.uid || '', 'windows', device.deviceId, device, {
       localConnected,
       aggressive: !!(dom.footer?.classList.contains('is-expanded') && !document.hidden),
@@ -168,11 +165,7 @@
     // Capability is intentionally separate from the visual presence state.
     // A linked standalone agent may reconnect after a stale offline marker;
     // sending an explicit user command is safe because it carries a short TTL.
-    if (isStandaloneCloudDevice(device)) return true;
-    // Older standalone documents may not yet expose bridge/cloudLinked metadata.
-    // If the device was registered by a Windows agent, keep the controls usable
-    // and let the transport decide whether the PC is actually reachable.
-    return !!(device.agentVersion || device.systemControl === true);
+    return isStandaloneCloudDevice(device);
   }
 
   function normalizedDeviceName(device) {
@@ -205,24 +198,6 @@
     if (!dom.spectrum) return;
     dom.spectrum.classList.toggle('is-active', !!active);
     dom.spectrum.setAttribute('aria-label', active ? 'Windows está reproduciendo audio' : 'Sin actividad de audio en Windows');
-  }
-
-  function currentAudioState(device = selectedDevice()) {
-    const nativeSelected = !!(
-      device?.deviceId
-      && state.native.connected
-      && state.native.deviceId
-      && String(device.deviceId) === String(state.native.deviceId)
-    );
-    return {
-      volume: nativeSelected && Number.isFinite(Number(state.native.volume))
-        ? clamp(state.native.volume, 0, 100)
-        : clamp(device?.volume, 0, 100),
-      muted: nativeSelected && typeof state.native.muted === 'boolean'
-        ? state.native.muted
-        : !!device?.muted,
-      nativeSelected,
-    };
   }
 
   function clearOptimisticState() {
@@ -279,11 +254,10 @@
     // briefly publish the previous value after a local +/- press (for example
     // target 7 while the last remote snapshot still says 6). Accepting a ±1
     // difference here caused the visible 7 -> 6 -> 7 bounce.
-    const actual = currentAudioState(device);
     const volumeMatches = state.optimisticVolume == null
-      || Math.round(actual.volume) === Math.round(state.optimisticVolume);
+      || Math.round(clamp(device.volume, 0, 100)) === Math.round(state.optimisticVolume);
     const muteMatches = state.optimisticMuted == null
-      || actual.muted === state.optimisticMuted;
+      || !!device.muted === state.optimisticMuted;
 
     // While a volume command is queued or in flight, the latest local value is
     // authoritative for the UI. Only release it once Firestore/Windows reports
@@ -293,7 +267,7 @@
 
   function effectiveMuted(device = selectedDevice()) {
     if (Date.now() < state.optimisticUntil && typeof state.optimisticMuted === 'boolean') return state.optimisticMuted;
-    return currentAudioState(device).muted;
+    return !!device?.muted;
   }
 
   function buildDialSegments() {
@@ -553,9 +527,8 @@
     const pstatus = devicePresenceStatus(device);
     const online = !!pstatus.online;
     reconcileOptimisticState(device);
-    const actualAudio = device ? currentAudioState(device) : { volume: 0, muted: false, nativeSelected: false };
-    const rawVolume = actualAudio.volume;
-    const rawMuted = actualAudio.muted;
+    const rawVolume = device ? clamp(device.volume, 0, 100) : 0;
+    const rawMuted = !!device?.muted;
     const optimisticActive = Date.now() < state.optimisticUntil;
     const volume = optimisticActive && state.optimisticVolume != null ? state.optimisticVolume : rawVolume;
     const muted = optimisticActive && typeof state.optimisticMuted === 'boolean' ? state.optimisticMuted : rawMuted;
@@ -731,181 +704,16 @@
     }
   }
 
-  function makeCommandId() {
-    return `${Date.now().toString(36)}-${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}`;
-  }
-
-  function promiseWithTimeout(promise, timeoutMs, fallbackValue) {
-    let timer = 0;
-    return Promise.race([
-      Promise.resolve(promise),
-      new Promise((resolve) => { timer = window.setTimeout(() => resolve(fallbackValue), timeoutMs); }),
-    ]).finally(() => clearTimeout(timer));
-  }
-
-  async function realtimeAuthToken(forceRefresh = false) {
-    try {
-      if (state.auth?.currentUser?.getIdToken) {
-        const token = await state.auth.currentUser.getIdToken(!!forceRefresh);
-        if (token) return token;
-      }
-    } catch (_) {}
-    try {
-      const saved = JSON.parse(localStorage.getItem('starTab_lastUser') || 'null');
-      return String(saved?.token || '');
-    } catch (_) {
-      return '';
-    }
-  }
-
-  async function sendRealtimeRestCommand(device, payload, commandId, ttlMs = 12_000) {
-    if (!device?.deviceId || !state.user?.uid || typeof fetch !== 'function') return false;
-    const execute = async (forceRefresh = false) => {
-      const token = await realtimeAuthToken(forceRefresh);
-      if (!token) return { ok: false, authFailed: true };
-      const now = Date.now();
-      const envelope = {
-        id: commandId,
-        clientAt: now,
-        expiresAtClient: now + Math.max(4_000, Number(ttlMs) || 12_000),
-        payload,
-      };
-      const controller = new AbortController();
-      const timer = window.setTimeout(() => controller.abort(), REMOTE_REST_TIMEOUT_MS);
-      try {
-        const url = `${REALTIME_REST_ROOT}/${encodeURIComponent(state.user.uid)}/devices/windows/${encodeURIComponent(device.deviceId)}/command.json?auth=${encodeURIComponent(token)}`;
-        const response = await fetch(url, {
-          method: 'PUT',
-          cache: 'no-store',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(envelope),
-          signal: controller.signal,
-        });
-        return { ok: response.ok, authFailed: response.status === 401 || response.status === 403 };
-      } catch (_) {
-        return { ok: false, authFailed: false };
-      } finally {
-        clearTimeout(timer);
-      }
-    };
-
-    let result = await execute(false);
-    if (!result.ok && result.authFailed && state.auth?.currentUser) result = await execute(true);
-    return result.ok === true;
-  }
-
   async function sendCommand(action, value = null, options = {}) {
     const device = selectedDevice();
     if (!state.user?.uid || !device) return false;
 
-    // Fast path: if the selected PC is this Windows machine, do NOT touch
-    // Firestore. Native Messaging is lower latency and produces zero cloud
-    // command reads/writes for local volume changes.
-    if (isLocalNativeTarget(device)) {
-      const nativeCommand = nativeCommandFor(action, value, options);
-      if (nativeCommand && await sendNativeCommand(nativeCommand)) return true;
-      // If the native port briefly drops, fall through to the remote path so
-      // control can still work through the standalone cloud agent.
-    }
-
-    if (!state.db || !canControlDevice(device)) return false;
-
-    const commandId = makeCommandId();
-    const realtimePayload = {
-      action,
-      issuedBy: state.user.uid,
-      issuedByClient: clientId,
-      clientAt: Date.now(),
-    };
-    if (Number.isFinite(Number(value))) realtimePayload.value = Number(value);
-    if (action === 'setMute') realtimePayload.muted = !!options.muted;
-
-    let fallbackCommandId = commandId;
-
-    // Volume from mobile must never depend exclusively on `.info/connected`.
-    // Mobile browsers frequently suspend/resume the RTDB socket and can report
-    // it as disconnected while normal HTTPS is already usable. We therefore:
-    //   1) try the RTDB SDK briefly (same command id),
-    //   2) use authenticated REST directly if the socket is not ready,
-    //   3) fall back to Firestore with the SAME id.
-    // The Windows agent deduplicates by id, so delayed transports are harmless.
-    if (action === 'setVolume') {
-      const realtimeSocketReady = globalThis.StarTabPresence?.isRealtimeConnected?.() === true;
-      if (realtimeSocketReady && globalThis.StarTabPresence?.sendWindowsCommandFast) {
-        try {
-          const fastResult = await promiseWithTimeout(
-            globalThis.StarTabPresence.sendWindowsCommandFast(
-              state.user.uid,
-              device.deviceId,
-              realtimePayload,
-              12_000,
-              commandId,
-            ),
-            REMOTE_FAST_WRITE_TIMEOUT_MS,
-            { ok: false, written: false, id: commandId, reason: 'write-timeout' },
-          );
-          if (fastResult?.ok === true && fastResult?.written === true) return true;
-          fallbackCommandId = String(fastResult?.id || commandId);
-        } catch (_) {}
-      }
-
-      try {
-        if (await sendRealtimeRestCommand(device, realtimePayload, fallbackCommandId, 12_000)) return true;
-      } catch (_) {}
-    } else {
-      const routePresence = devicePresenceStatus(device);
-      const preferRealtime = globalThis.StarTabPresence?.isRealtimeConnected?.() === true
-        && (routePresence?.commandable !== false || isStandaloneCloudDevice(device));
-      if (preferRealtime && globalThis.StarTabPresence?.sendWindowsCommand) {
-        try {
-          const realtimeResult = await globalThis.StarTabPresence.sendWindowsCommand(
-            state.user.uid,
-            device.deviceId,
-            realtimePayload,
-            20_000,
-            650,
-          );
-          if (realtimeResult?.ok === true && realtimeResult?.acknowledged === true) return true;
-          fallbackCommandId = String(realtimeResult?.id || commandId);
-        } catch (_) {}
-      }
-
-      // Mute/toggle/step are audio controls too. On mobile, if the persistent
-      // RTDB socket is sleeping, send them through authenticated HTTPS instead
-      // of forcing the user to reopen/reload StarTab just to wake the socket.
-      if (action === 'setMute' || action === 'toggleMute' || action === 'step') {
-        try {
-          if (await sendRealtimeRestCommand(device, realtimePayload, fallbackCommandId, 12_000)) return true;
-        } catch (_) {}
-      }
-    }
-
-    // Compatibility + reliability fallback. Reusing the same id guarantees
-    // last-write-wins behavior without double-applying a delayed RTDB command.
-    const command = {
-      id: fallbackCommandId || commandId,
-      action,
-      issuedBy: state.user.uid,
-      issuedByClient: clientId,
-      clientAt: Date.now(),
-      expiresAtClient: Date.now() + 20_000,
-      serverAt: firebase.firestore.FieldValue.serverTimestamp(),
-    };
-    if (Number.isFinite(Number(value))) command.value = Number(value);
-    if (action === 'setMute') command.muted = !!options.muted;
-
-    try {
-      await state.db
-        .collection('users')
-        .doc(state.user.uid)
-        .collection('windowsDevices')
-        .doc(device.deviceId)
-        .set({ command }, { merge: true });
-      return true;
-    } catch (error) {
-      console.error('StarTab Windows Volume: no se pudo enviar el comando:', error);
-      return false;
-    }
+    const payload = { action, issuedBy: state.user.uid, issuedByClient: clientId };
+    if (value != null && Number.isFinite(Number(value))) payload.value = Number(value);
+    if (action === 'setMute') payload.muted = !!options.muted;
+    const result = await globalThis.StarTabTransport.send(state.user.uid, 'windows', device.deviceId, payload);
+    if (!result.ok && dom.hint) dom.hint.textContent = `Orden sin confirmar: ${result.reason || 'sin respuesta del PC'}`;
+    return result.ok;
   }
 
   function pumpVolumeCommand() {
@@ -944,11 +752,9 @@
       return;
     }
 
-    // Keep the UI synchronous and coalesce only a very small burst. Local Native
-    // Messaging can absorb a tighter cadence; remote RTDB still gets enough
-    // coalescing to avoid flooding while feeling immediate.
-    const delay = isLocalNativeTarget(selectedDevice()) ? 12 : 42;
-    state.commandTimer = window.setTimeout(pumpVolumeCommand, delay);
+    // Small coalescing window keeps rapid +/- presses fluid locally while
+    // reducing Firestore traffic. The UI itself is updated synchronously.
+    state.commandTimer = window.setTimeout(pumpVolumeCommand, 55);
   }
 
   function applyNativeStatus(payload) {
@@ -1062,6 +868,7 @@
     dom.device?.addEventListener('change', () => {
       const previousId = state.selectedDeviceId;
       if (previousId && state.user?.uid) void globalThis.StarTabPresence?.setWatcher?.(state.user.uid, 'windows', previousId, false, 'pc-volume');
+      clearTimeout(state.commandTimer); state.commandTimer=0; state.pendingVolume=null; state.volumeRevision++;
       clearOptimisticState();
       state.selectedDeviceId = dom.device.value || null;
       if (dom.footer?.classList.contains('is-expanded') && state.selectedDeviceId && state.user?.uid) {
@@ -1129,6 +936,7 @@
     syncUser();
     state.userTimer = window.setInterval(syncUser, 900);
     state.statusTimer = window.setInterval(render, 5_000);
+    window.addEventListener('startab-direct-pc-change',render);
     document.addEventListener('visibilitychange', () => {
       if (!dom.footer?.classList.contains('is-expanded') || !state.selectedDeviceId || !state.user?.uid) return;
       void globalThis.StarTabPresence?.setWatcher?.(state.user.uid, 'windows', state.selectedDeviceId, !document.hidden, 'pc-volume');

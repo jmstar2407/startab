@@ -116,7 +116,7 @@
     if (!device) return { state:'offline', online:false, source:'none' };
     const user = currentUser();
     const adaptive = globalThis.StarTabPresence?.status?.(user?.uid || '', 'windows', device.deviceId || state.deviceId, device, {
-      localConnected: !!(state.open && globalThis.chrome?.runtime?.id && device.deviceId && localStorage.getItem('startab_windows_native_device_id_v1') === String(device.deviceId)),
+      localConnected: globalThis.StarTabDirectPC?.isConnected?.(user?.uid, device.deviceId) === true,
       aggressive: state.open && !document.hidden,
     });
     if (adaptive) return adaptive;
@@ -366,40 +366,9 @@
       clientAt: Date.now(),
       ...extra,
     };
-    const routePresence = presenceStatus(device);
-    const preferRealtime = globalThis.StarTabPresence?.isRealtimeConnected?.() === true
-      && routePresence?.commandable !== false;
-    let fallbackCommandId = '';
-    if (preferRealtime && globalThis.StarTabPresence?.sendWindowsCommand) {
-      try {
-        const realtimeResult = await globalThis.StarTabPresence.sendWindowsCommand(
-          state.user.uid,
-          device.deviceId,
-          realtimePayload,
-          20_000,
-          850,
-        );
-        if (realtimeResult?.ok === true && realtimeResult?.acknowledged === true) return true;
-        fallbackCommandId = String(realtimeResult?.id || '');
-      } catch (_) {}
-    }
-
-    // Firestore remains the compatibility fallback. Reusing the RTDB id makes
-    // monitor/hotspot/RGB/power actions safe even if both transports overlap.
-    const command = {
-      id: fallbackCommandId || `${Date.now().toString(36)}-${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}`,
-      action,
-      issuedBy: state.user.uid,
-      issuedByClient: clientId,
-      clientAt: Date.now(),
-      expiresAtClient: Date.now() + 20_000,
-      serverAt: firebase.firestore.FieldValue.serverTimestamp(),
-      ...extra,
-    };
-    await state.db.collection('users').doc(state.user.uid)
-      .collection('windowsDevices').doc(device.deviceId)
-      .set({ command }, { merge: true });
-    return true;
+    const result = await globalThis.StarTabTransport.send(state.user.uid, 'windows', device.deviceId, realtimePayload);
+    if (!result.ok && dom.note) dom.note.textContent = `Orden sin confirmar: ${result.reason || 'sin respuesta del PC'}`;
+    return result.ok;
   }
 
   function sendCommand(action, extra = {}) {

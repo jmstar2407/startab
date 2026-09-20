@@ -23,6 +23,13 @@
     auth: null,
     user: null,
     firebaseRetry: 0,
+    sessionGeneration: 0,
+    starting: false,
+    lastConnectAt: 0,
+    leaseAt: 0,
+    relayTotalX: 0,
+    relayTotalY: 0,
+    scrollTotal: 0,
     open: false,
     sessionId: null,
     sessionRef: null,
@@ -200,7 +207,8 @@
     const deviceId = selectedDeviceId();
     if (!state.db || !state.user?.uid || !deviceId) return null;
     const ref = state.db.collection('users').doc(state.user.uid).collection('windowsDevices').doc(deviceId);
-    const snapshot = await ref.get();
+    const snapshot = await globalThis.StarTabTransport.deadline(ref.get(), 2500);
+    if (!snapshot) throw new Error('device-query-timeout');
     if (!snapshot.exists) return null;
     const data = snapshot.data() || {};
     const full = { ...data, deviceId };
@@ -261,7 +269,7 @@
 
   async function cleanupSession(removeRemote = true) {
     if (state.user?.uid && state.deviceId) {
-      try { await globalThis.StarTabPresence?.setWatcher?.(state.user.uid, 'windows', state.deviceId, false, 'pc-touchpad'); } catch (_) {}
+      void globalThis.StarTabPresence?.setWatcher?.(state.user.uid, 'windows', state.deviceId, false, 'pc-touchpad');
     }
     state.unsubscribeSession?.();
     state.unsubscribeSession = null;
@@ -283,7 +291,7 @@
     state.sessionRef = null;
     state.sessionId = null;
     if (removeRemote && ref) {
-      try { await ref.delete(); } catch (_) {}
+      void ref.delete().catch(() => {});
     }
   }
 
@@ -313,7 +321,7 @@
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
     await waitForIceGathering(pc);
-    if (!state.sessionRef || !pc.localDescription) return;
+    if (!state.sessionRef || !pc.localDescription || state.pc !== pc || !state.open) return;
 
     await state.sessionRef.set({
       offer: { type: pc.localDescription.type, sdp: pc.localDescription.sdp },
@@ -324,7 +332,10 @@
   }
 
   async function beginSession() {
+    const generation = ++state.sessionGeneration;
+    state.lastConnectAt = Date.now();
     await cleanupSession(true);
+    if (!state.open || document.hidden || generation !== state.sessionGeneration) return;
     if (!state.db) {
       setStatus('error', 'Sin Firebase', 'Firebase todavía no está disponible en StarTab.');
       return;
@@ -337,6 +348,7 @@
       return;
     }
 
+    if (!state.open || document.hidden || generation !== state.sessionGeneration) return;
     if (!state.user?.uid) {
       setStatus('error', 'Sin sesión', 'Inicia sesión en StarTab para controlar tu PC.');
       if (dom.device) dom.device.textContent = 'Inicia sesión con la misma cuenta del PC.';
@@ -350,7 +362,7 @@
 
     state.deviceId = device.data.deviceId;
     state.deviceName = device.data.deviceName || 'PC Windows';
-    try { await globalThis.StarTabPresence?.setWatcher?.(state.user.uid, 'windows', state.deviceId, true, 'pc-touchpad'); } catch (_) {}
+    void globalThis.StarTabPresence?.setWatcher?.(state.user.uid, 'windows', state.deviceId, true, 'pc-touchpad');
     if (dom.device) dom.device.textContent = `${state.deviceName} · ${String(state.deviceId).slice(0, 8)}…`;
     if (!device.commandable) {
       setStatus('error', 'Desconectado', 'El PC seleccionado no está disponible.');
@@ -362,20 +374,23 @@
       return;
     }
 
+    state.relayTotalX = state.relayTotalY = state.scrollTotal = 0;
+    state.leaseAt = Date.now();
     state.sessionId = `${clientId.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 42)}-${Date.now().toString(36)}`;
     state.sessionRef = device.ref.collection('pointerSessions').doc(state.sessionId);
     setStatus('connecting', 'Conectando', 'Preparando el touchpad remoto…');
 
     try {
-      await state.sessionRef.set({
+      const initialized = await globalThis.StarTabTransport.deadline(state.sessionRef.set({
         sessionId: state.sessionId,
         clientId,
         createdBy: state.user.uid,
         createdAtClient: Date.now(),
         expiresAtClient: Date.now() + SESSION_TTL_MS,
         status: 'offering',
-        protocol: 1,
-      }, { merge: true });
+        protocol: 3,
+      }, { merge: true }).then(() => true), 2500, false);
+      if (!initialized || !state.open || generation !== state.sessionGeneration) return;
 
       state.unsubscribeSession = state.sessionRef.onSnapshot((snapshot) => {
         if (!snapshot.exists || !state.pc || state.remoteDescriptionSet) return;
@@ -408,10 +423,11 @@
       state.relayDx = 0;
       state.relayDy = 0;
       if (!state.sessionRef || (!x && !y)) return;
+      state.relayTotalX += Math.round(x); state.relayTotalY += Math.round(y);
       state.relaySeq += 1;
       try {
         await state.sessionRef.set({
-          motionRelay: { seq: state.relaySeq, dx: Math.round(x), dy: Math.round(y), clientAt: Date.now() },
+          motionRelay: { seq: state.relaySeq, dx: Math.round(x), dy: Math.round(y), totalX: state.relayTotalX, totalY: state.relayTotalY, clientAt: Date.now() },
           expiresAtClient: Date.now() + SESSION_TTL_MS,
         }, { merge: true });
       } catch (_) {}
@@ -437,10 +453,11 @@
       const wheel = state.scrollDy;
       state.scrollDy = 0;
       if (!state.sessionRef || !wheel) return;
+      state.scrollTotal += Math.round(wheel);
       state.scrollSeq += 1;
       try {
         await state.sessionRef.set({
-          scrollRelay: { seq: state.scrollSeq, delta: Math.round(wheel), clientAt: Date.now() },
+          scrollRelay: { seq: state.scrollSeq, delta: Math.round(wheel), total: state.scrollTotal, clientAt: Date.now() },
           expiresAtClient: Date.now() + SESSION_TTL_MS,
         }, { merge: true });
       } catch (_) {}
@@ -469,14 +486,8 @@
     if (channelOpen(state.controlChannel)) {
       try { state.controlChannel.send(payload); return; } catch (_) {}
     }
-    if (!state.sessionRef) return;
-    state.clickSeq += 1;
-    try {
-      await state.sessionRef.set({
-        clickRelay: { seq: state.clickSeq, button, clientAt: Date.now() },
-        expiresAtClient: Date.now() + SESSION_TTL_MS,
-      }, { merge: true });
-    } catch (_) {}
+    if (!state.user?.uid || !state.deviceId) return;
+    await globalThis.StarTabTransport.send(state.user.uid,'windows',state.deviceId,{action:'pointerClick',button},3000);
   }
 
   async function sendButtonState(button, down) {
@@ -488,23 +499,15 @@
         return true;
       } catch (_) {}
     }
-    if (!state.sessionRef) return false;
-    state.buttonSeq += 1;
-    try {
-      await state.sessionRef.set({
-        buttonRelay: { seq: state.buttonSeq, button, down: !!down, clientAt: Date.now() },
-        expiresAtClient: Date.now() + SESSION_TTL_MS,
-      }, { merge: true });
-      return true;
-    } catch (_) {
-      return false;
-    }
+    if (!state.user?.uid || !state.deviceId) return false;
+    const result = await globalThis.StarTabTransport.send(state.user.uid,'windows',state.deviceId,{action:'pointerButton',button,down:!!down},3000);
+    return result.ok;
   }
 
   function queueKeyboardRelay(operation) {
     if (!state.sessionRef || !state.capabilities.advanced || !operation) return;
     state.keyboardSeq += 1;
-    state.keyboardOps.push({ seq: state.keyboardSeq, ...operation });
+    state.keyboardOps.push({ seq: state.keyboardSeq, clientAt:Date.now(), ...operation });
     if (state.keyboardOps.length > 40) state.keyboardOps.splice(0, state.keyboardOps.length - 40);
     if (state.keyboardRelayTimer) return;
     state.keyboardRelayTimer = window.setTimeout(async () => {
@@ -703,6 +706,7 @@
     if (!state.open) return;
     if (state.dragLocked) await setDragLocked(false, { haptic: false });
     state.open = false;
+    state.sessionGeneration++;
     dom.modal?.classList.remove('is-open');
     dom.modal?.setAttribute('aria-hidden', 'true');
     document.body.classList.remove('windows-touchpad-open');
@@ -849,6 +853,31 @@
       console.error('StarTab Touchpad: Firebase no disponible:', error);
     }
   }
+
+  function recoverSession() {
+    if (!state.open || document.hidden || state.starting) return;
+    if (state.deviceId !== selectedDeviceId() || !state.sessionRef || (!channelOpen(state.controlChannel) && Date.now()-state.lastConnectAt > 12000)) {
+      state.starting = true;
+      void beginSession().finally(() => { state.starting = false; });
+    }
+  }
+  setInterval(() => {
+    if (!state.open || document.hidden) return;
+    recoverSession();
+    if (state.sessionRef && Date.now()-state.leaseAt > 25000) {
+      state.leaseAt=Date.now(); void state.sessionRef.set({expiresAtClient:Date.now()+SESSION_TTL_MS},{merge:true}).catch(()=>{});
+    }
+    if (state.dragLocked) {
+      if (channelOpen(state.controlChannel)) { try { state.controlChannel.send(JSON.stringify({t:'lease'})); } catch (_) {} }
+      else if (state.user?.uid && state.deviceId) void globalThis.StarTabTransport.send(state.user.uid,'windows',state.deviceId,{action:'pointerLease'},2500);
+    }
+  },2500);
+  window.addEventListener('online',recoverSession);
+  window.addEventListener('startab-device-selection-change',recoverSession);
+  document.addEventListener('visibilitychange',()=>{
+    if (document.hidden && state.open) { state.sessionGeneration++; void setDragLocked(false,{haptic:false}); void cleanupSession(true); }
+    else recoverSession();
+  });
 
   cacheDom();
   bindUi();

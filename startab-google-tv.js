@@ -775,6 +775,8 @@
   }
 
   function listenDevices() {
+    closeWs();
+    for (const entry of directPending.values()) clearTimeout(entry.timer); directPending.clear();
     state.unsubscribe?.(); state.unsubscribe = null;
     state.unsubscribePresence?.(); state.unsubscribePresence = null;
     state.devices.clear();
@@ -838,7 +840,7 @@
       if (!wsSend({ t:'ping', id:`lan-health-${probeAt}` })) { markLanFailure(); return; }
       window.setTimeout(() => {
         if (!state.modalOpen || state.lanTrackedDeviceId !== state.selectedId) return;
-        if (state.lanLastAliveAt < probeAt) markLanFailure();
+        if (state.lanLastAliveAt < probeAt) { markLanFailure(); closeWs(); scheduleLocalReconnect(); }
       }, LAN_HEALTH_REPLY_TIMEOUT_MS);
     }, LAN_HEALTH_PING_MS);
   }
@@ -847,7 +849,7 @@
     const p = pairingFor(device?.deviceId || state.selectedId) || {};
     const ip = String(device?.localIp || p.ip || '').trim();
     const port = Number(device?.localPort || p.port || 8765);
-    const secret = String(p.secret || '');
+    const secret = String(device?.localSecret || p.secret || '');
     return { ip, port, secret };
   }
 
@@ -901,24 +903,29 @@
     if (!shouldKeepLocalWarm()) return;
     const d = selectedDevice(); if (!d || state.wsConnecting || state.wsReady) return;
     const { ip, port, secret } = localEndpoint(d); if (!ip || !secret) return;
+    if (Date.now() - (state.localAttemptAt || 0) < 5000) return;
+    state.localAttemptAt = Date.now();
     state.wsConnecting = true;
     let ws;
     try { ws = new WebSocket(`ws://${ip}:${port}`); } catch (_) { state.wsConnecting = false; markLanFailure(); return; }
     state.ws = ws;
     const timer = setTimeout(() => { try { ws.close(); } catch (_) {} }, 1800);
-    ws.onopen = () => { clearTimeout(timer); ws.send(JSON.stringify({ type:'hello', secret })); };
+    ws.onopen = () => { if (state.ws !== ws) return; ws.send(JSON.stringify({ type:'hello', secret })); };
     ws.onmessage = ev => {
-      markLanAlive();
+      if (state.ws !== ws) return;
       try {
         const data = JSON.parse(ev.data || '{}');
+        if (data.ok === true) markLanAlive();
+        if (data.reason === 'unauthorized') { closeWs(); return; }
         if (data.type === 'state' && data.ok) {
-          state.wsReady = true; state.wsConnecting = false; applyRemoteState(data); startWsKeepAlive(); render();
+          clearTimeout(timer); state.wsReady = true; state.wsConnecting = false; applyRemoteState(data); startWsKeepAlive(); render();
         }
         if (data.type === 'keyCapture') {
           handleKeyCaptureEvent(data);
           return;
         }
         if (data.type === 'ack') {
+          const pending = directPending.get(data.id); if (pending) { clearTimeout(pending.timer); directPending.delete(data.id); }
           if (data.ok === false) { showCommandError(data.reason || 'error'); return; }
           if (Array.isArray(data.apps)) { state.availableApps = data.apps; renderAppsList(); }
           if (data.remoteKeyBindings && typeof data.remoteKeyBindings === 'object') applyRemoteState(data, true);
@@ -940,9 +947,36 @@
     };
   }
 
+  const directPending = new Map();
+  function cloudPayload(obj) {
+    const data = {...obj, clientAt:obj.clientAt || Date.now()}; delete data.secret;
+    const names = {move:'motionRelay',scroll:'scrollRelay',click:'clickRelay',volume:'volumeCommand',back:'backCommand'};
+    const name = names[obj.t] || 'actionCommand';
+    if (name === 'actionCommand') data.type = obj.t;
+    delete data.t;
+    return {[name]:data};
+  }
   function wsSend(obj) {
-    if (!state.wsReady || state.ws?.readyState !== WebSocket.OPEN) return false;
-    try { state.ws.send(JSON.stringify({ ...obj, secret: pairingFor(state.selectedId)?.secret || '' })); return true; } catch (_) { return false; }
+    if (!state.wsReady || state.ws?.readyState !== WebSocket.OPEN || state.ws.bufferedAmount > 65536) return false;
+    const device = selectedDevice(), userId = uid();
+    const data = {...obj, id:obj.id || unique(), clientAt:Date.now()};
+    const payload = cloudPayload(data);
+    const envelope = globalThis.StarTabTransport.envelope(payload, 8000, data.id);
+    data.expiresAtClient = envelope.expiresAtClient;
+    try {
+      state.ws.send(JSON.stringify({...data,secret:localEndpoint(device).secret}));
+      if (obj.t !== 'ping') {
+        const timer = setTimeout(() => {
+          directPending.delete(data.id);
+          // Same ID on both transports. Do not reroute to a newly selected TV/account.
+          if (uid() !== userId || state.selectedId !== device?.deviceId) return;
+          closeWs(); scheduleLocalReconnect();
+          void firebaseMerge(payload,8000,{device,uid:userId},envelope);
+        },1100);
+        directPending.set(data.id,{timer,deviceId:device?.deviceId});
+      }
+      return true;
+    } catch (_) { closeWs(); scheduleLocalReconnect(); return false; }
   }
 
   function bytesToBase64(bytes) {
@@ -1076,22 +1110,22 @@
     }
   }
 
-  async function firebaseMerge(payload, leaseMs = 12000) {
-    const d = selectedDevice(); if (!d || !state.db || !uid()) return false;
-    // Ruta preferida: RTDB mantiene un stream SSE abierto en el TV. No hay polling
-    // y la orden llega apenas cambia el nodo. Firestore queda como fallback compatible.
-    const pstatus = presenceStatus(d);
-    const preferRealtime = globalThis.StarTabPresence?.isRealtimeConnected?.() === true
-      && pstatus?.commandable !== false;
-    if (preferRealtime && globalThis.StarTabPresence?.sendTvCommand) {
-      try {
-        const realtimeOk = await globalThis.StarTabPresence.sendTvCommand(uid(), d.deviceId, payload, leaseMs);
-        state.realtimeCommandOk = realtimeOk;
-        if (realtimeOk) return true;
-      } catch (_) { state.realtimeCommandOk = false; }
+  async function firebaseMerge(payload, leaseMs = 12000, target = null, envelope = null) {
+    const d = target?.device || selectedDevice();
+    const userId = target?.uid || uid();
+    if (!d || !state.db || !userId) return false;
+    if (payload.quickApps) {
+      try { await state.db.collection('users').doc(userId).collection('tvDevices').doc(d.deviceId).set(payload,{merge:true}); return true; }
+      catch (_) { return false; }
     }
-    const lease = { id: unique(), clientAt: Date.now(), expiresAtClient: Date.now() + leaseMs };
-    try { await state.db.collection('users').doc(uid()).collection('tvDevices').doc(d.deviceId).set({ ...payload, controlLease: lease }, { merge:true }); return true; } catch (_) { return false; }
+    const result = await globalThis.StarTabTransport.send(userId, 'tv', d.deviceId, payload, leaseMs, envelope || '');
+    if (d.deviceId === state.selectedId && userId === uid()) {
+      state.realtimeCommandOk = result.ok;
+      if (!result.ok && result.reason !== 'superseded') showCommandError(result.reason);
+      if (result.ok && Array.isArray(result.apps)) { state.availableApps = result.apps; renderAppsList(); }
+      if (result.ok) { applyRemoteState(result); render(); }
+    }
+    return result.ok;
   }
 
   function sendAction(type, extra = {}, haptic = true) {
@@ -1423,7 +1457,7 @@
     window.addEventListener('resize',closeAppContext); window.addEventListener('scroll',closeAppContext,true);
 
     dom.scannerClose?.addEventListener('click',stopQrScanner); dom.scannerCancel?.addEventListener('click',stopQrScanner); dom.scanner?.querySelector('.startab-tv-scanner-backdrop')?.addEventListener('click',stopQrScanner);
-    dom.deviceSelect?.addEventListener('change',()=>{const next=dom.deviceSelect.value||'';if(next==='__add_tv__'){openAddModal();dom.deviceSelect.value=state.selectedId||'';return;}stopFirebaseSessionLease();state.selectedId=next;localStorage.setItem(SELECTED_KEY,state.selectedId);state.optimisticVolume=null;state.optimisticBrightness=null;state.volumeHoldUntil=0;state.brightnessHoldUntil=0;controlPaint.volume=null;controlPaint.brightness=null;state.availableApps=[];closeWs();connectSelectedLocal();startFirebaseSessionLease();render();});
+    dom.deviceSelect?.addEventListener('change',()=>{clearPendingControls();const next=dom.deviceSelect.value||'';if(next==='__add_tv__'){openAddModal();dom.deviceSelect.value=state.selectedId||'';return;}stopFirebaseSessionLease();state.selectedId=next;localStorage.setItem(SELECTED_KEY,state.selectedId);state.optimisticVolume=null;state.optimisticBrightness=null;state.volumeHoldUntil=0;state.brightnessHoldUntil=0;controlPaint.volume=null;controlPaint.brightness=null;state.availableApps=[];closeWs();connectSelectedLocal();startFirebaseSessionLease();render();});
 
     dom.power?.addEventListener('click',()=>{
       const action = state.powerOn === false ? 'on' : 'off';
@@ -1473,6 +1507,13 @@
     bindNavTouch();
   }
 
+  function clearPendingControls() {
+    for (const name of ['volumeTimer','brightnessTimer','motionTimer','scrollTimer','keyboardTimer']) { clearTimeout(state[name]); state[name]=0; }
+    state.pendingVolume=null; state.pendingBrightness=null; state.motionDx=state.motionDy=state.scrollDy=0; state.keyboardBuffer='';
+    for (const entry of directPending.values()) clearTimeout(entry.timer); directPending.clear();
+  }
+  window.addEventListener('online',()=>{closeWs();scheduleLocalReconnect(100);});
+  window.addEventListener('pagehide',()=>{clearPendingControls();closeWs();});
   function boot() {
     injectUi(); state.selectedId=localStorage.getItem(SELECTED_KEY)||''; initFirebase();
     setInterval(()=>{if(shouldKeepLocalWarm()&&state.selectedId&&!state.wsReady&&!state.wsConnecting)connectSelectedLocal();},1500);

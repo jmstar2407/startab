@@ -8,8 +8,8 @@
   const ACTIVE_ONLINE_FRESH_MS = 75_000;
   const UNRESPONSIVE_MS = 3 * 60_000;
   const ACTIVE_UNRESPONSIVE_MS = 3 * 60_000;
-  const FIRESTORE_FALLBACK_STALE_MS = 6 * 60_000;
-  const FIRESTORE_FALLBACK_WHEN_RTDB_DOWN_MS = 25 * 60_000;
+  const FIRESTORE_FALLBACK_STALE_MS = 90_000;
+  const FIRESTORE_FALLBACK_WHEN_RTDB_DOWN_MS = 90_000;
   const SUBSCRIPTION_BOOTSTRAP_MS = 12_000;
   const BOOTSTRAP_FIRESTORE_MAX_AGE_MS = 24 * 60 * 60_000;
   const STANDBY_MEMORY_MS = 8 * 60 * 60_000;
@@ -45,6 +45,7 @@
         connectionBound = true;
         rtdb.ref('.info/connected').on('value', (snap) => {
           connected = snap.val() === true;
+          if (connected) for (const session of watcherSessions.values()) void session.tick?.();
           globalThis.dispatchEvent?.(new CustomEvent('startab-presence-connection', { detail: { connected } }));
         }, () => {
           connected = false;
@@ -174,8 +175,8 @@
       fsStandby ? fsAt : 0,
     );
     const newestExplicitOnlineAt = Math.max(livePositive && !liveStandby ? liveAt : 0, fsExplicitOnline && !fsStandby ? fsAt : 0);
-    if (isTv && standbyAt > 0 && now - standbyAt <= STANDBY_MEMORY_MS && newestExplicitOnlineAt <= standbyAt + SIGNAL_SKEW_MS) {
-      return result('standby', true, true, liveStandby && liveAt >= fsAt ? 'rtdb' : 'firestore', now - standbyAt);
+    if (isTv && standbyAt > 0 && now - standbyAt <= STANDBY_MEMORY_MS && newestExplicitOnlineAt <= standbyAt + SIGNAL_SKEW_MS && Math.max(liveState === 'offline' ? liveAt : 0, fsExplicitOffline ? fsAt : 0) <= standbyAt + SIGNAL_SKEW_MS) {
+      return result('standby', now - standbyAt <= freshMs, true, liveStandby && liveAt >= fsAt ? 'rtdb' : 'firestore', now - standbyAt);
     }
 
     // Choose the newest positive signal. RTDB normally wins, but a newer
@@ -238,8 +239,8 @@
     return result('offline', false, false, localState === 'offline' ? 'lan' : (liveAt >= fsAt ? 'rtdb' : 'firestore'), newestAge);
   }
 
-  function commandEnvelope(payload, ttlMs = 15_000, forcedId = '') {
-    const id = String(forcedId || '').trim() || globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  function commandEnvelope(payload, ttlMs = 15_000) {
+    const id = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const now = Date.now();
     return {
       id,
@@ -262,19 +263,6 @@
 
   function sendTvCommand(uid, deviceId, payload, ttlMs = 15_000) {
     return sendDeviceCommand(uid, 'tv', deviceId, payload, ttlMs);
-  }
-
-  async function sendWindowsCommandFast(uid, deviceId, payload, ttlMs = 12_000, commandId = '') {
-    const db = ensure();
-    if (!db || !uid || !deviceId) return { ok: false, acknowledged: false, written: false, id: '' };
-
-    const envelope = commandEnvelope(payload, ttlMs, commandId);
-    try {
-      await db.ref(`${base(uid)}/devices/windows/${deviceId}/command`).set(envelope);
-      return { ok: true, acknowledged: false, written: true, id: envelope.id };
-    } catch (_) {
-      return { ok: false, acknowledged: false, written: false, id: envelope.id, reason: 'write-failed' };
-    }
   }
 
   async function sendWindowsCommand(uid, deviceId, payload, ttlMs = 20_000, ackTimeoutMs = 900) {
@@ -361,6 +349,7 @@
     const tick = async () => {
       if (document.hidden || !session.owners.size) return;
       try {
+        void ref.onDisconnect().remove().catch(() => {});
         await ref.set({
           active: true,
           clientId,
@@ -368,11 +357,11 @@
           lastSeen: firebase.database.ServerValue.TIMESTAMP,
           expiresAtClient: Date.now() + WATCH_TTL_MS,
         });
-        try { ref.onDisconnect().remove(); } catch (_) {}
+
       } catch (_) {}
     };
     session.tick = tick;
-    await tick();
+    void tick();
     session.timer = window.setInterval(tick, ACTIVE_WATCH_REFRESH_MS);
     return true;
   }
@@ -395,7 +384,6 @@
     status,
     sendTvCommand,
     sendWindowsCommand,
-    sendWindowsCommandFast,
     setWatcher,
     stopAllWatchers,
     isRealtimeConnected: () => connected === true,

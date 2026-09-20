@@ -8,6 +8,7 @@ const MENU_ROOT='startab-add-root';const MENU_PREFIX='startab-add-category-';con
   const IS_WINDOWS = /Windows/i.test(navigator.userAgent || '');
   const RECONNECT_MS = 30_000;
 
+  const nativeRequests = new Map();
   let nativePort = null;
   let nativeConnected = false;
   let nativeState = null;
@@ -85,6 +86,7 @@ const MENU_ROOT='startab-add-root';const MENU_PREFIX='startab-add-category-';con
 
     nativePort.onMessage.addListener((message) => {
       if (!message || typeof message !== 'object') return;
+      if (message.type === 'remoteCommandResult') nativeRequests.get(message.id)?.(message);
       if (message.type === 'hello' || message.type === 'state' || message.type === 'meter' || message.type === 'systemState' || message.type === 'rgbState' || message.type === 'cloudState') {
         nativeConnected = true;
         nativeState = { ...(nativeState || {}), ...message };
@@ -97,6 +99,7 @@ const MENU_ROOT='startab-add-root';const MENU_PREFIX='startab-add-category-';con
       const reason = chrome.runtime.lastError?.message || null;
       nativePort = null;
       nativeConnected = false;
+      for (const finish of nativeRequests.values()) finish({ok:false,reason:'native-disconnected'});
       emitToOffscreen({ kind: 'disconnected', error: reason, state: nativeState });
       broadcastStatus(reason);
       scheduleReconnect();
@@ -109,7 +112,7 @@ const MENU_ROOT='startab-add-root';const MENU_PREFIX='startab-add-category-';con
     if (!nativePort || !nativeConnected) return false;
     if (!command || typeof command !== 'object') return false;
     const type = String(command.type || '');
-    if (!['getState', 'setVolume', 'setMute', 'toggleMute', 'step', 'pointerMove', 'pointerWheel', 'pointerClick', 'pointerButton', 'textInput', 'keyInput', 'monitorOff', 'shutdown', 'sleep', 'restart', 'logoff', 'lock', 'getSystemState', 'setHotspot', 'setRgb', 'configureCloud', 'getCloudState', 'ping'].includes(type)) return false;
+    if (!['getState', 'setVolume', 'setMute', 'toggleMute', 'step', 'pointerLease', 'pointerMove', 'pointerWheel', 'pointerClick', 'pointerButton', 'textInput', 'keyInput', 'monitorOff', 'shutdown', 'sleep', 'restart', 'logoff', 'lock', 'getSystemState', 'setHotspot', 'setRgb', 'configureCloud', 'getCloudState', 'remoteCommand', 'ping'].includes(type)) return false;
     try {
       nativePort.postMessage(command);
       return true;
@@ -134,6 +137,15 @@ const MENU_ROOT='startab-add-root';const MENU_PREFIX='startab-add-category-';con
     }
 
     if (message.type === 'STARTAB_WINDOWS_NATIVE_COMMAND') {
+      if (message.command?.type === 'remoteCommand') {
+        const id = String(message.command.envelope?.id || '');
+        if (!id) { sendResponse({ok:false,reason:'invalid-id'}); return; }
+        const timer = setTimeout(() => finish({ok:false,reason:'native-timeout'}), 10000);
+        const finish = result => { clearTimeout(timer); nativeRequests.delete(id); sendResponse(result); };
+        nativeRequests.set(id, finish);
+        if (!postNativeCommand(message.command)) finish({ok:false,reason:'native-disconnected'});
+        return true;
+      }
       const ok = postNativeCommand(message.command);
       sendResponse({ ok, reason: ok ? null : 'native-disconnected' });
       return;

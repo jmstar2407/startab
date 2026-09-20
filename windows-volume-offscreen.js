@@ -236,7 +236,7 @@
         // para poder responder la oferta WebRTC del móvil. El relay Firestore no
         // se ejecuta aquí mientras el daemon esté online, evitando doble cursor.
         if (state.nativeConnected && !state.unsubscribePointerSessions) startPointerSessionBridge();
-        if (state.standaloneCloudOnline) return;
+        if (nativeSupportsStandaloneCloud() || state.standaloneCloudOnline) return;
         const command = data.command;
         if (!command?.id || command.id === state.lastCommandId || command.id === data.lastCommandId) return;
 
@@ -307,6 +307,22 @@
 
   function handlePointerPayload(payload, entry) {
     if (!payload || typeof payload !== 'object') return;
+    if (payload.t === 'lease') { void sendPointerNative({type:'pointerLease'}); return; }
+    if (payload.t === 'ping') {
+      try { entry.controlChannel?.send(JSON.stringify({t:'pong'})); } catch (_) {}
+      return;
+    }
+    if (payload.t === 'command' && payload.envelope?.id) {
+      const envelope = payload.envelope;
+      const current = entry.controlChannel;
+      entry.commandChain = (entry.commandChain || Promise.resolve()).catch(() => {}).then(async () => {
+        const result = await chrome.runtime.sendMessage({type:'STARTAB_WINDOWS_NATIVE_COMMAND', command:{type:'remoteCommand',envelope}});
+        // A timeout is ambiguous; allow the same ID to reach the daemon for deduplication.
+        if (result?.reason === 'native-timeout' || result?.reason === 'native-disconnected') return;
+        try { current?.send(JSON.stringify({t:'commandAck',id:envelope.id,ok:result?.ok === true,reason:result?.reason || ''})); } catch (_) {}
+      }).catch(() => {});
+      return;
+    }
     if (payload.t === 'move') {
       const dx = Math.max(-500, Math.min(500, Number(payload.dx) || 0));
       const dy = Math.max(-500, Math.min(500, Number(payload.dy) || 0));
@@ -341,6 +357,7 @@
 
   function attachPointerDataChannel(channel, entry) {
     if (!channel) return;
+    if (channel.label === 'control') entry.controlChannel = channel;
     channel.addEventListener('message', (event) => {
       try { handlePointerPayload(JSON.parse(String(event.data || '')), entry); } catch (_) {}
     });
@@ -470,7 +487,7 @@
     // Cuando el daemon standalone está activo, él procesa el relay Firestore.
     // Chrome conserva únicamente la ruta WebRTC directa para evitar duplicar
     // movimientos y mantener la latencia mínima cuando está disponible.
-    if (!state.standaloneCloudOnline) handlePointerRelay(data, entry);
+    if (!nativeSupportsStandaloneCloud() && !state.standaloneCloudOnline) handlePointerRelay(data, entry);
 
     const offerId = String(data.offerId || '');
     if (!offerId || !data.offer?.sdp || offerId === entry.offerId) return;
@@ -750,8 +767,6 @@
     lastPublishedSessions: [],
     lastPublishedAt: 0,
     lastCommandId: '',
-    commandSequence: 0,
-    latestVolumeSequence: new Map(),
   };
 
   function readSavedUser() {
@@ -932,6 +947,29 @@
     connectRefs(deviceId);
   }
 
+  let mediaCommandChain = Promise.resolve();
+  const mediaResults = new Map();
+  function receiveEnvelope(envelope, firestore = false) {
+    const owner = media.uid, device = media.boundDeviceId;
+    mediaCommandChain = mediaCommandChain.catch(() => {}).then(async () => {
+      if (!media.isLeader || owner !== media.uid || device !== media.boundDeviceId || !envelope?.id || !envelope.payload) return;
+      const now = Date.now();
+      let result = mediaResults.get(envelope.id);
+      if (!result) {
+        if (!(envelope.clientAt > 0) || envelope.clientAt > now+5000 || envelope.expiresAtClient <= now || now-envelope.clientAt > 30000) result = {ok:false,reason:'expired'};
+        else result = await handleCommandData({...envelope.payload,id:envelope.id,clientAt:envelope.clientAt}) || {ok:false,reason:'not-executed'};
+        mediaResults.set(envelope.id,result);
+        while(mediaResults.size>1024) mediaResults.delete(mediaResults.keys().next().value);
+      }
+      const ack = {...result,id:envelope.id,clientAt:Date.now()};
+      if (firestore) await media.refs?.state?.set({commandResult:ack},{merge:true}).catch(() => {});
+      if (typeof firebase.database === 'function') {
+        const base = firebase.database().ref(`startab/v2/users/${owner}/devices/media/${device}`);
+        void base.child('commandAck').set(ack).catch(() => {});
+        void base.child(`commands/${envelope.id}`).remove().catch(() => {});
+      }
+    }).catch(error => console.warn('StarTab media command:',error.message));
+  }
   function connectRefs(deviceId) {
     if (!media.db || !media.uid || !deviceId || media.refs) return;
     const userRoot = media.db.collection('users').doc(media.uid);
@@ -948,7 +986,7 @@
 
     if (media.refs.commandRealtime) {
       const commandRef = media.refs.command;
-      const handler = (snapshot) => { const sequence = ++media.commandSequence; void handleCommandData(snapshot?.val?.() || null, sequence); };
+      const handler = (snapshot) => { void handleCommandData(snapshot?.val?.() || null); };
       const errorHandler = (error) => console.warn('StarTab Media background: RTDB command listener:', error);
       commandRef.on('value', handler, errorHandler);
       media.unsubs.push(() => {
@@ -962,6 +1000,19 @@
       );
     }
 
+    // Keep Firestore subscribed even when RTDB is present: it is the independent fallback.
+    const fallbackRef = userRoot.collection('mediaRemote').doc(`command_${deviceId}`);
+    media.unsubs.push(fallbackRef.onSnapshot(snapshot => {
+      const data = snapshot.data();
+      if (data?.command?.payload) receiveEnvelope(data.command,true);
+      else if (data?.targetDeviceId) void handleCommandData(data);
+    }, () => {}));
+    if (typeof firebase.database === 'function') {
+      const queue = firebase.database().ref(`startab/v2/users/${media.uid}/devices/media/${deviceId}/commands`);
+      const onCommand = snap => receiveEnvelope(snap.val());
+      queue.on('child_added',onCommand,()=>{});
+      media.unsubs.push(()=>queue.off('child_added',onCommand));
+    }
     if (media.isLeader) {
       void refreshRegistry(true);
       void publishHeartbeat(true);
@@ -1037,15 +1088,15 @@
 
   async function handleCommandSnapshot(snapshot) {
     if (!snapshot?.exists) return;
-    const sequence = ++media.commandSequence;
-    await handleCommandData(snapshot.data() || {}, sequence);
+    await handleCommandData(snapshot.data() || {});
   }
 
-  async function handleCommandData(data, arrivalSequence = ++media.commandSequence) {
+  async function handleCommandData(data) {
     const deviceId = media.boundDeviceId || mediaDeviceId();
     if (!media.isLeader || !deviceId || !data || typeof data !== 'object') return;
     const id = String(data.id || '');
-    if (!id || id === media.lastCommandId) return;
+    if (!id) return {ok:false,reason:'invalid-id'};
+    if (id === media.lastCommandId) return {ok:false,reason:'already-processed'};
     if (String(data.targetDeviceId || '') !== deviceId) return;
 
     const issuedAt = Number(data.clientAt) || 0;
@@ -1059,36 +1110,29 @@
     const command = data.command || {};
     const action = String(command.action || '');
     const tabId = Number(target.tabId);
-    const frameId = Number(target.frameId) || 0;
 
-    if (action === 'volume') {
-      const volumeKey = `${tabId}:${frameId}`;
-      const latestSequence = Number(media.latestVolumeSequence.get(volumeKey)) || 0;
-      if (arrivalSequence < latestSequence) return;
-      media.latestVolumeSequence.set(volumeKey, arrivalSequence);
-    }
-
+    let outcome = {ok:false,reason:'invalid-target'};
     try {
       if (action === 'openTab') {
         if (Number.isInteger(tabId)) {
-          await chrome.runtime.sendMessage({
+          outcome = await chrome.runtime.sendMessage({
             type: 'STARTAB_MEDIA_OPEN_TAB',
             target: { tabId },
           });
         }
       } else if (action === 'closeTab') {
         if (Number.isInteger(tabId)) {
-          await chrome.runtime.sendMessage({
+          outcome = await chrome.runtime.sendMessage({
             type: 'STARTAB_MEDIA_CLOSE_TAB',
             target: { tabId },
           });
         }
       } else {
-        await chrome.runtime.sendMessage({
+        outcome = await chrome.runtime.sendMessage({
           type: 'STARTAB_MEDIA_CONTROL',
           target: {
             tabId,
-            frameId,
+            frameId: Number(target.frameId) || 0,
           },
           command: {
             action,
@@ -1097,21 +1141,13 @@
         });
       }
     } catch (error) {
+      outcome = {ok:false,reason:String(error?.message || error)};
       console.warn('StarTab Media background: no se pudo ejecutar el comando remoto:', action, error);
-    }
-
-    if (action === 'volume') {
-      // The background registry update arrives immediately after the media command.
-      // Let bursts collapse into the newest value instead of blocking this RTDB
-      // listener on a full registry round-trip for every slider movement.
-      window.setTimeout(() => {
-        void refreshRegistry(false).then(() => schedulePublish(true));
-      }, 18);
-      return;
     }
 
     await refreshRegistry(false);
     schedulePublish(true);
+    return {ok:outcome?.ok === true,reason:outcome?.reason || ''};
   }
 
   function startLeaderLock() {
