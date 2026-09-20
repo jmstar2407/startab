@@ -25,6 +25,16 @@
     globalPresenceUid: '',
     globalPresenceWindowsUnsub: null,
     globalPresenceTvUnsub: null,
+    globalPresenceWindowsMap: new Map(),
+    globalPresenceTvMap: new Map(),
+    globalPcDoc: null,
+    globalTvDoc: null,
+    globalPcDocId: '',
+    globalTvDocId: '',
+    globalPcDocUnsub: null,
+    globalTvDocUnsub: null,
+    globalWatchedPcId: '',
+    globalWatchedTvId: '',
     mobileMql: null,
     sourcePlacementObserver: null,
     sourcePlacementGuard: false,
@@ -73,24 +83,111 @@
     return option?.textContent?.replace(/\s·\s(?:Directo|Firebase|Standby|Reconectando|Sin respuesta|No disponible|sin conexión)$/i, '').trim() || 'Google TV';
   }
 
+  function selectedTvDeviceId() {
+    const select = $('startab-tv-device-select');
+    if (select?.value && select.value !== '__add_tv__') return String(select.value);
+    try { return String(localStorage.getItem('startab_google_tv_selected_v1') || ''); }
+    catch (_) { return ''; }
+  }
+
+  function normalizeGlobalDoc(snapshot, fallbackId = '') {
+    if (!snapshot?.exists) return null;
+    const data = snapshot.data?.() || {};
+    return { ...data, deviceId: String(data.deviceId || snapshot.id || fallbackId || '') };
+  }
+
+  function bindSelectedFallbackDocs(uid) {
+    if (!uid || !globalThis.firebase?.firestore) return;
+    const db = firebase.firestore();
+    const pcId = selectedWindowsDeviceId();
+    const tvId = selectedTvDeviceId();
+
+    if (pcId !== state.globalPcDocId) {
+      try { state.globalPcDocUnsub?.(); } catch (_) {}
+      state.globalPcDocUnsub = null;
+      state.globalPcDoc = null;
+      state.globalPcDocId = pcId;
+      if (pcId) {
+        state.globalPcDocUnsub = db.collection('users').doc(uid).collection('windowsDevices').doc(pcId)
+          .onSnapshot((snap) => { state.globalPcDoc = normalizeGlobalDoc(snap, pcId); updateStatuses(); }, () => {});
+      }
+    }
+
+    if (tvId !== state.globalTvDocId) {
+      try { state.globalTvDocUnsub?.(); } catch (_) {}
+      state.globalTvDocUnsub = null;
+      state.globalTvDoc = null;
+      state.globalTvDocId = tvId;
+      if (tvId) {
+        state.globalTvDocUnsub = db.collection('users').doc(uid).collection('tvDevices').doc(tvId)
+          .onSnapshot((snap) => { state.globalTvDoc = normalizeGlobalDoc(snap, tvId); updateStatuses(); }, () => {});
+      }
+    }
+  }
+
+  async function syncGlobalPresenceWatchers(uid) {
+    if (!uid || !globalThis.StarTabPresence?.setWatcher) return;
+    const visible = !document.hidden;
+    const pcId = selectedWindowsDeviceId();
+    const tvId = selectedTvDeviceId();
+
+    if (state.globalWatchedPcId && (!visible || state.globalWatchedPcId !== pcId)) {
+      try { await globalThis.StarTabPresence.setWatcher(uid, 'windows', state.globalWatchedPcId, false, 'control-nav-global'); } catch (_) {}
+      state.globalWatchedPcId = '';
+    }
+    if (state.globalWatchedTvId && (!visible || state.globalWatchedTvId !== tvId)) {
+      try { await globalThis.StarTabPresence.setWatcher(uid, 'tv', state.globalWatchedTvId, false, 'control-nav-global'); } catch (_) {}
+      state.globalWatchedTvId = '';
+    }
+    if (!visible) return;
+    if (pcId && state.globalWatchedPcId !== pcId) {
+      state.globalWatchedPcId = pcId;
+      try { await globalThis.StarTabPresence.setWatcher(uid, 'windows', pcId, true, 'control-nav-global'); } catch (_) {}
+    }
+    if (tvId && state.globalWatchedTvId !== tvId) {
+      state.globalWatchedTvId = tvId;
+      try { await globalThis.StarTabPresence.setWatcher(uid, 'tv', tvId, true, 'control-nav-global'); } catch (_) {}
+    }
+  }
+
   function ensureGlobalPresenceSubscriptions() {
     const user = currentUser();
     const uid = String(user?.uid || '');
     if (!globalThis.StarTabPresence?.watchType) return;
     if (!globalThis.StarTabPresence?.ensure?.()) return;
-    if (uid === state.globalPresenceUid && state.globalPresenceWindowsUnsub && state.globalPresenceTvUnsub) return;
-    try { state.globalPresenceWindowsUnsub?.(); } catch (_) {}
-    try { state.globalPresenceTvUnsub?.(); } catch (_) {}
-    state.globalPresenceWindowsUnsub = null;
-    state.globalPresenceTvUnsub = null;
-    state.globalPresenceUid = uid;
+
+    if (uid !== state.globalPresenceUid) {
+      try { state.globalPresenceWindowsUnsub?.(); } catch (_) {}
+      try { state.globalPresenceTvUnsub?.(); } catch (_) {}
+      try { state.globalPcDocUnsub?.(); } catch (_) {}
+      try { state.globalTvDocUnsub?.(); } catch (_) {}
+      state.globalPresenceWindowsUnsub = null;
+      state.globalPresenceTvUnsub = null;
+      state.globalPcDocUnsub = null;
+      state.globalTvDocUnsub = null;
+      state.globalPresenceWindowsMap = new Map();
+      state.globalPresenceTvMap = new Map();
+      state.globalPcDoc = null;
+      state.globalTvDoc = null;
+      state.globalPcDocId = '';
+      state.globalTvDocId = '';
+      state.globalPresenceUid = uid;
+    }
     if (!uid) return;
-    const refresh = () => {
-      ensureEmbedded();
+
+    const refreshWindows = (map) => {
+      state.globalPresenceWindowsMap = map instanceof Map ? new Map(map) : new Map();
       updateStatuses();
     };
-    state.globalPresenceWindowsUnsub = globalThis.StarTabPresence.watchType(uid, 'windows', refresh);
-    state.globalPresenceTvUnsub = globalThis.StarTabPresence.watchType(uid, 'tv', refresh);
+    const refreshTv = (map) => {
+      state.globalPresenceTvMap = map instanceof Map ? new Map(map) : new Map();
+      updateStatuses();
+    };
+    if (!state.globalPresenceWindowsUnsub) state.globalPresenceWindowsUnsub = globalThis.StarTabPresence.watchType(uid, 'windows', refreshWindows);
+    if (!state.globalPresenceTvUnsub) state.globalPresenceTvUnsub = globalThis.StarTabPresence.watchType(uid, 'tv', refreshTv);
+
+    bindSelectedFallbackDocs(uid);
+    void syncGlobalPresenceWatchers(uid);
   }
 
   async function setMediaWindowsWatcher(active) {
@@ -453,13 +550,31 @@
     window.dispatchEvent(new Event('resize'));
   }
 
+  function statusToControlState(status, emptyText = 'No disponible') {
+    if (!status) return { key: 'offline', text: emptyText, source: 'none' };
+    if (status.state === 'standby') return { key: 'standby', text: 'Standby', source: status.source || 'firebase' };
+    if (status.online || status.state === 'online') {
+      const via = status.source === 'lan' ? 'Directo' : 'En línea';
+      return { key: 'online', text: via, source: status.source || 'firebase' };
+    }
+    return { key: 'offline', text: 'No disponible', source: status.source || 'none' };
+  }
+
   function pcStatus() {
-    const card = $('windows-system-volume');
-    const data = card?.dataset.state || 'empty';
-    if (data === 'online') return { key: 'online', text: 'En línea' };
-    if (data === 'signed-out') return { key: 'offline', text: 'Sin sesión' };
-    if (data === 'empty') return { key: 'offline', text: 'Sin PC seleccionado' };
-    return { key: 'offline', text: 'No disponible' };
+    const user = currentUser();
+    const id = selectedWindowsDeviceId();
+    if (!user?.uid) return { key: 'offline', text: 'Sin sesión', source: 'none' };
+    if (!id) return { key: 'offline', text: 'Sin PC seleccionado', source: 'none' };
+    const live = state.globalPresenceWindowsMap.get(id) || globalThis.StarTabPresence?.presenceFor?.(user.uid, 'windows', id) || null;
+    const fallback = state.globalPcDocId === id ? state.globalPcDoc : null;
+    const merged = live ? { ...(fallback || {}), ...live, deviceId: id } : fallback;
+    // Los indicadores globales NO usan la conexión local/directa como verdad visual.
+    // Deben mostrar exactamente el mismo estado compartido en PC, iPhone y cualquier
+    // otro cliente, por eso dependen exclusivamente de Firebase (RTDB + Firestore).
+    const adaptive = globalThis.StarTabPresence?.status?.(user.uid, 'windows', id, merged, {
+      aggressive: !document.hidden,
+    });
+    return statusToControlState(adaptive, 'No disponible');
   }
 
   function formatLastConnection(timestamp) {
@@ -471,14 +586,17 @@
   }
 
   function tvStatus() {
-    const title = $('startab-tv-status-title')?.textContent || '';
-    const led = $('startab-tv-led')?.dataset.state || 'idle';
-    if (/reconectando/i.test(title)) return { key: 'unresponsive', text: 'Reconectando' };
-    if (/sin respuesta/i.test(title)) return { key: 'unresponsive', text: 'Sin respuesta' };
-    if (/standby/i.test(title)) return { key: 'standby', text: 'Standby' };
-    if (led === 'direct' || led === 'firebase') return { key: 'online', text: title || 'En línea' };
-    if (led === 'warn' && /standby/i.test(title)) return { key: 'standby', text: 'Standby' };
-    return { key: 'offline', text: title && !/sin tv|buscando/i.test(title) ? title : 'No disponible' };
+    const user = currentUser();
+    const id = selectedTvDeviceId();
+    if (!user?.uid) return { key: 'offline', text: 'Sin sesión', source: 'none' };
+    if (!id) return { key: 'offline', text: 'Sin TV seleccionada', source: 'none' };
+    const live = state.globalPresenceTvMap.get(id) || globalThis.StarTabPresence?.presenceFor?.(user.uid, 'tv', id) || null;
+    const fallback = state.globalTvDocId === id ? state.globalTvDoc : null;
+    const merged = live ? { ...(fallback || {}), ...live, deviceId: id } : fallback;
+    const adaptive = globalThis.StarTabPresence?.status?.(user.uid, 'tv', id, merged, {
+      aggressive: !document.hidden,
+    });
+    return statusToControlState(adaptive, 'No disponible');
   }
 
   function paintModeStatus(mode, status, label) {
@@ -512,7 +630,10 @@
     paintModeStatus('tv', tv, tvName);
     const pcLast = $('startab-control-pc-last-connection');
     if (pcLast) {
-      const at = Number($('windows-system-volume')?.dataset.lastConnectionAt || 0);
+      const pcId = selectedWindowsDeviceId();
+      const live = pcId ? (state.globalPresenceWindowsMap.get(pcId) || null) : null;
+      const fallback = state.globalPcDocId === pcId ? state.globalPcDoc : null;
+      const at = Number(live?.lastSeen || live?.clientAt || fallback?.clientAt || 0);
       const text = pc.key === 'online' ? '' : formatLastConnection(at);
       pcLast.hidden = !text;
       pcLast.textContent = text ? `Últ. conexión ${text}` : '';
@@ -570,13 +691,17 @@
     }
 
     $('windows-device-select')?.addEventListener('change', () => {
+      ensureGlobalPresenceSubscriptions();
       if (state.mode === 'media' && $('multimedia-modal')?.classList.contains('is-open')) void setMediaWindowsWatcher(true);
       setTimeout(updateStatuses, 30);
     });
-    $('startab-tv-device-select')?.addEventListener('change', () => setTimeout(updateStatuses, 30));
+    $('startab-tv-device-select')?.addEventListener('change', () => { ensureGlobalPresenceSubscriptions(); setTimeout(updateStatuses, 30); });
     window.addEventListener('startab-device-selection-change', () => setTimeout(updateStatuses, 30));
     window.addEventListener('startab-presence-connection', updateStatuses);
     document.addEventListener('visibilitychange', () => {
+      ensureGlobalPresenceSubscriptions();
+      const uid = String(currentUser()?.uid || '');
+      if (uid) void syncGlobalPresenceWatchers(uid);
       if (!$('multimedia-modal')?.classList.contains('is-open')) return;
       if (state.mode === 'media') void setMediaWindowsWatcher(!document.hidden);
     });
@@ -619,6 +744,7 @@
     buildHeaderDeviceHost();
     buildPanes();
     enhanceVolumeToggle();
+    ensureGlobalPresenceSubscriptions();
 
     let attempts = 0;
     const waitForDynamic = () => {
