@@ -62,32 +62,79 @@
     } catch (_) { return null; }
   }
 
-  function selectedWindowsDeviceId() {
+  function rawSelectedWindowsDeviceId() {
     const select = $('windows-device-select');
-    if (select?.value) return String(select.value);
+    const value = String(select?.value || '').trim();
+    if (value && !value.startsWith('__')) return value;
     try {
       const saved = JSON.parse(localStorage.getItem('startab_windows_volume_selected_device_v2') || 'null');
-      return String(saved?.deviceId || '');
+      return String(saved?.deviceId || '').trim();
     } catch (_) { return ''; }
   }
 
-  function selectedPcLabel() {
-    const select = $('windows-device-select');
-    const option = select?.selectedOptions?.[0];
-    return option?.textContent?.replace(/\s·\s(?:Directo|Firebase|En línea|Standby|Reconectando|Sin respuesta|No disponible).*$/i, '').trim() || 'PC seleccionado';
+  function rawSelectedTvDeviceId() {
+    const select = $('startab-tv-device-select');
+    const value = String(select?.value || '').trim();
+    if (value && value !== '__add_tv__' && !value.startsWith('__')) return value;
+    try { return String(localStorage.getItem('startab_google_tv_selected_v1') || '').trim(); }
+    catch (_) { return ''; }
   }
 
-  function selectedTvLabel() {
-    const select = $('startab-tv-device-select');
-    const option = select?.selectedOptions?.[0];
-    return option?.textContent?.replace(/\s·\s(?:Directo|Firebase|Standby|Reconectando|Sin respuesta|No disponible|sin conexión)$/i, '').trim() || 'Google TV';
+  function presenceTimestamp(node) {
+    return Math.max(Number(node?.lastSeen || 0), Number(node?.clientAt || 0), Number(node?.updatedAt || 0));
+  }
+
+  function resolvePresenceDeviceId(type, preferredId = '') {
+    const map = type === 'tv' ? state.globalPresenceTvMap : state.globalPresenceWindowsMap;
+    const preferred = String(preferredId || '').trim();
+    if (!(map instanceof Map) || !map.size) return preferred;
+
+    const ranked = [...map.entries()].sort((a, b) => presenceTimestamp(b[1]) - presenceTimestamp(a[1]));
+    const best = ranked[0] || null;
+    if (!best) return preferred;
+    if (!preferred || !map.has(preferred)) return String(best[0]);
+
+    const current = map.get(preferred);
+    const currentAt = presenceTimestamp(current);
+    const bestAt = presenceTimestamp(best[1]);
+    const currentState = String(current?.state || '').toLowerCase();
+    const currentLooksDead = currentState === 'offline' || current?.online === false;
+    // Auto-repara IDs antiguos/reinstalados: si otro registro del mismo tipo está
+    // claramente más reciente, el indicador global sigue la presencia viva aunque
+    // el selector interno todavía no se haya reconstruido.
+    if (currentLooksDead && bestAt > currentAt + 15_000) return String(best[0]);
+    if (bestAt > currentAt + 90_000) return String(best[0]);
+    return preferred;
+  }
+
+  function selectedWindowsDeviceId() {
+    return resolvePresenceDeviceId('windows', rawSelectedWindowsDeviceId());
   }
 
   function selectedTvDeviceId() {
+    return resolvePresenceDeviceId('tv', rawSelectedTvDeviceId());
+  }
+
+  function liveDeviceLabel(type, id, fallback) {
+    const map = type === 'tv' ? state.globalPresenceTvMap : state.globalPresenceWindowsMap;
+    const node = id && map instanceof Map ? map.get(id) : null;
+    return String(node?.deviceName || node?.name || node?.hostname || fallback || '').trim();
+  }
+
+  function selectedPcLabel() {
+    const id = selectedWindowsDeviceId();
+    const select = $('windows-device-select');
+    const option = select?.selectedOptions?.[0];
+    const optionLabel = option?.value ? option.textContent?.replace(/\s·\s(?:Directo|Firebase|En línea|Standby|Reconectando|Sin respuesta|No disponible).*$/i, '').trim() : '';
+    return optionLabel || liveDeviceLabel('windows', id, 'PC Windows') || 'PC Windows';
+  }
+
+  function selectedTvLabel() {
+    const id = selectedTvDeviceId();
     const select = $('startab-tv-device-select');
-    if (select?.value && select.value !== '__add_tv__') return String(select.value);
-    try { return String(localStorage.getItem('startab_google_tv_selected_v1') || ''); }
-    catch (_) { return ''; }
+    const option = select?.selectedOptions?.[0];
+    const optionLabel = option?.value && option.value !== '__add_tv__' ? option.textContent?.replace(/\s·\s(?:Directo|Firebase|Standby|Reconectando|Sin respuesta|No disponible|sin conexión)$/i, '').trim() : '';
+    return optionLabel || liveDeviceLabel('tv', id, 'Google TV') || 'Google TV';
   }
 
   function normalizeGlobalDoc(snapshot, fallbackId = '') {
@@ -181,10 +228,14 @@
 
     const refreshWindows = (map) => {
       state.globalPresenceWindowsMap = map instanceof Map ? new Map(map) : new Map();
+      bindSelectedFallbackDocs(uid);
+      void syncGlobalPresenceWatchers(uid);
       updateStatuses();
     };
     const refreshTv = (map) => {
       state.globalPresenceTvMap = map instanceof Map ? new Map(map) : new Map();
+      bindSelectedFallbackDocs(uid);
+      void syncGlobalPresenceWatchers(uid);
       updateStatuses();
     };
     if (!state.globalPresenceWindowsUnsub) state.globalPresenceWindowsUnsub = globalThis.StarTabPresence.watchType(uid, 'windows', refreshWindows);
@@ -633,6 +684,15 @@
     const tvName = selectedTvLabel();
     paintModeStatus('pc', pc, pcName);
     paintModeStatus('tv', tv, tvName);
+    try {
+      window.dispatchEvent(new CustomEvent('startab-global-device-state', {
+        detail: {
+          pc: { ...pc, deviceId: selectedWindowsDeviceId(), label: pcName },
+          tv: { ...tv, deviceId: selectedTvDeviceId(), label: tvName },
+          updatedAt: Date.now(),
+        },
+      }));
+    } catch (_) {}
     const pcLast = $('startab-control-pc-last-connection');
     if (pcLast) {
       const pcId = selectedWindowsDeviceId();

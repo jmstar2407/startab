@@ -15603,3 +15603,14 @@ body.windows-pc-control-open .startab-control-center-panel{overscroll-behavior:c
     min-width:145px!important;
   }
 }
+
+/* StarTab v1.6.0 — el campo del teclado TV es solo un capturador de teclas.
+   El texto se envia al TV y nunca se representa en el telefono. */
+#startab-tv-keyboard-input{
+  color:transparent!important;
+  caret-color:transparent!important;
+  text-shadow:none!important;
+  -webkit-text-fill-color:transparent!important;
+}
+#startab-tv-keyboard-input::selection{background:transparent!important;color:transparent!important}
+#startab-tv-keyboard-input::placeholder{-webkit-text-fill-color:rgba(232,238,249,.31)!important;color:rgba(232,238,249,.31)!important}

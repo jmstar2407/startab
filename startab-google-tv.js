@@ -26,6 +26,7 @@
     editingAppPackage: '', editingBackground: '', contextAppPackage: '', appEditHoldTimer: 0,
     cameraStream: null, scannerActive: false, scanTimer: 0, scanBusy: false, barcodeDetector: null,
     availableApps: [], appSearch: '', wsKeepAlive: 0, firebaseSessionTimer: 0, modalOpen: false, keyboardBuffer: '', keyboardTimer: 0,
+    keyboardComposing: false, keyboardSuppressInputUntil: 0,
     unsubscribePresence: null, realtimeCommandOk: null,
     lanHealth: '', lanFailures: 0, lanLastAliveAt: 0, lanTrackedDeviceId: '', preconnectTimer: 0,
   };
@@ -1139,21 +1140,29 @@
     });
   }
 
+  function resetKeyboardCapture() {
+    const el = dom.keyboardInput;
+    if (!el) return;
+    el.value = '';
+    el.dataset.prev = '';
+    try { el.setSelectionRange(0, 0); } catch (_) {}
+  }
+
   function openKeyboard() {
     if (!selectedDevice() || !dom.keyboardInput) return;
     const el=dom.keyboardInput;
-    el.value=''; el.dataset.prev='';
-    // Si el usuario cerró manualmente el teclado pero el campo conservó foco,
-    // blur + focus dentro del mismo gesto fuerza a reabrir el IME móvil.
+    state.keyboardComposing = false;
+    resetKeyboardCapture();
+    // El input es únicamente un capturador invisible. Mantenerlo editable es
+    // necesario para que iOS/Android abran el teclado, pero nunca conserva texto.
     try { el.blur(); } catch (_) {}
-    // El focus ocurre dentro del click del usuario: en móvil abre directamente
-    // el teclado nativo, sin mostrar ningún modal/campo de StarTab.
     try { el.focus({preventScroll:true}); } catch (_) { try { el.focus(); } catch (_) {} }
     try { el.setSelectionRange(0,0); } catch (_) {}
-    // Respaldo para navegadores móviles que necesitan un segundo focus breve.
     setTimeout(()=>{ if(document.activeElement!==el){try{el.focus({preventScroll:true});}catch(_){try{el.focus();}catch(__){}}} },35);
   }
   function closeKeyboard() {
+    state.keyboardComposing = false;
+    resetKeyboardCapture();
     try { dom.keyboardInput?.blur(); } catch (_) {}
   }
   function sendKeyboardText(text) {
@@ -1171,15 +1180,42 @@
     const sendKey=()=>firebaseMerge({actionCommand:{id:unique(),type:'key',key:safeKey,count:safeCount,clientAt:Date.now()}},15000);
     if(pending) firebaseMerge({actionCommand:{id:unique(),type:'text',text:pending,clientAt:Date.now()}},15000).finally(sendKey); else sendKey();
   }
-  function handleKeyboardInput() {
+  function handleKeyboardBeforeInput(e) {
+    if (!dom.keyboardInput || state.keyboardComposing) return;
+    const type = String(e.inputType || '');
+    if (type === 'insertLineBreak' || type === 'insertParagraph') {
+      e.preventDefault();
+      state.keyboardSuppressInputUntil = performance.now() + 120;
+      sendKeyboardEnter();
+      resetKeyboardCapture();
+      return;
+    }
+    if (type.startsWith('delete')) {
+      e.preventDefault();
+      state.keyboardSuppressInputUntil = performance.now() + 120;
+      sendKeyboardKey('backspace', 1);
+      resetKeyboardCapture();
+      return;
+    }
+    if ((type === 'insertText' || type === 'insertReplacementText' || type === 'insertFromPaste' || type === 'insertFromDrop') && typeof e.data === 'string' && e.data) {
+      e.preventDefault();
+      state.keyboardSuppressInputUntil = performance.now() + 120;
+      sendKeyboardText(e.data);
+      resetKeyboardCapture();
+    }
+  }
+
+  function handleKeyboardInput(e) {
     const el=dom.keyboardInput;if(!el)return;
-    const prev=String(el.dataset.prev||''), next=String(el.value||'');
-    if(next===prev)return;
-    if(next.startsWith(prev)) sendKeyboardText(next.slice(prev.length));
-    else if(prev.startsWith(next)) sendKeyboardKey('backspace',prev.length-next.length);
-    else { const common=[...prev].findIndex((c,i)=>next[i]!==c); const i=common<0?Math.min(prev.length,next.length):common; if(prev.length>i)sendKeyboardKey('backspace',prev.length-i); if(next.length>i)sendKeyboardText(next.slice(i)); }
-    el.dataset.prev=next;
-    if(next.length>700){el.value=next.slice(-350);el.dataset.prev=el.value;}
+    if (state.keyboardComposing) return;
+    const next = String(el.value || '');
+    if (performance.now() <= Number(state.keyboardSuppressInputUntil || 0)) {
+      resetKeyboardCapture();
+      return;
+    }
+    // Fallback para navegadores que no permiten cancelar beforeinput.
+    if (next) sendKeyboardText(next);
+    resetKeyboardCapture();
   }
 
   function stopFirebaseSessionLease() {
@@ -1241,9 +1277,20 @@
     dom.keyboard?.addEventListener('click',openKeyboard);
     dom.keyboardBar?.addEventListener('submit',e=>e.preventDefault());
     const sendKeyboardEnter=()=>{const now=Date.now();if(now-(state.lastKeyboardEnterAt||0)<120)return;state.lastKeyboardEnterAt=now;sendKeyboardKey('enter');};
-    dom.keyboardInput?.addEventListener('beforeinput',e=>{if(e.inputType==='insertLineBreak'||e.inputType==='insertParagraph'){e.preventDefault();sendKeyboardEnter();}});
+    dom.keyboardInput?.addEventListener('beforeinput', handleKeyboardBeforeInput);
+    dom.keyboardInput?.addEventListener('compositionstart', () => { state.keyboardComposing = true; });
+    dom.keyboardInput?.addEventListener('compositionend', e => {
+      state.keyboardComposing = false;
+      const text = String(e.data || dom.keyboardInput?.value || '');
+      if (text) sendKeyboardText(text);
+      state.keyboardSuppressInputUntil = performance.now() + 100;
+      resetKeyboardCapture();
+    });
     dom.keyboardInput?.addEventListener('input',handleKeyboardInput);
-    dom.keyboardInput?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();sendKeyboardEnter();} });
+    dom.keyboardInput?.addEventListener('keydown',e=>{
+      if(e.key==='Enter'){e.preventDefault();sendKeyboardEnter();resetKeyboardCapture();}
+      else if(e.key==='Backspace'){e.preventDefault();sendKeyboardKey('backspace',1);resetKeyboardCapture();}
+    });
     dom.back?.addEventListener('click',sendBack);
     dom.menu?.addEventListener('click',()=>sendAction('menu'));
     dom.home?.addEventListener('click',()=>sendAction('home'));
