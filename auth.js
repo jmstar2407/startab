@@ -1,0 +1,29 @@
+const firebaseConfig={apiKey:"AIzaSyBU8DyN2kRcDq0fxB20qRUXWBHV0E-0d6A",authDomain:"startab-44e48.firebaseapp.com",databaseURL:"https://startab-44e48-default-rtdb.firebaseio.com",projectId:"startab-44e48",storageBucket:"startab-44e48.firebasestorage.app",messagingSenderId:"874084877753",appId:"1:874084877753:web:cf9cbe9a344356dc9be268"};
+if(!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+const auth=firebase.auth();
+const provider=new firebase.auth.GoogleAuthProvider();
+provider.setCustomParameters({prompt:'select_account'});
+const googleBtn=document.getElementById('googleSignIn');
+const statusDiv=document.getElementById('status');
+function showStatus(message,type='info'){statusDiv.textContent=message;statusDiv.className=`status ${type}`;statusDiv.style.display='block';}
+// Exact origin and window checks are also enforced by the receiving StarTab page.
+const requestedOrigin=new URLSearchParams(location.search).get('returnOrigin');
+const returnOrigin=requestedOrigin && /^(https:\/\/[^/]+|http:\/\/localhost(?::\d+)?|chrome-extension:\/\/[a-p]{32})$/.test(requestedOrigin) ? requestedOrigin : location.origin;
+googleBtn.addEventListener('click',async()=>{
+  googleBtn.disabled=true;
+  try{
+    showStatus('Iniciando sesión…');
+    const result=await auth.signInWithPopup(provider);
+    const credential=result.credential || firebase.auth.GoogleAuthProvider.credentialFromResult?.(result);
+    const user=result.user;
+    const userData={uid:user.uid,email:user.email,displayName:user.displayName,photoURL:user.photoURL,
+      token:await user.getIdToken(),refreshToken:user.refreshToken,emailVerified:user.emailVerified,
+      oauthCredential:credential?{idToken:credential.idToken||null,accessToken:credential.accessToken||null}:null,timestamp:Date.now()};
+    if(window.opener&&!window.opener.closed) window.opener.postMessage({type:'STAR_TAB_AUTH_SUCCESS',user:userData},returnOrigin);
+    else if(returnOrigin===location.origin) localStorage.setItem('starTab_auth_data',JSON.stringify(userData));
+    showStatus('Sesión iniciada. Regresa a StarTab.','success');
+    setTimeout(()=>window.close(),1800);
+  }catch(error){showStatus(error.code==='auth/popup-blocked'?'Permite las ventanas emergentes y vuelve a intentarlo.':`No se pudo iniciar sesión: ${error.message}`,'error');}
+  finally{googleBtn.disabled=false;}
+});
+// Tokens are never returned to arbitrary STAR_TAB_REQUEST_TOKEN messages.

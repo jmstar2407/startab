@@ -1,0 +1,25 @@
+{
+  "rules": {
+    "startab": {
+      "v2": {
+        "users": {
+          "$uid": {
+            ".read": "auth != null && auth.uid === $uid",
+            ".write": "auth != null && auth.uid === $uid",
+            "devices": {
+              "$type": {
+                "$device": {
+                  "commands": {
+                    "$id": {
+                      ".validate": "newData.hasChildren(['id', 'clientAt', 'expiresAtClient', 'payload']) && newData.child('id').isString() && newData.child('id').val() === $id && newData.child('clientAt').isNumber() && newData.child('expiresAtClient').isNumber() && newData.child('clientAt').val() <= now + 5000 && newData.child('expiresAtClient').val() > now && newData.child('expiresAtClient').val() <= now + 30000"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
