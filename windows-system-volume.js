@@ -7,6 +7,9 @@
   const SELECTED_DEVICE_KEY = 'startab_windows_volume_selected_device_v2';
   const CLIENT_ID_KEY = 'startab_windows_volume_client_id_v2';
   const NATIVE_DEVICE_KEY = 'startab_windows_native_device_id_v1';
+  const REALTIME_REST_ROOT = 'https://startab-44e48-default-rtdb.firebaseio.com/startab/v2/users';
+  const REMOTE_FAST_WRITE_TIMEOUT_MS = 420;
+  const REMOTE_REST_TIMEOUT_MS = 1100;
 
   const state = {
     db: null,
@@ -165,7 +168,11 @@
     // Capability is intentionally separate from the visual presence state.
     // A linked standalone agent may reconnect after a stale offline marker;
     // sending an explicit user command is safe because it carries a short TTL.
-    return isStandaloneCloudDevice(device);
+    if (isStandaloneCloudDevice(device)) return true;
+    // Older standalone documents may not yet expose bridge/cloudLinked metadata.
+    // If the device was registered by a Windows agent, keep the controls usable
+    // and let the transport decide whether the PC is actually reachable.
+    return !!(device.agentVersion || device.systemControl === true);
   }
 
   function normalizedDeviceName(device) {
@@ -724,6 +731,69 @@
     }
   }
 
+  function makeCommandId() {
+    return `${Date.now().toString(36)}-${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}`;
+  }
+
+  function promiseWithTimeout(promise, timeoutMs, fallbackValue) {
+    let timer = 0;
+    return Promise.race([
+      Promise.resolve(promise),
+      new Promise((resolve) => { timer = window.setTimeout(() => resolve(fallbackValue), timeoutMs); }),
+    ]).finally(() => clearTimeout(timer));
+  }
+
+  async function realtimeAuthToken(forceRefresh = false) {
+    try {
+      if (state.auth?.currentUser?.getIdToken) {
+        const token = await state.auth.currentUser.getIdToken(!!forceRefresh);
+        if (token) return token;
+      }
+    } catch (_) {}
+    try {
+      const saved = JSON.parse(localStorage.getItem('starTab_lastUser') || 'null');
+      return String(saved?.token || '');
+    } catch (_) {
+      return '';
+    }
+  }
+
+  async function sendRealtimeRestCommand(device, payload, commandId, ttlMs = 12_000) {
+    if (!device?.deviceId || !state.user?.uid || typeof fetch !== 'function') return false;
+    const execute = async (forceRefresh = false) => {
+      const token = await realtimeAuthToken(forceRefresh);
+      if (!token) return { ok: false, authFailed: true };
+      const now = Date.now();
+      const envelope = {
+        id: commandId,
+        clientAt: now,
+        expiresAtClient: now + Math.max(4_000, Number(ttlMs) || 12_000),
+        payload,
+      };
+      const controller = new AbortController();
+      const timer = window.setTimeout(() => controller.abort(), REMOTE_REST_TIMEOUT_MS);
+      try {
+        const url = `${REALTIME_REST_ROOT}/${encodeURIComponent(state.user.uid)}/devices/windows/${encodeURIComponent(device.deviceId)}/command.json?auth=${encodeURIComponent(token)}`;
+        const response = await fetch(url, {
+          method: 'PUT',
+          cache: 'no-store',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(envelope),
+          signal: controller.signal,
+        });
+        return { ok: response.ok, authFailed: response.status === 401 || response.status === 403 };
+      } catch (_) {
+        return { ok: false, authFailed: false };
+      } finally {
+        clearTimeout(timer);
+      }
+    };
+
+    let result = await execute(false);
+    if (!result.ok && result.authFailed && state.auth?.currentUser) result = await execute(true);
+    return result.ok === true;
+  }
+
   async function sendCommand(action, value = null, options = {}) {
     const device = selectedDevice();
     if (!state.user?.uid || !device) return false;
@@ -740,9 +810,7 @@
 
     if (!state.db || !canControlDevice(device)) return false;
 
-    // Remote-first optimized path: the standalone Windows agent keeps one RTDB
-    // SSE connection open, so volume/system commands do not need to mutate the
-    // Firestore device document on every interaction.
+    const commandId = makeCommandId();
     const realtimePayload = {
       action,
       issuedBy: state.user.uid,
@@ -751,46 +819,71 @@
     };
     if (Number.isFinite(Number(value))) realtimePayload.value = Number(value);
     if (action === 'setMute') realtimePayload.muted = !!options.muted;
-    const routePresence = devicePresenceStatus(device);
-    const preferRealtime = globalThis.StarTabPresence?.isRealtimeConnected?.() === true
-      && (routePresence?.commandable !== false || isStandaloneCloudDevice?.(device));
-    let fallbackCommandId = '';
 
-    // High-frequency volume updates use a write-confirmed RTDB path and do not
-    // wait for the cloud acknowledgement before allowing the next value through.
-    // The Windows agent applies last-write-wins semantics, while Firestore remains
-    // a fallback only when the RTDB write itself fails.
-    if (action === 'setVolume' && preferRealtime && globalThis.StarTabPresence?.sendWindowsCommandFast) {
+    let fallbackCommandId = commandId;
+
+    // Volume from mobile must never depend exclusively on `.info/connected`.
+    // Mobile browsers frequently suspend/resume the RTDB socket and can report
+    // it as disconnected while normal HTTPS is already usable. We therefore:
+    //   1) try the RTDB SDK briefly (same command id),
+    //   2) use authenticated REST directly if the socket is not ready,
+    //   3) fall back to Firestore with the SAME id.
+    // The Windows agent deduplicates by id, so delayed transports are harmless.
+    if (action === 'setVolume') {
+      const realtimeSocketReady = globalThis.StarTabPresence?.isRealtimeConnected?.() === true;
+      if (realtimeSocketReady && globalThis.StarTabPresence?.sendWindowsCommandFast) {
+        try {
+          const fastResult = await promiseWithTimeout(
+            globalThis.StarTabPresence.sendWindowsCommandFast(
+              state.user.uid,
+              device.deviceId,
+              realtimePayload,
+              12_000,
+              commandId,
+            ),
+            REMOTE_FAST_WRITE_TIMEOUT_MS,
+            { ok: false, written: false, id: commandId, reason: 'write-timeout' },
+          );
+          if (fastResult?.ok === true && fastResult?.written === true) return true;
+          fallbackCommandId = String(fastResult?.id || commandId);
+        } catch (_) {}
+      }
+
       try {
-        const fastResult = await globalThis.StarTabPresence.sendWindowsCommandFast(
-          state.user.uid,
-          device.deviceId,
-          realtimePayload,
-          12_000,
-        );
-        if (fastResult?.ok === true && fastResult?.written === true) return true;
+        if (await sendRealtimeRestCommand(device, realtimePayload, fallbackCommandId, 12_000)) return true;
       } catch (_) {}
+    } else {
+      const routePresence = devicePresenceStatus(device);
+      const preferRealtime = globalThis.StarTabPresence?.isRealtimeConnected?.() === true
+        && (routePresence?.commandable !== false || isStandaloneCloudDevice(device));
+      if (preferRealtime && globalThis.StarTabPresence?.sendWindowsCommand) {
+        try {
+          const realtimeResult = await globalThis.StarTabPresence.sendWindowsCommand(
+            state.user.uid,
+            device.deviceId,
+            realtimePayload,
+            20_000,
+            650,
+          );
+          if (realtimeResult?.ok === true && realtimeResult?.acknowledged === true) return true;
+          fallbackCommandId = String(realtimeResult?.id || commandId);
+        } catch (_) {}
+      }
+
+      // Mute/toggle/step are audio controls too. On mobile, if the persistent
+      // RTDB socket is sleeping, send them through authenticated HTTPS instead
+      // of forcing the user to reopen/reload StarTab just to wake the socket.
+      if (action === 'setMute' || action === 'toggleMute' || action === 'step') {
+        try {
+          if (await sendRealtimeRestCommand(device, realtimePayload, fallbackCommandId, 12_000)) return true;
+        } catch (_) {}
+      }
     }
 
-    if (preferRealtime && globalThis.StarTabPresence?.sendWindowsCommand) {
-      try {
-        const realtimeResult = await globalThis.StarTabPresence.sendWindowsCommand(
-          state.user.uid,
-          device.deviceId,
-          realtimePayload,
-          20_000,
-          650,
-        );
-        if (realtimeResult?.ok === true && realtimeResult?.acknowledged === true) return true;
-        fallbackCommandId = String(realtimeResult?.id || '');
-      } catch (_) {}
-    }
-
-    // Compatibility + reliability fallback. The SAME command id is reused when
-    // RTDB was written but not acknowledged. New and old agents therefore
-    // deduplicate the command instead of changing volume twice.
+    // Compatibility + reliability fallback. Reusing the same id guarantees
+    // last-write-wins behavior without double-applying a delayed RTDB command.
     const command = {
-      id: fallbackCommandId || `${Date.now().toString(36)}-${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}`,
+      id: fallbackCommandId || commandId,
       action,
       issuedBy: state.user.uid,
       issuedByClient: clientId,
@@ -854,7 +947,7 @@
     // Keep the UI synchronous and coalesce only a very small burst. Local Native
     // Messaging can absorb a tighter cadence; remote RTDB still gets enough
     // coalescing to avoid flooding while feeling immediate.
-    const delay = isLocalNativeTarget(selectedDevice()) ? 12 : 32;
+    const delay = isLocalNativeTarget(selectedDevice()) ? 12 : 42;
     state.commandTimer = window.setTimeout(pumpVolumeCommand, delay);
   }
 

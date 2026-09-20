@@ -238,8 +238,8 @@
     return result('offline', false, false, localState === 'offline' ? 'lan' : (liveAt >= fsAt ? 'rtdb' : 'firestore'), newestAge);
   }
 
-  function commandEnvelope(payload, ttlMs = 15_000) {
-    const id = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  function commandEnvelope(payload, ttlMs = 15_000, forcedId = '') {
+    const id = String(forcedId || '').trim() || globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const now = Date.now();
     return {
       id,
@@ -264,11 +264,11 @@
     return sendDeviceCommand(uid, 'tv', deviceId, payload, ttlMs);
   }
 
-  async function sendWindowsCommandFast(uid, deviceId, payload, ttlMs = 12_000) {
+  async function sendWindowsCommandFast(uid, deviceId, payload, ttlMs = 12_000, commandId = '') {
     const db = ensure();
     if (!db || !uid || !deviceId) return { ok: false, acknowledged: false, written: false, id: '' };
 
-    const envelope = commandEnvelope(payload, ttlMs);
+    const envelope = commandEnvelope(payload, ttlMs, commandId);
     try {
       await db.ref(`${base(uid)}/devices/windows/${deviceId}/command`).set(envelope);
       return { ok: true, acknowledged: false, written: true, id: envelope.id };
