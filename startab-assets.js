@@ -1,8 +1,0 @@
-// Graceful fallback for optional images, including missing assets in older packages.
-document.addEventListener('error', event => {
-  const img=event.target;
-  if (!(img instanceof HTMLImageElement) || img.dataset.startabFallback) return;
-  img.dataset.startabFallback='1';
-  const label=(img.alt || 'S').trim().slice(0,1).toUpperCase().replace(/[<>&"']/g,'');
-  img.src='data:image/svg+xml,'+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48"><rect width="48" height="48" rx="12" fill="#25272b"/><text x="24" y="32" text-anchor="middle" font-family="Arial,sans-serif" font-size="26" fill="white">${label}</text></svg>`);
-},true);
