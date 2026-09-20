@@ -6,8 +6,8 @@
   const WATCH_TTL_MS = 34_000;
   // RTDB is the live source of truth. Agents publish every ~2-8 s; after
   // 20 s without a server-timestamped heartbeat we consider the device gone.
-  const ONLINE_FRESH_MS = 20_000;
-  const ACTIVE_ONLINE_FRESH_MS = 12_000;
+  const ONLINE_FRESH_MS = 30_000;
+  const ACTIVE_ONLINE_FRESH_MS = 22_000;
   const UNRESPONSIVE_MS = 20_000;
   const ACTIVE_UNRESPONSIVE_MS = 12_000;
   const FIRESTORE_FALLBACK_STALE_MS = 90_000;
@@ -23,6 +23,7 @@
   const watcherSessions = new Map();
   let rtdb = null;
   let connected = null;
+  let serverTimeOffsetMs = 0;
   let connectionBound = false;
 
   const clientId = (() => {
@@ -45,6 +46,10 @@
       rtdb = firebase.database();
       if (!connectionBound) {
         connectionBound = true;
+        rtdb.ref('.info/serverTimeOffset').on('value', (snap) => {
+          const next = Number(snap.val());
+          if (Number.isFinite(next)) serverTimeOffsetMs = next;
+        }, () => {});
         rtdb.ref('.info/connected').on('value', (snap) => {
           connected = snap.val() === true;
           if (connected) for (const session of watcherSessions.values()) void session.tick?.();
@@ -141,7 +146,7 @@
   }
 
   function status(uid, type, deviceId, firestoreDevice, options = {}) {
-    const now = Date.now();
+    const now = Date.now() + serverTimeOffsetMs;
     const localState = String(options.localState || '').toLowerCase();
     const isTv = type === 'tv';
 
@@ -156,12 +161,22 @@
     // Once this client has received the first RTDB snapshot, RTDB is the ONLY
     // source used for visual presence. This prevents desktop/mobile from
     // disagreeing because one happened to read a newer Firestore document.
-    if (subscription?.hasSnapshot && connected === true) {
-      if (!live || !liveAt) return result('offline', false, false, 'rtdb', Number.POSITIVE_INFINITY, { authoritative: true });
+    if (subscription?.hasSnapshot && connected === true && live && liveAt) {
       if (liveState === 'offline') return result('offline', false, false, 'rtdb', liveAge, { authoritative: true, explicitOffline: true });
-      if (liveAge > freshMs) return result('offline', false, false, 'rtdb', liveAge, { authoritative: true, stale: true });
-      if (liveStandby) return result('standby', true, true, 'rtdb', liveAge, { authoritative: true });
-      return result('online', true, true, 'rtdb', liveAge, { authoritative: true });
+      if (liveAge <= freshMs) {
+        if (liveStandby) return result('standby', true, true, 'rtdb', liveAge, { authoritative: true });
+        return result('online', true, true, 'rtdb', liveAge, { authoritative: true });
+      }
+      // A stale RTDB heartbeat is meaningful, but before declaring the device
+      // offline let a very recent Firestore heartbeat rescue it. This covers
+      // short RTDB reconnects without letting old Firestore data override RTDB.
+      const fsAtQuick = Number(firestoreDevice?.clientAt || 0);
+      const fsAgeQuick = fsAtQuick ? Math.max(0, now - fsAtQuick) : Number.POSITIVE_INFINITY;
+      if (firestoreDevice?.online === true && fsAgeQuick <= 35_000) {
+        const fsStandbyQuick = isTv && firestoreDevice?.powerOn === false;
+        return result(fsStandbyQuick ? 'standby' : 'online', true, true, 'firestore', fsAgeQuick, { fallback: true, rtdbStale: true });
+      }
+      return result('offline', false, false, 'rtdb', liveAge, { authoritative: true, stale: true });
     }
 
     // Direct/native is a command transport, not a separate visual truth. Use it
@@ -190,8 +205,9 @@
 
     if (subscription && !subscription.hasSnapshot && !subscription.failed
       && now - Number(subscription.startedAt || now) <= SUBSCRIPTION_BOOTSTRAP_MS) {
-      // Unknown is intentionally rendered as offline/grey until the shared RTDB
-      // snapshot arrives. No yellow/reconnecting guess states.
+      if (fsOnline && fsAge <= 35_000) {
+        return result(fsStandby ? 'standby' : 'online', true, true, 'firestore', fsAge, { fallback: true, bootstrap: true });
+      }
       return result('offline', false, false, 'bootstrap', fsAge, { bootstrap: true });
     }
 
