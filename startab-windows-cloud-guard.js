@@ -1,0 +1,123 @@
+(() => {
+  'use strict';
+  if (globalThis.__startabWindowsCloudGuardV1) return;
+  globalThis.__startabWindowsCloudGuardV1 = true;
+
+  const state = {
+    connected: false,
+    deviceId: '',
+    deviceName: '',
+    volume: 0,
+    muted: false,
+    lastSeen: 0,
+    cloudUid: '',
+    lastCloudRepairAt: 0,
+    busy: false,
+  };
+
+  const emit = () => {
+    try {
+      window.dispatchEvent(new CustomEvent('startab-windows-guard-state', { detail: { ...state } }));
+    } catch (_) {}
+  };
+
+  function authUser() {
+    try { return globalThis.firebase?.auth?.()?.currentUser || null; } catch (_) { return null; }
+  }
+
+  async function nativeMessage(type, command) {
+    if (!globalThis.chrome?.runtime?.sendMessage) return null;
+    try {
+      if (type === 'state') return await chrome.runtime.sendMessage({ type: 'STARTAB_WINDOWS_NATIVE_GET_STATE' });
+      return await chrome.runtime.sendMessage({ type: 'STARTAB_WINDOWS_NATIVE_COMMAND', command });
+    } catch (_) { return null; }
+  }
+
+  function consumeNative(payload) {
+    if (!payload || typeof payload !== 'object') return;
+    const native = payload.state || payload;
+    state.connected = payload.connected === true;
+    if (native?.deviceId) state.deviceId = String(native.deviceId);
+    if (native?.deviceName) state.deviceName = String(native.deviceName);
+    if (Number.isFinite(Number(native?.volume))) state.volume = Number(native.volume);
+    if (typeof native?.muted === 'boolean') state.muted = native.muted;
+    if (state.connected) state.lastSeen = Date.now();
+    emit();
+  }
+
+  async function refreshToken(user) {
+    if (!user) return '';
+    try { await user.getIdToken?.(false); } catch (_) {}
+    const candidates = [
+      user.refreshToken,
+      user?._delegate?.stsTokenManager?.refreshToken,
+      user?.stsTokenManager?.refreshToken,
+      user?._tokenResponse?.refreshToken,
+    ];
+    for (const value of candidates) if (String(value || '').length > 20) return String(value);
+    try {
+      const captured = await chrome.runtime.sendMessage({ type: 'STARTAB_CAPTURE_FIREBASE_CREDENTIALS', uid: user.uid });
+      if (captured?.ok && captured.uid === user.uid && String(captured.refreshToken || '').length > 20) return String(captured.refreshToken);
+    } catch (_) {}
+    return '';
+  }
+
+  async function repairCloudBinding(force = false) {
+    if (state.busy || !state.connected || !state.deviceId) return;
+    const user = authUser();
+    if (!user?.uid) return;
+    const now = Date.now();
+    if (!force && now - state.lastCloudRepairAt < 45_000 && state.cloudUid === user.uid) return;
+    state.busy = true;
+    try {
+      const cloud = await nativeMessage('command', { type: 'getCloudState' });
+      const cloudState = cloud?.state || cloud || {};
+      state.cloudUid = String(cloudState.uid || '');
+      const configured = cloudState.configured === true && state.cloudUid === String(user.uid);
+      if (!configured || force) {
+        const token = await refreshToken(user);
+        if (token) {
+          const result = await nativeMessage('command', { type: 'configureCloud', uid: user.uid, refreshToken: token });
+          if (result?.ok !== false) state.cloudUid = String(user.uid);
+        }
+      }
+      state.lastCloudRepairAt = Date.now();
+    } finally {
+      state.busy = false;
+      emit();
+    }
+  }
+
+  async function tick() {
+    const payload = await nativeMessage('state');
+    if (payload) consumeNative(payload);
+    if (state.connected) void repairCloudBinding(false);
+  }
+
+  try {
+    chrome?.runtime?.onMessage?.addListener?.((message) => {
+      if (message?.type === 'STARTAB_WINDOWS_NATIVE_STATUS') {
+        consumeNative(message);
+        if (state.connected) void repairCloudBinding(false);
+      }
+    });
+  } catch (_) {}
+
+  try {
+    firebase?.auth?.()?.onAuthStateChanged?.((user) => {
+      if (user?.uid) setTimeout(() => void repairCloudBinding(true), 250);
+    });
+  } catch (_) {}
+
+  window.addEventListener('startab-local-device-ready', () => setTimeout(() => void tick(), 20));
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) void tick(); });
+  window.addEventListener('online', () => { void tick(); void repairCloudBinding(true); });
+  setInterval(() => { if (!document.hidden) void tick(); }, 4_000);
+  setTimeout(() => void tick(), 200);
+
+  globalThis.StarTabWindowsCloudGuard = Object.freeze({
+    snapshot: () => ({ ...state }),
+    repair: () => repairCloudBinding(true),
+    refresh: tick,
+  });
+})();

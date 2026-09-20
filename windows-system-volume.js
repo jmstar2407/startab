@@ -139,6 +139,27 @@
     render();
   }
 
+
+  function ensureNativeDeviceShadow() {
+    if (!state.native.connected || !state.native.deviceId) return;
+    const id = String(state.native.deviceId);
+    const existing = state.devices.get(id) || {};
+    state.devices.set(id, {
+      ...existing,
+      deviceId: id,
+      deviceName: state.native.deviceName || existing.deviceName || 'PC Windows',
+      online: true,
+      standalone: true,
+      cloudLinked: true,
+      bridge: 'standaloneNative',
+      clientAt: Math.max(Number(existing.clientAt || 0), Date.now()),
+      volume: Number.isFinite(Number(state.native.volume)) ? Number(state.native.volume) : Number(existing.volume || 0),
+      muted: typeof state.native.muted === 'boolean' ? state.native.muted : !!existing.muted,
+      audioActive: typeof state.native.audioActive === 'boolean' ? state.native.audioActive : existing.audioActive,
+      __localNativeShadow: true,
+    });
+  }
+
   function selectedDevice() {
     return state.selectedDeviceId ? state.devices.get(state.selectedDeviceId) || null : null;
   }
@@ -434,6 +455,7 @@
 
   function renderDevices() {
     if (!dom.device) return;
+    ensureNativeDeviceShadow();
     const previous = state.selectedDeviceId;
     const devices = [...state.devices.values()].sort((a, b) => {
       const onlineDelta = Number(isDeviceOnline(b)) - Number(isDeviceOnline(a));
@@ -842,6 +864,8 @@
     if (typeof nativeState?.muted === 'boolean') state.native.muted = nativeState.muted;
     if (typeof nativeState?.audioActive === 'boolean') state.native.audioActive = nativeState.audioActive;
     if (payload.error) state.native.lastError = String(payload.error);
+    ensureNativeDeviceShadow();
+    renderDevices();
     render();
   }
 

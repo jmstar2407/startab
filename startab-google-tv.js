@@ -772,7 +772,38 @@
     const clear = new TextEncoder().encode(JSON.stringify({ pin, uid:credentials.uid, refreshToken:credentials.refreshToken }));
     const encrypted = await crypto.subtle.encrypt({ name:'AES-GCM', iv }, aesKey, clear);
     const clientPublic = await crypto.subtle.exportKey('spki', clientKeys.publicKey);
-    return { type:'pair-secure', clientPublicKey:bytesToBase64(clientPublic), iv:bytesToBase64(iv), payload:bytesToBase64(encrypted) };
+    const secretSeed = new Uint8Array(sharedBits.byteLength + new TextEncoder().encode(`startab-local-secret:${pin}`).byteLength);
+    secretSeed.set(new Uint8Array(sharedBits), 0);
+    secretSeed.set(new TextEncoder().encode(`startab-local-secret:${pin}`), sharedBits.byteLength);
+    const secretDigest = new Uint8Array(await crypto.subtle.digest('SHA-256', secretSeed));
+    const localSecret = bytesToBase64(secretDigest).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+    return {
+      message: { type:'pair-secure', clientPublicKey:bytesToBase64(clientPublic), iv:bytesToBase64(iv), payload:bytesToBase64(encrypted) },
+      localSecret,
+    };
+  }
+
+  async function resolvePairingCredentials(userId) {
+    const user = state.auth?.currentUser || globalThis.firebase?.auth?.()?.currentUser || null;
+    if (user?.uid === userId) {
+      try { await user.getIdToken?.(true); } catch (_) {}
+      const candidates = [
+        user.refreshToken,
+        user?._delegate?.stsTokenManager?.refreshToken,
+        user?.stsTokenManager?.refreshToken,
+        user?._tokenResponse?.refreshToken,
+      ];
+      for (const token of candidates) {
+        if (String(token || '').length > 20) return { uid:userId, refreshToken:String(token) };
+      }
+    }
+    const saved = readUser();
+    if (saved?.uid === userId && String(saved.refreshToken || '').length > 20) return { uid:userId, refreshToken:String(saved.refreshToken) };
+    try {
+      const captured = await globalThis.chrome?.runtime?.sendMessage?.({ type:'STARTAB_CAPTURE_FIREBASE_CREDENTIALS', uid:userId });
+      if (captured?.ok && captured.uid === userId && String(captured.refreshToken || '').length > 20) return { uid:userId, refreshToken:String(captured.refreshToken) };
+    } catch (_) {}
+    return null;
   }
 
   function parsePairQr(rawValue) {
@@ -783,10 +814,12 @@
       const pin = String(url.searchParams.get('pin') || '').replace(/\D/g, '').slice(0, 6);
       const port = Number(url.searchParams.get('port') || 8765);
       const version = Number(url.searchParams.get('v') || 1);
-      if (version !== 1 || !/^\d{1,3}(\.\d{1,3}){3}$/.test(ip) || pin.length !== 6 || !Number.isInteger(port) || port < 1 || port > 65535) return null;
+      const session = String(url.searchParams.get('session') || '').trim();
+      if (![1,2].includes(version) || !/^\d{1,3}(\.\d{1,3}){3}$/.test(ip) || pin.length !== 6 || !Number.isInteger(port) || port < 1 || port > 65535) return null;
+      if (version === 2 && session.length < 12) return null;
       const octets = ip.split('.').map(Number);
       if (octets.some(n => n < 0 || n > 255)) return null;
-      return { ip, pin, port, deviceId: String(url.searchParams.get('device') || '') };
+      return { version, session, ip, pin, port, deviceId: String(url.searchParams.get('device') || ''), name:String(url.searchParams.get('name') || 'Google TV') };
     } catch (_) { return null; }
   }
 
@@ -813,10 +846,47 @@
     if (!userId) { setStatus('error','Sin sesión','Inicia sesión en StarTab primero.'); return; }
     if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(ip) || pin.length !== 6 || !Number.isInteger(port)) { setStatus('error','Datos no válidos','Verifica la IP y el PIN del TV.'); return; }
     setStatus('warn','Vinculando…','Conectando directamente con el Google TV.');
-    let credentials = readUser();
-    if (!credentials?.refreshToken && state.auth?.currentUser?.refreshToken) credentials = { uid: state.auth.currentUser.uid, refreshToken: state.auth.currentUser.refreshToken };
-    if (!credentials?.refreshToken) { try { credentials = await globalThis.chrome?.runtime?.sendMessage?.({ type:'STARTAB_CAPTURE_FIREBASE_CREDENTIALS', uid:userId }); } catch (_) {} }
-    if (!credentials?.refreshToken) { setStatus('error','Falta credencial','Abre nuevamente el inicio de sesión de StarTab y vuelve a intentar.'); return; }
+    const credentials = await resolvePairingCredentials(userId);
+    if (!credentials?.refreshToken) { setStatus('error','Sesión incompleta','Espera unos segundos a que Firebase restaure la sesión y vuelve a escanear.'); return; }
+
+    if (Number(pairData?.version || 1) === 2) {
+      const session = String(pairData?.session || '').trim();
+      const base = `https://startab-44e48-default-rtdb.firebaseio.com/startab/pairing/tv/${encodeURIComponent(session)}`;
+      try {
+        const response = await fetch(`${base}.json?t=${Date.now()}`, { cache:'no-store' });
+        if (!response.ok) throw new Error(`relay-${response.status}`);
+        const relay = await response.json();
+        if (!relay?.publicKey || String(relay.deviceId || '') !== String(pairData.deviceId || relay.deviceId || '')) throw new Error('relay-invalid');
+        if (Number(relay.expiresAtClient || 0) < Date.now()) throw new Error('relay-expired');
+        const secure = await buildSecurePairPayload(relay.publicKey, credentials, pin);
+        const write = await fetch(`${base}/request.json`, {
+          method:'PUT', cache:'no-store', headers:{'Content-Type':'application/json'}, body:JSON.stringify(secure.message),
+        });
+        if (!write.ok) throw new Error(`relay-write-${write.status}`);
+        const deadline = Date.now() + 14_000;
+        let paired = null;
+        while (Date.now() < deadline) {
+          await new Promise(resolve => setTimeout(resolve, 650));
+          const poll = await fetch(`${base}/status.json?t=${Date.now()}`, { cache:'no-store' });
+          if (!poll.ok) continue;
+          const status = await poll.json();
+          if (status?.ok === true && status?.state === 'paired') { paired = status; break; }
+          if (status?.ok === false && status?.state) throw new Error(status.state);
+        }
+        if (!paired) throw new Error('relay-timeout');
+        const deviceId = String(paired.deviceId || pairData.deviceId || relay.deviceId || '');
+        savePairing(deviceId, { secret:secure.localSecret, ip, port, name:String(paired.deviceName || pairData.name || relay.deviceName || 'Google TV') });
+        state.selectedId = deviceId; localStorage.setItem(SELECTED_KEY, deviceId);
+        closeAddModal();
+        setStatus('direct','TV vinculado','Vínculo seguro completado por Firebase.');
+        setTimeout(() => { listenDevices(); connectSelectedLocal(); }, 500);
+        return;
+      } catch (error) {
+        const reason = String(error?.message || error);
+        setStatus('error','No se pudo vincular', reason.includes('expired') ? 'El QR venció. Genera uno nuevo en el TV.' : 'No cierres el QR del TV y vuelve a escanear.');
+        return;
+      }
+    }
 
     let ws;
     try { ws = new WebSocket(`ws://${ip}:${port}`); } catch (_) { setStatus('error','No se pudo conectar','Verifica que el móvil y el TV estén en la misma red Wi‑Fi.'); return; }
@@ -825,7 +895,7 @@
     ws.onmessage = async ev => {
       let data; try { data = JSON.parse(ev.data || '{}'); } catch (_) { return; }
       if (data.type === 'pair-init' && data.ok && data.publicKey) {
-        try { ws.send(JSON.stringify(await buildSecurePairPayload(data.publicKey, { uid:userId, refreshToken:credentials.refreshToken }, pin))); }
+        try { ws.send(JSON.stringify((await buildSecurePairPayload(data.publicKey, { uid:userId, refreshToken:credentials.refreshToken }, pin)).message)); }
         catch (_) { clearTimeout(timeout); try { ws.close(); } catch (_) {} setStatus('error','Error de seguridad','No se pudo cifrar el vínculo con el Google TV.'); }
         return;
       }

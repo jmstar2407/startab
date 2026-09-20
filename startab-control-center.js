@@ -108,6 +108,8 @@
   }
 
   function selectedWindowsDeviceId() {
+    const local = globalThis.StarTabWindowsCloudGuard?.snapshot?.() || null;
+    if (local?.connected && local?.deviceId) return String(local.deviceId);
     return resolvePresenceDeviceId('windows', rawSelectedWindowsDeviceId());
   }
 
@@ -624,11 +626,16 @@
     const live = state.globalPresenceWindowsMap.get(id) || globalThis.StarTabPresence?.presenceFor?.(user.uid, 'windows', id) || null;
     const fallback = state.globalPcDocId === id ? state.globalPcDoc : null;
     const merged = live ? { ...(fallback || {}), ...live, deviceId: id } : fallback;
-    // Los indicadores globales NO usan la conexión local/directa como verdad visual.
-    // Deben mostrar exactamente el mismo estado compartido en PC, iPhone y cualquier
-    // otro cliente, por eso dependen exclusivamente de Firebase (RTDB + Firestore).
+    const local = globalThis.StarTabWindowsCloudGuard?.snapshot?.() || null;
+    const localConnected = local?.connected === true && String(local?.deviceId || '') === String(id);
+    // En la propia PC, Native Messaging es una prueba directa de vida y nunca debe
+    // mostrarse “No disponible” mientras el agente está respondiendo. El guard además
+    // repara la vinculación cloud para que móvil/otros clientes converjan por Firebase.
     const adaptive = globalThis.StarTabPresence?.status?.(user.uid, 'windows', id, merged, {
       aggressive: !document.hidden,
+      localConnected,
+      localState: localConnected ? 'direct' : '',
+      localAge: localConnected ? Math.max(0, Date.now() - Number(local.lastSeen || Date.now())) : 0,
     });
     return statusToControlState(adaptive, 'No disponible');
   }
@@ -763,6 +770,7 @@
     $('startab-tv-device-select')?.addEventListener('change', () => { ensureGlobalPresenceSubscriptions(); setTimeout(updateStatuses, 30); });
     window.addEventListener('startab-device-selection-change', () => setTimeout(updateStatuses, 30));
     window.addEventListener('startab-presence-connection', updateStatuses);
+    window.addEventListener('startab-windows-guard-state', updateStatuses);
     window.addEventListener('startab-presence-auth', () => {
       ensureGlobalPresenceSubscriptions();
       setTimeout(updateStatuses, 20);
