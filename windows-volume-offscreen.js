@@ -131,17 +131,7 @@
     async function publishPresenceHeartbeat() {
         if (!state.nativeConnected || state.standaloneCloudOnline) return;
         const realtimeOk = await publishRealtimePresence(true);
-        if (realtimeOk || !state.deviceRef) return;
-        try {
-            await state.deviceRef.set({
-                online: true,
-                clientAt: Date.now(),
-                presenceMode: "firestore-fallback",
-                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-            }, {
-                merge: true
-            });
-        } catch (_) {}
+        return realtimeOk;
     }
     async function markCurrentOffline() {
         if (state.standaloneCloudOnline || nativeSupportsStandaloneCloud()) return;
@@ -150,16 +140,7 @@
                 await publishRealtimePresence(false);
             } catch (_) {}
         }
-        if (!state.deviceRef) return;
-        try {
-            await state.deviceRef.set({
-                online: false,
-                clientAt: Date.now(),
-                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-            }, {
-                merge: true
-            });
-        } catch (_) {}
+
     }
     function stopDeviceListener() {
         stopPresenceWatcherObserver();
@@ -192,49 +173,32 @@
         return major > 2 || major === 2 && minor >= 8;
     }
     async function startDeviceBridge() {
-        if (!state.db || !state.user?.uid || !state.nativeState?.deviceId) return;
+        if (!state.user?.uid || !state.nativeState?.deviceId) return;
         const deviceId = state.nativeState.deviceId;
         const nextBridgeKey = `${state.user.uid}:${deviceId}`;
-        if (state.bridgeKey === nextBridgeKey && state.unsubscribeDevice) {
-            await publishNativeState(false);
-            if (state.nativeConnected && !state.unsubscribePointerSessions) startPointerSessionBridge();
-            return;
-        }
+        if (state.bridgeKey === nextBridgeKey) { await publishNativeState(false); return; }
         stopDeviceListener();
         state.bridgeKey = nextBridgeKey;
-        state.deviceRef = state.db.collection("users").doc(state.user.uid).collection("windowsDevices").doc(deviceId);
+        // v1.7.6: Windows ya no escucha comandos ni touchpad desde Firestore.
+        // El agente nativo consume devices/{deviceId}/commands directamente desde RTDB.
+        state.deviceRef = null;
+        // Limpieza única de campos vivos heredados. Firestore conserva solo registro/metadatos.
+        if (state.db) {
+            try {
+                const legacy = state.db.collection("users").doc(state.user.uid).collection("windowsDevices").doc(deviceId);
+                const del = firebase.firestore.FieldValue.delete();
+                await legacy.set({
+                    online:del, clientAt:del, updatedAt:del, connectedAt:del, connectedAtClient:del,
+                    volume:del, muted:del, audioActive:del, hotspotState:del, hotspotClients:del, hotspotMessage:del,
+                    rgbControl:del, rgbAvailable:del, rgbState:del, rgbColor:del, rgbTransport:del, rgbMessage:del,
+                    presenceMode:del, lastCommandId:del, commandResult:del, command:del
+                }, {merge:true});
+            } catch (_) {}
+        }
         await publishNativeState(true);
         state.lastPresenceHeartbeatAt = Date.now();
         void publishRealtimePresence(true);
         startPresenceWatcherObserver();
-        state.unsubscribeDevice = state.deviceRef.onSnapshot(snapshot => {
-            if (!snapshot.exists) return;
-            const data = snapshot.data() || {};
-            const wasStandalone = state.standaloneCloudOnline;
-            state.standaloneCloudOnline = standaloneCloudActive(data);
-            if (!wasStandalone && state.standaloneCloudOnline) {
-                try {
-                    state.presenceOnDisconnect?.cancel?.();
-                } catch (_) {}
-                state.presenceOnDisconnect = null;
-            } else if (wasStandalone && !state.standaloneCloudOnline && state.nativeConnected) {
-                void publishRealtimePresence(true);
-            }
-            if (state.nativeConnected && !state.unsubscribePointerSessions) startPointerSessionBridge();
-            if (nativeSupportsStandaloneCloud() || state.standaloneCloudOnline) return;
-            const command = data.command;
-            if (!command?.id || command.id === state.lastCommandId || command.id === data.lastCommandId) return;
-            const issuedAt = Number(command.clientAt) || 0;
-            const expiresAt = Number(command.expiresAtClient) || issuedAt + COMMAND_MAX_AGE_MS;
-            if (!issuedAt || Date.now() > expiresAt + 2e3 || Date.now() - issuedAt > COMMAND_MAX_AGE_MS + 5e3) {
-                state.lastCommandId = command.id;
-                void acknowledgeCommand(command.id, false, "expired");
-                return;
-            }
-            state.lastCommandId = command.id;
-            void executeCommand(command);
-        }, error => console.error("StarTab Windows bridge: listener Firestore:", error));
-        startPointerSessionBridge();
     }
     function waitForIceGathering(pc, timeoutMs = 3200) {
         if (!pc || pc.iceGatheringState === "complete") return Promise.resolve();
@@ -650,66 +614,40 @@
         }
     }
     async function acknowledgeCommand(commandId, ok, reason) {
-        if (!state.deviceRef) return;
+        // v1.7.6: ACK de Windows exclusivamente por RTDB. El agente nativo publica
+        // commandAck y elimina el comando procesado; la extensión no escribe estado vivo en Firestore.
+        if (!state.user?.uid || !state.nativeState?.deviceId || typeof firebase.database !== "function") return;
         try {
-            await state.deviceRef.set({
-                lastCommandId: commandId,
-                commandResult: {
-                    id: commandId,
-                    ok: !!ok,
-                    reason: reason || null,
-                    clientAt: Date.now()
-                }
-            }, {
-                merge: true
-            });
-        } catch (error) {
-            console.warn("StarTab Windows bridge: no se pudo confirmar comando:", error);
-        }
+            const base = firebase.database().ref(`startab/v2/users/${state.user.uid}/devices/${state.nativeState.deviceId}`);
+            await base.child("commandAck").set({ id: commandId, ok: !!ok, reason: reason || null, clientAt: Date.now(), updatedAt: firebase.database.ServerValue.TIMESTAMP });
+        } catch (_) {}
     }
     async function publishNativeState(force = false) {
-        if (!state.nativeConnected && nativeSupportsStandaloneCloud()) return;
-        if (!state.db || !state.user?.uid || !state.nativeState?.deviceId) return;
+        if (!state.user?.uid || !state.nativeState?.deviceId || typeof firebase.database !== "function") return;
         const native = state.nativeState;
+        try { localStorage.setItem("startab_windows_native_device_id_v1", String(native.deviceId)); } catch (_) {}
+        try { if (native.deviceName) localStorage.setItem("startab_windows_native_device_name_v1", String(native.deviceName)); } catch (_) {}
         try {
-            localStorage.setItem("startab_windows_native_device_id_v1", String(native.deviceId));
-        } catch (_) {}
-        try {
-            if (native.deviceName) localStorage.setItem("startab_windows_native_device_name_v1", String(native.deviceName));
-        } catch (_) {}
-        const target = state.db.collection("users").doc(state.user.uid).collection("windowsDevices").doc(native.deviceId);
-        state.deviceRef = target;
-        const payload = {
-            deviceId: native.deviceId,
-            deviceName: native.deviceName || "PC Windows",
-            platform: "windows",
-            bridge: nativeSupportsStandaloneCloud(native) ? "standaloneNative" : "nativeMessaging",
-            agentVersion: native.agentVersion || "2.0.0",
-            online: !!state.nativeConnected,
-            clientAt: Date.now(),
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        };
-        if (Number.isFinite(Number(native.volume))) payload.volume = Math.max(0, Math.min(100, Number(native.volume)));
-        if (typeof native.muted === "boolean") payload.muted = native.muted;
-        if (typeof native.audioActive === "boolean") payload.audioActive = native.audioActive;
-        if (typeof native.systemControl === "boolean") payload.systemControl = native.systemControl;
-        if (typeof native.hotspotState === "string") payload.hotspotState = native.hotspotState;
-        if (Number.isFinite(Number(native.hotspotClients))) payload.hotspotClients = Math.max(0, Number(native.hotspotClients));
-        if (typeof native.hotspotMessage === "string") payload.hotspotMessage = native.hotspotMessage.slice(0, 500);
-        if (typeof native.rgbControl === "boolean") payload.rgbControl = native.rgbControl;
-        if (typeof native.rgbAvailable === "boolean") payload.rgbAvailable = native.rgbAvailable;
-        if (typeof native.rgbState === "string") payload.rgbState = native.rgbState;
-        if (typeof native.rgbColor === "string") payload.rgbColor = native.rgbColor.slice(0, 16);
-        if (typeof native.rgbTransport === "string") payload.rgbTransport = native.rgbTransport.slice(0, 40);
-        if (typeof native.rgbMessage === "string") payload.rgbMessage = native.rgbMessage.slice(0, 500);
-        if (force) payload.connectedAt = firebase.firestore.FieldValue.serverTimestamp();
-        try {
-            await target.set(payload, {
-                merge: true
-            });
-        } catch (error) {
-            console.error("StarTab Windows bridge: no se pudo publicar estado:", error);
-        }
+            const base = firebase.database().ref(`startab/v2/users/${state.user.uid}/devices/${native.deviceId}`);
+            const live = {
+                power: "on",
+                updatedAt: firebase.database.ServerValue.TIMESTAMP
+            };
+            if (Number.isFinite(Number(native.volume))) live.volume = Math.max(0, Math.min(100, Number(native.volume)));
+            if (typeof native.muted === "boolean") live.muted = native.muted;
+            if (typeof native.audioActive === "boolean") live.audioActive = native.audioActive;
+            if (typeof native.hotspotState === "string") live.hotspotState = native.hotspotState;
+            if (Number.isFinite(Number(native.hotspotClients))) live.hotspotClients = Math.max(0, Number(native.hotspotClients));
+            if (typeof native.hotspotMessage === "string") live.hotspotMessage = native.hotspotMessage.slice(0, 500);
+            if (typeof native.rgbControl === "boolean") live.rgbControl = native.rgbControl;
+            if (typeof native.rgbAvailable === "boolean") live.rgbAvailable = native.rgbAvailable;
+            if (typeof native.rgbState === "string") live.rgbState = native.rgbState;
+            if (typeof native.rgbColor === "string") live.rgbColor = native.rgbColor.slice(0, 16);
+            if (typeof native.rgbTransport === "string") live.rgbTransport = native.rgbTransport.slice(0, 40);
+            if (typeof native.rgbMessage === "string") live.rgbMessage = native.rgbMessage.slice(0, 500);
+            await base.child("state").update(live);
+            if (force) await base.child("info").update({ deviceId:native.deviceId, name:native.deviceName||"PC Windows", type:"windows", platform:"windows", agentVersion:native.agentVersion||"2.0.0" });
+        } catch (error) { console.warn("StarTab Windows: no se pudo publicar estado RTDB:", error); }
     }
     async function handleNativeEvent(payload) {
         if (!payload || typeof payload !== "object") return;
