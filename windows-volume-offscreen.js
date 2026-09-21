@@ -70,7 +70,7 @@
         stopPresenceWatcherObserver();
         if (!state.user?.uid || !state.nativeState?.deviceId || typeof firebase.database !== "function") return;
         try {
-            const ref = firebase.database().ref(`startab/v2/users/${state.user.uid}/devices/windows/${state.nativeState.deviceId}/watchers`);
+            const ref = firebase.database().ref(`startab/v2/users/${state.user.uid}/devices/${state.nativeState.deviceId}/watchers`);
             const handler = snap => {
                 const raw = snap.val() || {};
                 const now = Date.now();
@@ -100,7 +100,7 @@
         if (!state.user?.uid || !state.nativeState?.deviceId || state.standaloneCloudOnline) return false;
         try {
             if (typeof firebase.database !== "function") return false;
-            const ref = firebase.database().ref(`startab/v2/users/${state.user.uid}/presence/windows/${state.nativeState.deviceId}`);
+            const ref = firebase.database().ref(`startab/v2/users/${state.user.uid}/devices/${state.nativeState.deviceId}/connection`);
             state.presenceRef = ref;
             const payload = {
                 state: online ? "online" : "offline",

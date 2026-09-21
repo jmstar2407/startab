@@ -7,12 +7,10 @@
             ".read": "auth != null && auth.uid === $uid",
             ".write": "auth != null && auth.uid === $uid",
             "devices": {
-              "$type": {
-                "$device": {
-                  "commands": {
-                    "$id": {
-                      ".validate": "newData.hasChildren(['id', 'clientAt', 'expiresAtClient', 'payload']) && newData.child('id').isString() && newData.child('id').val() === $id && newData.child('clientAt').isNumber() && newData.child('expiresAtClient').isNumber() && newData.child('clientAt').val() <= now + 5000 && newData.child('expiresAtClient').val() > now && newData.child('expiresAtClient').val() <= now + 30000"
-                    }
+              "$deviceId": {
+                "commands": {
+                  "$id": {
+                    ".validate": "newData.hasChildren(['id','clientAt','expiresAtClient','payload']) && newData.child('id').isString() && newData.child('id').val() === $id && newData.child('clientAt').isNumber() && newData.child('expiresAtClient').isNumber() && newData.child('expiresAtClient').val() > now && newData.child('expiresAtClient').val() <= now + 30000"
                   }
                 }
               }
@@ -20,15 +18,7 @@
           }
         }
       },
-      "pairing": {
-        "tv": {
-          "$session": {
-            ".read": "data.exists() && data.child('expiresAtClient').isNumber() && data.child('expiresAtClient').val() > now - 60000",
-            ".write": "(!data.exists() && newData.child('expiresAtClient').isNumber() && newData.child('expiresAtClient').val() > now && newData.child('expiresAtClient').val() <= now + 900000) || (data.exists() && data.child('expiresAtClient').isNumber() && data.child('expiresAtClient').val() > now && newData.child('expiresAtClient').val() === data.child('expiresAtClient').val())",
-            ".validate": "newData.hasChildren(['deviceId','publicKey','expiresAtClient']) && newData.child('deviceId').isString() && newData.child('publicKey').isString() && newData.child('expiresAtClient').isNumber()"
-          }
-        }
-      }
+      "pairing": {"tv": {"$session": {".read": "data.exists()", ".write": true}}}
     }
   }
 }
