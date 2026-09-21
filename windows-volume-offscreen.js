@@ -10,7 +10,7 @@
     appId: '1:874084877753:web:cf9cbe9a344356dc9be268',
   };
 
-  const HEARTBEAT_MS = 25_000;
+  const HEARTBEAT_MS = 60_000;
   const COMMAND_MAX_AGE_MS = 20_000;
 
   const state = {
@@ -585,7 +585,10 @@
   });
 
   state.heartbeat = window.setInterval(() => {
-    if (state.nativeConnected) void publishNativeState(false);
+    // El agente standalone ya mantiene la presencia en Firestore. Evitamos
+    // duplicar su heartbeat desde Chrome; Native Messaging solo publica si
+    // no hay un agente cloud standalone activo.
+    if (state.nativeConnected && !state.standaloneCloudOnline) void publishNativeState(false);
   }, HEARTBEAT_MS);
 
   state.userTimer = window.setInterval(() => void syncUser(), 3_000);
@@ -621,9 +624,9 @@
   const NATIVE_DEVICE_KEY = 'startab_windows_native_device_id_v1';
   const LAST_COMMAND_PREFIX = 'startab_media_remote_last_command_v3_';
   const LEADER_LOCK = 'startab-media-cloud-bridge-v3';
-  const HEARTBEAT_MS = 12_000;
+  const HEARTBEAT_MS = 30_000;
   const COMMAND_MAX_AGE_MS = 25_000;
-  const STATE_FORCE_REFRESH_MS = 45_000;
+  const STATE_FORCE_REFRESH_MS = 60_000;
 
   const media = {
     db: null,
@@ -867,6 +870,7 @@
         sessions,
         clientAt: Date.now(),
         serverAt: serverTimestamp(),
+        stateUpdatedAt: serverTimestamp(),
       }, { merge: false });
       media.lastPublishedFingerprint = fingerprint;
       media.lastPublishedSessions = sessions.map((item) => ({ ...item }));
