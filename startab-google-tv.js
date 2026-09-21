@@ -1002,7 +1002,8 @@
     const sendKey=()=>firebaseMerge({actionCommand:{id:unique(),type:'key',key:safeKey,count:safeCount,clientAt:Date.now()}},15000);
     if(pending) firebaseMerge({actionCommand:{id:unique(),type:'text',text:pending,clientAt:Date.now()}},15000).finally(sendKey); else sendKey();
   }
-  function handleKeyboardInput() {
+  function handleKeyboardInput(event) {
+    if (event?.isComposing) return;
     const el=dom.keyboardInput;if(!el)return;
     const prev=String(el.dataset.prev||''), next=String(el.value||'');
     if(next===prev)return;
@@ -1062,6 +1063,7 @@
     const sendKeyboardEnter=()=>{const now=Date.now();if(now-(state.lastKeyboardEnterAt||0)<120)return;state.lastKeyboardEnterAt=now;sendKeyboardKey('enter');};
     dom.keyboardInput?.addEventListener('beforeinput',e=>{if(e.inputType==='insertLineBreak'||e.inputType==='insertParagraph'){e.preventDefault();sendKeyboardEnter();}});
     dom.keyboardInput?.addEventListener('input',handleKeyboardInput);
+    dom.keyboardInput?.addEventListener('compositionend',handleKeyboardInput);
     dom.keyboardInput?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();sendKeyboardEnter();} });
     dom.back?.addEventListener('click',sendBack);
     dom.menu?.addEventListener('click',()=>sendAction('menu'));

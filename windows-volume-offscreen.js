@@ -189,8 +189,18 @@
     for (const sessionId of [...state.pointerPeers.keys()]) closePointerPeer(sessionId);
   }
 
-  function handlePointerPayload(payload, entry) {
+  function handlePointerPayload(payload, entry, channel) {
     if (!payload || typeof payload !== 'object') return;
+    if (payload.t === 'audio' && ['setVolume', 'setMute'].includes(payload.action)) {
+      const command = commandForNative(payload);
+      void chrome.runtime.sendMessage({type:'STARTAB_WINDOWS_NATIVE_COMMAND', command, awaitResult:true})
+        .then(response => {
+          if (channel?.readyState === 'open') channel.send(JSON.stringify({t:'audioAck',id:payload.id,ok:response?.ok === true}));
+        }).catch(() => {
+          try { channel.send(JSON.stringify({t:'audioAck',id:payload.id,ok:false})); } catch (_) {}
+        });
+      return;
+    }
     if (payload.t === 'move') {
       const dx = Math.max(-500, Math.min(500, Number(payload.dx) || 0));
       const dy = Math.max(-500, Math.min(500, Number(payload.dy) || 0));
@@ -226,7 +236,7 @@
   function attachPointerDataChannel(channel, entry) {
     if (!channel) return;
     channel.addEventListener('message', (event) => {
-      try { handlePointerPayload(JSON.parse(String(event.data || '')), entry); } catch (_) {}
+      try { handlePointerPayload(JSON.parse(String(event.data || '')), entry, channel); } catch (_) {}
     });
     channel.addEventListener('close', () => {
       if (channel.label === 'control' && entry?.leftDown) {
@@ -459,7 +469,7 @@
       deviceId: native.deviceId,
       deviceName: native.deviceName || 'PC Windows',
       platform: 'windows',
-      bridge: native.standalone === true || native.agentVersion === '1.6' ? 'standaloneNative' : 'nativeMessaging',
+      bridge: native.standalone === true || ['1.6', '1.6.1'].includes(native.agentVersion) ? 'standaloneNative' : 'nativeMessaging',
       agentVersion: native.agentVersion || '2.0.0',
       online: !!state.nativeConnected,
       clientAt: Date.now(),
@@ -496,7 +506,7 @@
       // v2.8+ tiene un daemon cloud independiente. Que Chrome pierda Native
       // Messaging no significa que el PC esté offline, por lo que no debemos
       // pisar el heartbeat del agente standalone con online=false.
-      if (!(state.nativeState?.standalone === true || state.nativeState?.agentVersion === '1.6' || String(state.nativeState?.agentVersion || '').startsWith('2.8.'))) {
+      if (!(state.nativeState?.standalone === true || ['1.6', '1.6.1'].includes(state.nativeState?.agentVersion) || String(state.nativeState?.agentVersion || '').startsWith('2.8.'))) {
         await publishNativeState(false);
       }
       return;

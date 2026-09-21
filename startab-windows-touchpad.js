@@ -211,6 +211,30 @@
     });
   }
 
+  const audioRequests = new Map();
+  let audioConnecting = null;
+  let audioAttemptAt = 0;
+  globalThis.StartabWindowsDirectAudio = {
+    async send(deviceId, command) {
+      if (state.deviceId !== deviceId || !channelOpen(state.controlChannel)) {
+        if (!audioConnecting && Date.now() - audioAttemptAt > 5000) {
+          audioAttemptAt = Date.now();
+          audioConnecting = beginSession().catch(() => {}).finally(() => { audioConnecting = null; });
+        }
+        return false; // Firebase handles this command while the direct channel connects.
+      }
+      const channel = state.controlChannel;
+      const id = crypto.randomUUID();
+      return new Promise(resolve => {
+        const finish = ok => { clearTimeout(timer); audioRequests.delete(id); resolve(ok); };
+        const timer = setTimeout(() => finish(false), 1200);
+        audioRequests.set(id, finish);
+        try { channel.send(JSON.stringify({t:'audio', id, ...command})); }
+        catch (_) { finish(false); }
+      });
+    }
+  };
+
   function channelOpen(channel) {
     return !!channel && channel.readyState === 'open';
   }
@@ -273,6 +297,12 @@
     state.pc = pc;
     state.motionChannel = pc.createDataChannel('motion', { ordered: false, maxRetransmits: 0 });
     state.controlChannel = pc.createDataChannel('control', { ordered: true });
+    state.controlChannel.addEventListener('message', event => {
+      try {
+        const reply = JSON.parse(event.data);
+        if (reply.t === 'audioAck') audioRequests.get(reply.id)?.(reply.ok === true);
+      } catch (_) {}
+    });
 
     const handleChannel = (channel) => {
       if (!channel) return;

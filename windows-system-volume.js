@@ -538,6 +538,7 @@
           state.devices.clear();
           snapshot.forEach((doc) => {
             const data = doc.data() || {};
+            if (data.commandResult?.id) commandAcks.get(data.commandResult.id)?.(data.commandResult.ok === true);
             state.devices.set(doc.id, { ...data, deviceId: data.deviceId || doc.id });
           });
           renderDevices();
@@ -569,6 +570,18 @@
     }
   }
 
+  const commandAcks = new Map();
+  function awaitCommandAck(id) {
+    let cancel;
+    const promise = new Promise(resolve => {
+      const finish = ok => { clearTimeout(timer); commandAcks.delete(id); resolve(ok); };
+      const timer = setTimeout(() => finish(false), 5000);
+      cancel = () => finish(false);
+      commandAcks.set(id, finish);
+    });
+    return {promise, cancel};
+  }
+
   async function sendCommand(action, value = null) {
     const device = selectedDevice();
     if (!device || !isDeviceOnline(device)) return false;
@@ -582,6 +595,10 @@
       } catch (_) {}
     }
     if (!state.user?.uid || !state.db) return false;
+    try {
+      if (await globalThis.StartabWindowsDirectAudio?.send(device.deviceId,
+        {action, ...(value != null ? {value:Number(value)} : {}), ...(muted != null ? {muted} : {})})) return true;
+    } catch (_) {}
 
     const command = {
       id: `${Date.now().toString(36)}-${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}`,
@@ -595,15 +612,18 @@
     if (value != null && Number.isFinite(Number(value))) command.value = Number(value);
     if (muted != null) command.muted = muted;
 
+    const acknowledgement = awaitCommandAck(command.id);
     try {
-      await state.db
+      const write = state.db
         .collection('users')
         .doc(state.user.uid)
         .collection('windowsDevices')
         .doc(device.deviceId)
         .set({ command }, { merge: true });
-      return true;
+      write.catch(() => acknowledgement.cancel());
+      return await acknowledgement.promise;
     } catch (error) {
+      acknowledgement.cancel();
       console.error('StarTab Windows Volume: no se pudo enviar el comando:', error);
       return false;
     }
