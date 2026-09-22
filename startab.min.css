@@ -14097,3 +14097,11 @@ html.startab-tv-modal-open{overflow:hidden!important}
 .startab-tv-brightness-wrap input[type=range]::-webkit-slider-thumb{
   transform:translateZ(0)!important;
 }
+
+/* Native Google TV remote pairing */
+.startab-tv-dpad-link{font-size:12px!important;padding:9px 14px!important;margin:0 0 12px!important}
+#startab-tv-dpad-note{line-height:1.5;margin:0 0 14px}
+.startab-tv-dpad-code-label{display:block;font-size:13px;margin:18px 0 8px}
+#startab-tv-dpad-code{box-sizing:border-box;width:100%;padding:14px;border:1px solid rgba(255,255,255,.2);border-radius:12px;background:rgba(0,0,0,.2);color:inherit;font:600 22px monospace;letter-spacing:.3em;text-transform:uppercase}
+#startab-tv-dpad-form button{margin-top:14px}
+#startab-tv-dpad-layer button:disabled,#startab-tv-dpad-code:disabled{opacity:.5;cursor:default}

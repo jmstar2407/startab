@@ -134,6 +134,8 @@
                 <button id="startab-tv-settings" type="button" data-tv-control aria-label="Configuración" title="Configuración">${ICONS.settings}</button>
               </div>
 
+              <button class="startab-tv-manual-pair startab-tv-dpad-link" id="startab-tv-dpad-link" type="button" data-tv-control>Vincular cruceta</button>
+
               <div class="startab-tv-app-row startab-tv-quick-apps" id="startab-tv-quick-apps"></div>
 
               <section class="startab-tv-control-card startab-tv-volume-card">
@@ -157,6 +159,22 @@
           </div>
 
         </section>
+
+        <div class="startab-tv-layer" id="startab-tv-dpad-layer" aria-hidden="true">
+          <div class="startab-tv-layer-backdrop"></div>
+          <section class="startab-tv-submodal startab-tv-add-card" role="dialog" aria-modal="true" aria-labelledby="startab-tv-dpad-title">
+            <header><div><span>MANDO DE GOOGLE TV</span><h3 id="startab-tv-dpad-title">Vincular cruceta</h3></div><button id="startab-tv-dpad-close" type="button" aria-label="Cerrar">×</button></header>
+            <div class="startab-tv-submodal-body">
+              <p id="startab-tv-dpad-note" role="status" aria-live="polite">Muestra el código en la TV e introdúcelo aquí. Solo necesitas vincular una vez.</p>
+              <button class="startab-tv-manual-pair" id="startab-tv-dpad-start" type="button">Mostrar código en la TV</button>
+              <form id="startab-tv-dpad-form">
+                <label class="startab-tv-dpad-code-label" for="startab-tv-dpad-code">Código de la TV (6 caracteres)</label>
+                <input id="startab-tv-dpad-code" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="6" pattern="[0-9A-Fa-f]{6}" placeholder="A1B2C3" required disabled>
+                <button class="startab-tv-manual-pair" id="startab-tv-dpad-submit" type="submit" disabled>Vincular</button>
+              </form>
+            </div>
+          </section>
+        </div>
 
         <div class="startab-tv-layer startab-tv-add-layer" id="startab-tv-add-layer" aria-hidden="true">
           <div class="startab-tv-layer-backdrop"></div>
@@ -222,6 +240,7 @@
   function cacheDom() {
     const ids = [
       'toggle','modal','backdrop','close','led','status-title','status-note','device-select','empty','remote-content',
+      'dpad-link','dpad-layer','dpad-close','dpad-note','dpad-start','dpad-form','dpad-code','dpad-submit',
       'power','input','keyboard','back','menu','home','assistant','settings','nav-touch','nav-knob','nav-hint','quick-apps',
       'mute','volume','volume-value','volume-fill','vol-down','vol-up','brightness','brightness-value',
       'add','add-layer','add-close','scan-btn','pair-ip','pair-pin','pair-btn',
@@ -246,6 +265,10 @@
   function isOnline(d) { return !!d?.online && Date.now() - Number(d.clientAt || 0) < DEVICE_STALE_MS; }
 
   function applyRemoteState(data = {}, force = false) {
+    if (typeof data.remotePairingState === 'string') {
+      nativePairStates.set(state.selectedId, data);
+      renderNativePairing();
+    }
     const now = performance.now();
     if (Number.isFinite(Number(data.volume))) {
       const remoteVolume = Math.round(clamp(Number(data.volume), 0, 100));
@@ -500,6 +523,7 @@
     dom.remoteContent?.classList.toggle('is-hidden', !d);
     dom.modal?.querySelectorAll('[data-tv-control]').forEach(el => { el.disabled = !d; });
     renderQuickApps();
+    renderNativePairing();
 
     if (!uid()) setStatus('error','Sin sesión','Inicia sesión en StarTab.');
     else if (!d && state.selectedId) setStatus('warn','Buscando TV','Sincronizando con Firebase…');
@@ -561,9 +585,12 @@
   function commandErrorMessage(reason = '') {
     const map = {
       'accessibility-disabled':'Activa “StarTab TV · Cursor remoto” en Accesibilidad del Google TV.',
-      'dpad-unavailable':'La aplicación no admite el movimiento básico. Abre Cruceta en StarTab TV para activar las teclas reales.',
-      'dpad-native-required':'Esta pantalla necesita teclas reales. Abre Cruceta en StarTab TV y sigue la activación de compatibilidad.',
+      'dpad-unavailable':'La aplicación no admite el movimiento básico. Pulsa Vincular cruceta en este control.',
+      'dpad-native-required':'Esta pantalla necesita teclas reales. Pulsa Vincular cruceta en este control.',
       'dpad-not-confirmed':'No se pudo confirmar la pulsación. Vuelve a intentar; no se repite automáticamente para evitar un salto doble.',
+      'dpad-repair-required':'Google TV necesita renovar la vinculación. Pulsa Vincular cruceta.',
+      'dpad-reconnecting':'La cruceta está reconectando con Google TV. Espera unos segundos y vuelve a pulsar.',
+      'remote-pair-code':'Comprueba el código de seis caracteres y que la vinculación siga abierta.',
       'dpad-expired':'La pulsación llegó tarde y se descartó. Vuelve a pulsar.',
       'ok-unavailable':'No hay un elemento seleccionable para ejecutar OK.',
       'home-unavailable':'Android TV no permitió ejecutar Home.',
@@ -581,6 +608,9 @@
   }
 
   function showCommandError(reason) {
+    if (dom.dpadLayer?.classList.contains('is-open')) {
+      dom.dpadNote.textContent = commandErrorMessage(reason);
+    }
     setStatus('error','Orden no ejecutada',commandErrorMessage(reason));
     setTimeout(() => render(), 2600);
   }
@@ -596,6 +626,7 @@
     const timer = setTimeout(() => { try { ws.close(); } catch (_) {} }, 1600);
     ws.onopen = () => { clearTimeout(timer); ws.send(JSON.stringify({ type:'hello', secret })); };
     ws.onmessage = ev => {
+      if (state.ws !== ws) return;
       try {
         const data = JSON.parse(ev.data || '{}');
         if (data.type === 'state' && data.ok) {
@@ -604,7 +635,7 @@
         if (data.type === 'ack') {
           if (data.ok === false) { showCommandError(data.reason || 'error'); return; }
           if (Array.isArray(data.apps)) { state.availableApps = data.apps; renderAppsList(); }
-          const hasState = Number.isFinite(Number(data.volume)) || Number.isFinite(Number(data.brightnessLevel)) || typeof data.muted === 'boolean' || typeof data.powerOn === 'boolean';
+          const hasState = typeof data.remotePairingState === 'string' || Number.isFinite(Number(data.volume)) || Number.isFinite(Number(data.brightnessLevel)) || typeof data.muted === 'boolean' || typeof data.powerOn === 'boolean';
           if (hasState) { applyRemoteState(data); render(); }
         }
       } catch (_) {}
@@ -654,6 +685,77 @@
       if (octets.some(n => n < 0 || n > 255)) return null;
       return { ip, pin, port, deviceId: String(url.searchParams.get('device') || '') };
     } catch (_) { return null; }
+  }
+
+  // Pairing stays on the TV; the browser only submits the displayed code.
+  const nativePairStates = new Map();
+  let nativePairDevice = '', nativePairRequest = '', nativePairTimer = 0;
+  function nativePairState() {
+    return (state.wsReady ? nativePairStates.get(state.selectedId) : selectedDevice()) || {};
+  }
+  function renderNativePairing() {
+    const data = nativePairState();
+    if (dom.dpadLink) dom.dpadLink.textContent = data.remotePairingState === 'paired' ? 'Cruceta vinculada' : 'Vincular cruceta';
+    if (!dom.dpadLayer?.classList.contains('is-open') || nativePairDevice !== state.selectedId) return;
+    if (nativePairRequest && data.remotePairingRequest !== nativePairRequest) return;
+    const phase = data.remotePairingState || 'not-paired';
+    const waiting = phase === 'waiting-code';
+    const busy = ['connecting','waiting-code','verifying'].includes(phase);
+    const notes = {
+      'not-paired':'Muestra el código en la TV e introdúcelo aquí. Solo necesitas vincular una vez.',
+      connecting:'Abriendo la vinculación en la TV…',
+      'waiting-code':'Introduce los seis caracteres que aparecen en la pantalla de la TV.',
+      verifying:'Verificando el código…',
+      paired:'Cruceta vinculada. Puedes cerrar y usar las flechas y OK. Se conserva al reiniciar.',
+      error:'No se pudo vincular. Comprueba que Android TV Remote Service esté habilitado y actualizado en la TV y vuelve a intentarlo.'
+    };
+    const errors = { 'pairing-required':'Google TV necesita renovar la vinculación. Pulsa Mostrar código.', 'invalid-code':'El código no coincide. Revisa los seis caracteres de la TV.', 'pairing-timeout':'El código caducó. Pulsa Mostrar código para obtener otro.' };
+    dom.dpadNote.textContent = errors[data.remotePairingError] || notes[phase] || notes.error;
+    dom.dpadStart.disabled = busy;
+    dom.dpadStart.textContent = phase === 'paired' ? 'Volver a vincular' : 'Mostrar código en la TV';
+    dom.dpadCode.disabled = !waiting;
+    dom.dpadSubmit.disabled = !waiting;
+    if (nativePairRequest && phase !== 'connecting') { clearTimeout(nativePairTimer); nativePairTimer = 0; }
+  }
+  function openNativePairing() {
+    if (!selectedDevice()) return;
+    nativePairDevice = state.selectedId; nativePairRequest = '';
+    dom.dpadCode.value = '';
+    dom.dpadLayer.classList.add('is-open'); dom.dpadLayer.setAttribute('aria-hidden','false');
+    renderNativePairing(); dom.dpadStart.focus();
+  }
+  function closeNativePairing() {
+    if (!dom.dpadLayer?.classList.contains('is-open')) return;
+    if (nativePairDevice === state.selectedId && ((nativePairRequest && nativePairState().remotePairingRequest !== nativePairRequest) || ['connecting','waiting-code','verifying'].includes(nativePairState().remotePairingState))) {
+      sendNativePairCommand('remotePairCancel');
+    }
+    clearTimeout(nativePairTimer); nativePairTimer = 0; nativePairRequest = ''; nativePairDevice = '';
+    dom.dpadLayer.classList.remove('is-open'); dom.dpadLayer.setAttribute('aria-hidden','true');
+    dom.dpadCode.value = ''; dom.dpadLink?.focus();
+  }
+  async function sendNativePairCommand(type, extra = {}, id = unique()) {
+    const expiresAtClient = Date.now() + 15000;
+    if (wsSend({id,t:type,...extra,expiresAtClient})) return true;
+    pendingNavigation.set(id, Date.now());
+    for (const [key, stamp] of pendingNavigation) if (Date.now() - stamp > 20000) pendingNavigation.delete(key);
+    const sent = await firebaseMerge({actionCommand:{id,type,...extra,clientAt:Date.now(),expiresAtClient}},150000);
+    if (!sent && nativePairDevice === state.selectedId) {
+      dom.dpadNote.textContent = 'No se pudo enviar. Comprueba la conexión e inténtalo de nuevo.';
+      dom.dpadStart.disabled = false;
+    }
+    return sent;
+  }
+  function startNativePairing() {
+    nativePairRequest = unique(); dom.dpadStart.disabled = true;
+    dom.dpadCode.value = ''; dom.dpadCode.disabled = true; dom.dpadSubmit.disabled = true;
+    dom.dpadNote.textContent = 'Solicitando el código a la TV…';
+    sendNativePairCommand('remotePairStart', {}, nativePairRequest);
+    clearTimeout(nativePairTimer);
+    nativePairTimer = setTimeout(() => {
+      if (nativePairDevice !== state.selectedId || !dom.dpadLayer.classList.contains('is-open')) return;
+      dom.dpadNote.textContent = 'La TV no respondió a tiempo. Comprueba su conexión y vuelve a intentarlo.';
+      dom.dpadStart.disabled = false;
+    }, 30000);
   }
 
   function closeAddModal() { dom.addLayer?.classList.remove('is-open'); dom.addLayer?.setAttribute('aria-hidden','true'); }
@@ -1041,9 +1143,20 @@
   function bindUi() {
     dom.toggle = $('startab-tv-toggle');
     dom.toggle?.addEventListener('click',()=>{ state.modalOpen=true; dom.modal?.classList.add('is-open'); dom.modal?.setAttribute('aria-hidden','false'); document.documentElement.classList.add('startab-tv-modal-open'); connectSelectedLocal(); startFirebaseSessionLease(); render(); });
-    const close=()=>{ state.modalOpen=false; stopFirebaseSessionLease(); closeWs(); stopQrScanner(); closeAddModal(); closeAppsModal(); closeAppEditor(); closeAppContext(); closeKeyboard(); dom.modal?.classList.remove('is-open'); dom.modal?.setAttribute('aria-hidden','true'); document.documentElement.classList.remove('startab-tv-modal-open'); };
+    const close=()=>{ closeNativePairing(); state.modalOpen=false; stopFirebaseSessionLease(); closeWs(); stopQrScanner(); closeAddModal(); closeAppsModal(); closeAppEditor(); closeAppContext(); closeKeyboard(); dom.modal?.classList.remove('is-open'); dom.modal?.setAttribute('aria-hidden','true'); document.documentElement.classList.remove('startab-tv-modal-open'); };
     dom.close?.addEventListener('click',close); dom.backdrop?.addEventListener('click',close);
 
+    dom.dpadLink?.addEventListener('click',openNativePairing);
+    dom.dpadClose?.addEventListener('click',closeNativePairing);
+    dom.dpadLayer?.querySelector('.startab-tv-layer-backdrop')?.addEventListener('click',closeNativePairing);
+    dom.dpadStart?.addEventListener('click',startNativePairing);
+    dom.dpadCode?.addEventListener('input',()=>{dom.dpadCode.value=dom.dpadCode.value.toUpperCase().replace(/[^0-9A-F]/g,'').slice(0,6);});
+    dom.dpadForm?.addEventListener('submit',e=>{
+      e.preventDefault(); const code=dom.dpadCode.value.trim();
+      if (dom.dpadSubmit.disabled || !/^[0-9A-F]{6}$/.test(code)) return;
+      dom.dpadSubmit.disabled=true; dom.dpadNote.textContent='Verificando el código…';
+      sendNativePairCommand('remotePairCode',{code}).then(sent=>{if(!sent)dom.dpadSubmit.disabled=false;});
+    });
     dom.add?.addEventListener('click',openAddModal); dom.addClose?.addEventListener('click',closeAddModal); dom.addLayer?.querySelector('.startab-tv-layer-backdrop')?.addEventListener('click',closeAddModal);
     dom.scanBtn?.addEventListener('click',openQrScanner);
     dom.pairBtn?.addEventListener('click',()=>pairTv({ip:dom.pairIp?.value||'',pin:dom.pairPin?.value||'',port:8765}));
@@ -1067,7 +1180,7 @@
     window.addEventListener('resize',closeAppContext); window.addEventListener('scroll',closeAppContext,true);
 
     dom.scannerClose?.addEventListener('click',stopQrScanner); dom.scannerCancel?.addEventListener('click',stopQrScanner); dom.scanner?.querySelector('.startab-tv-scanner-backdrop')?.addEventListener('click',stopQrScanner);
-    dom.deviceSelect?.addEventListener('change',()=>{const next=dom.deviceSelect.value||'';if(next==='__add_tv__'){openAddModal();dom.deviceSelect.value=state.selectedId||'';return;}state.selectedId=next;localStorage.setItem(SELECTED_KEY,state.selectedId);state.optimisticVolume=null;state.optimisticBrightness=null;state.volumeHoldUntil=0;state.brightnessHoldUntil=0;controlPaint.volume=null;controlPaint.brightness=null;state.availableApps=[];closeWs();connectSelectedLocal();startFirebaseSessionLease();render();});
+    dom.deviceSelect?.addEventListener('change',()=>{const next=dom.deviceSelect.value||'';if(next==='__add_tv__'){openAddModal();dom.deviceSelect.value=state.selectedId||'';return;}closeNativePairing();state.selectedId=next;localStorage.setItem(SELECTED_KEY,state.selectedId);state.optimisticVolume=null;state.optimisticBrightness=null;state.volumeHoldUntil=0;state.brightnessHoldUntil=0;controlPaint.volume=null;controlPaint.brightness=null;state.availableApps=[];closeWs();connectSelectedLocal();startFirebaseSessionLease();render();});
 
     dom.power?.addEventListener('click',()=>{
       const action = state.powerOn === false ? 'on' : 'off';
@@ -1095,6 +1208,7 @@
 
     document.addEventListener('keydown', e => {
       if (e.key !== 'Escape') return;
+      if (dom.dpadLayer?.classList.contains('is-open')) { e.preventDefault(); closeNativePairing(); return; }
       if (dom.scanner?.classList.contains('is-open')) { stopQrScanner(); e.preventDefault(); return; }
       if (dom.appEditLayer?.classList.contains('is-open')) { closeAppEditor(); e.preventDefault(); return; }
       if (dom.appsLayer?.classList.contains('is-open')) { closeAppsModal(); e.preventDefault(); return; }
