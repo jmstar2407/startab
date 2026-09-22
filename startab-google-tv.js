@@ -707,10 +707,17 @@
       'waiting-code':'Introduce los seis caracteres que aparecen en la pantalla de la TV.',
       verifying:'Verificando el código…',
       paired:'Cruceta vinculada. Puedes cerrar y usar las flechas y OK. Se conserva al reiniciar.',
-      error:'No se pudo vincular. Comprueba que Android TV Remote Service esté habilitado y actualizado en la TV y vuelve a intentarlo.'
+      error:'StarTab no pudo completar la vinculación. Envíame el detalle que aparece debajo para identificar el fallo.'
     };
-    const errors = { 'pairing-required':'Google TV necesita renovar la vinculación. Pulsa Mostrar código.', 'invalid-code':'El código no coincide. Revisa los seis caracteres de la TV.', 'pairing-timeout':'El código caducó. Pulsa Mostrar código para obtener otro.' };
+    const errors = {
+      'identity-error':'StarTab no pudo preparar su certificado de vinculación.',
+      'tls-error':'El servicio respondió, pero falló la conexión segura de StarTab.',
+      'connection-error':'StarTab no logró conectarse al servicio remoto desde la propia TV.',
+      'protocol-error':'La conexión se abrió, pero no se completó el intercambio de vinculación.',
+      'save-error':'El código se aceptó, pero StarTab no pudo guardar la vinculación.',
+      'pairing-required':'Google TV necesita renovar la vinculación. Pulsa Mostrar código.', 'invalid-code':'El código no coincide. Revisa los seis caracteres de la TV.', 'pairing-timeout':'El código caducó. Pulsa Mostrar código para obtener otro.' };
     dom.dpadNote.textContent = errors[data.remotePairingError] || notes[phase] || notes.error;
+    if (phase === 'error' && data.remotePairingDetail) dom.dpadNote.textContent += ' Detalle: ' + data.remotePairingDetail;
     dom.dpadStart.disabled = busy;
     dom.dpadStart.textContent = phase === 'paired' ? 'Volver a vincular' : 'Mostrar código en la TV';
     dom.dpadCode.disabled = !waiting;
