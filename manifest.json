@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "StarTab - Nueva Pestaña",
-  "version": "1.6.6",
+  "version": "1.6.9",
   "description": "Página personalizada para nueva pestaña con sincronización en la nube",
   "chrome_url_overrides": {
     "newtab": "index.html"
@@ -81,5 +81,5 @@
     }
   ],
   "incognito": "spanning",
-  "version_name": "v1.6.6"
+  "version_name": "v1.6.9"
 }

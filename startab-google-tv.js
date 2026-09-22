@@ -134,7 +134,7 @@
                 <button id="startab-tv-settings" type="button" data-tv-control aria-label="Configuración" title="Configuración">${ICONS.settings}</button>
               </div>
 
-              <button class="startab-tv-manual-pair startab-tv-dpad-link" id="startab-tv-dpad-link" type="button" data-tv-control>Vincular cruceta</button>
+              <span class="startab-tv-dpad-link" id="startab-tv-dpad-link" data-tv-control>Cruceta autónoma</span>
 
               <div class="startab-tv-app-row startab-tv-quick-apps" id="startab-tv-quick-apps"></div>
 
@@ -585,8 +585,8 @@
   function commandErrorMessage(reason = '') {
     const map = {
       'accessibility-disabled':'Activa “StarTab TV · Cursor remoto” en Accesibilidad del Google TV.',
-      'dpad-unavailable':'La aplicación no admite el movimiento básico. Pulsa Vincular cruceta en este control.',
-      'dpad-native-required':'Esta pantalla necesita teclas reales. Pulsa Vincular cruceta en este control.',
+      'dpad-unavailable':'Activa Accesibilidad para StarTab TV en la televisión.',
+      'dpad-native-required':'Activa Accesibilidad para StarTab TV en la televisión.',
       'dpad-not-confirmed':'No se pudo confirmar la pulsación. Vuelve a intentar; no se repite automáticamente para evitar un salto doble.',
       'dpad-repair-required':'Google TV necesita renovar la vinculación. Pulsa Vincular cruceta.',
       'dpad-reconnecting':'La cruceta está reconectando con Google TV. Espera unos segundos y vuelve a pulsar.',
@@ -695,7 +695,7 @@
   }
   function renderNativePairing() {
     const data = nativePairState();
-    if (dom.dpadLink) dom.dpadLink.textContent = data.remotePairingState === 'paired' ? 'Cruceta vinculada' : 'Vincular cruceta';
+    if (dom.dpadLink) dom.dpadLink.textContent = data.accessibility === false ? 'Activar Accesibilidad en TV' : 'Cruceta autónoma';
     if (!dom.dpadLayer?.classList.contains('is-open') || nativePairDevice !== state.selectedId) return;
     if (nativePairRequest && data.remotePairingRequest !== nativePairRequest) return;
     const phase = data.remotePairingState || 'not-paired';
