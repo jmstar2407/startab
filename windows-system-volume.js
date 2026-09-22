@@ -3,7 +3,6 @@
 
   const FIREBASE_READY_RETRY_MS = 300;
   const FIREBASE_READY_MAX_RETRIES = 40;
-  const DEVICE_STALE_MS = 90_000;
   const SELECTED_DEVICE_KEY = 'startab_windows_volume_selected_device_v2';
   const CLIENT_ID_KEY = 'startab_windows_volume_client_id_v2';
   const NATIVE_DEVICE_KEY = 'startab_windows_native_device_id_v1';
@@ -137,9 +136,7 @@
 
   function isDeviceOnline(device) {
     if (device?.deviceId && device.deviceId === state.native.deviceId && state.native.connected) return true;
-    if (!device?.online) return false;
-    const clientAt = Number(device.clientAt) || 0;
-    return clientAt > 0 && Date.now() - clientAt < DEVICE_STALE_MS;
+    return !!device?.deviceId;
   }
 
   function setFill(value) {
@@ -421,7 +418,7 @@
     for (const device of devices) {
       const option = document.createElement('option');
       option.value = device.deviceId;
-      option.textContent = `${device.deviceName || 'PC Windows'}${isDeviceOnline(device) ? ' · En línea' : ' · Offline'}`;
+      option.textContent = `${device.deviceName || 'PC Windows'} · Vinculado`;
       dom.device.append(option);
     }
 
@@ -470,8 +467,8 @@
             ? 'Agente conectado · registrando este PC en StarTab'
             : 'No hay PCs Windows vinculados'
           : online
-            ? 'Volumen maestro sincronizado en tiempo real'
-            : 'PC sin conexión · esperando reconexión';
+            ? (globalThis.StartabWindowsCommands?.label(device.deviceId) || 'Último estado guardado · listo para controlar')
+            : 'Selecciona una PC para controlar';
     }
 
     if (dom.range && !dom.range.matches(':active')) dom.range.value = String(volume);
@@ -538,7 +535,7 @@
           state.devices.clear();
           snapshot.forEach((doc) => {
             const data = doc.data() || {};
-            if (data.commandResult?.id) commandAcks.get(data.commandResult.id)?.(data.commandResult.ok === true);
+            globalThis.StartabWindowsCommands?.observe(doc.id, data);
             state.devices.set(doc.id, { ...data, deviceId: data.deviceId || doc.id });
           });
           renderDevices();
@@ -550,6 +547,8 @@
         },
       );
   }
+
+  window.addEventListener('startab-pc-command-status', () => render());
 
   function connectFirebase() {
     try {
@@ -570,63 +569,19 @@
     }
   }
 
-  const commandAcks = new Map();
-  function awaitCommandAck(id) {
-    let cancel;
-    const promise = new Promise(resolve => {
-      const finish = ok => { clearTimeout(timer); commandAcks.delete(id); resolve(ok); };
-      const timer = setTimeout(() => finish(false), 5000);
-      cancel = () => finish(false);
-      commandAcks.set(id, finish);
-    });
-    return {promise, cancel};
-  }
-
   async function sendCommand(action, value = null) {
     const device = selectedDevice();
-    if (!device || !isDeviceOnline(device)) return false;
-    const muted = action === 'toggleMute' ? (state.optimisticMuted ?? !device.muted) : null;
-    if (action === 'toggleMute') action = 'setMute';
-    if (isExtension && state.native.connected && device.deviceId === state.native.deviceId) {
-      try {
-        const response = await chrome.runtime.sendMessage({type: 'STARTAB_WINDOWS_NATIVE_COMMAND', awaitResult:true,
-          command: {type: action, ...(value != null ? {value: Number(value)} : {}), ...(muted != null ? {muted} : {})}});
-        if (response?.ok) return true;
-      } catch (_) {}
+    if (!device?.deviceId || !state.user?.uid || !state.db) return false;
+    const extra = {};
+    if (action === 'toggleMute') {
+      extra.muted = state.optimisticMuted ?? !device.muted;
+      action = 'setMute';
     }
-    if (!state.user?.uid || !state.db) return false;
-    try {
-      if (await globalThis.StartabWindowsDirectAudio?.send(device.deviceId,
-        {action, ...(value != null ? {value:Number(value)} : {}), ...(muted != null ? {muted} : {})})) return true;
-    } catch (_) {}
-
-    const command = {
-      id: `${Date.now().toString(36)}-${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}`,
-      action,
-      issuedBy: state.user.uid,
-      issuedByClient: clientId,
-      clientAt: Date.now(),
-      expiresAtClient: Date.now() + 20_000,
-      serverAt: firebase.firestore.FieldValue.serverTimestamp(),
-    };
-    if (value != null && Number.isFinite(Number(value))) command.value = Number(value);
-    if (muted != null) command.muted = muted;
-
-    const acknowledgement = awaitCommandAck(command.id);
-    try {
-      const write = state.db
-        .collection('users')
-        .doc(state.user.uid)
-        .collection('windowsDevices')
-        .doc(device.deviceId)
-        .set({ command }, { merge: true });
-      write.catch(() => acknowledgement.cancel());
-      return await acknowledgement.promise;
-    } catch (error) {
-      acknowledgement.cancel();
-      console.error('StarTab Windows Volume: no se pudo enviar el comando:', error);
-      return false;
-    }
+    if (value != null && Number.isFinite(Number(value))) extra.value = Number(value);
+    return globalThis.StartabWindowsCommands.send({
+      db: state.db, user: state.user, device, action, extra,
+      native: isExtension && state.native.connected && device.deviceId === state.native.deviceId,
+    });
   }
 
   function pumpVolumeCommand() {

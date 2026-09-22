@@ -10,7 +10,6 @@
     appId: '1:874084877753:web:cf9cbe9a344356dc9be268',
   };
 
-  const HEARTBEAT_MS = 60_000;
   const COMMAND_MAX_AGE_MS = 20_000;
 
   const state = {
@@ -24,9 +23,10 @@
     unsubscribeDevice: null,
     unsubscribePointerSessions: null,
     pointerPeers: new Map(),
-    heartbeat: 0,
     lastCommandId: null,
     bridgeKey: null,
+    publishChain: Promise.resolve(),
+    lastStateFingerprint: '',
     userTimer: 0,
     standaloneCloudOnline: false,
   };
@@ -54,7 +54,7 @@
   }
 
   async function markCurrentOffline() {
-    if (!state.deviceRef) return;
+    if (!state.deviceRef || state.standaloneCloudOnline || state.nativeState?.eventDrivenState === true) return;
     try {
       await state.deviceRef.set({
         online: false,
@@ -71,6 +71,7 @@
     state.deviceRef = null;
     state.lastCommandId = null;
     state.bridgeKey = null;
+    state.lastStateFingerprint = '';
     state.standaloneCloudOnline = false;
   }
 
@@ -86,8 +87,7 @@
   }
 
   function standaloneCloudActive(data) {
-    const at = Number(data?.clientAt) || 0;
-    return data?.standalone === true && data?.cloudLinked === true && data?.online === true && at > 0 && Date.now() - at < 70_000;
+    return data?.standalone === true && data?.cloudLinked === true;
   }
 
   async function startDeviceBridge() {
@@ -191,8 +191,8 @@
 
   function handlePointerPayload(payload, entry, channel) {
     if (!payload || typeof payload !== 'object') return;
-    if (payload.t === 'audio' && ['setVolume', 'setMute'].includes(payload.action)) {
-      const command = commandForNative(payload);
+    if (payload.t === 'audio' && ['setVolume', 'setMute', 'getSystemState', 'setHotspot', 'setRgb', 'monitorOff', 'shutdown', 'sleep', 'restart', 'logoff', 'lock'].includes(payload.action)) {
+      const command = { ...commandForNative(payload), operationId: payload.operationId || payload.id, expiresAtClient: payload.expiresAtClient };
       void chrome.runtime.sendMessage({type:'STARTAB_WINDOWS_NATIVE_COMMAND', command, awaitResult:true})
         .then(response => {
           if (channel?.readyState === 'open') channel.send(JSON.stringify({t:'audioAck',id:payload.id,ok:response?.ok === true}));
@@ -407,28 +407,17 @@
 
   async function executeCommand(command) {
     const nativeCommand = commandForNative(command);
+    if (nativeCommand) Object.assign(nativeCommand, { operationId: command.id, expiresAtClient: command.expiresAtClient });
     if (!nativeCommand) {
       await acknowledgeCommand(command.id, false, 'invalid-command');
       return;
     }
 
     try {
-      // Backward-compatible UX: changing volume always restores sound first, even
-      // when the installed native host predates the v2.1 auto-unmute behavior.
-      if (nativeCommand.type === 'setVolume') {
-        const unmuteResponse = await chrome.runtime.sendMessage({
-          type: 'STARTAB_WINDOWS_NATIVE_COMMAND',
-          command: { type: 'setMute', muted: false },
-        });
-        if (!unmuteResponse?.ok) {
-          await acknowledgeCommand(command.id, false, unmuteResponse?.reason || 'native-disconnected');
-          return;
-        }
-      }
       const response = await chrome.runtime.sendMessage({
         type: 'STARTAB_WINDOWS_NATIVE_COMMAND',
         command: nativeCommand,
-        awaitResult: ['setVolume','setMute','toggleMute','step'].includes(nativeCommand.type),
+        awaitResult: true,
       });
       await acknowledgeCommand(command.id, !!response?.ok, response?.ok ? null : response?.reason || 'native-disconnected');
     } catch (error) {
@@ -453,9 +442,15 @@
     }
   }
 
-  async function publishNativeState(force = false) {
+  function publishNativeState(force = false) {
+    state.publishChain = state.publishChain.catch(() => {}).then(() => publishNativeStateOnce(force));
+    return state.publishChain;
+  }
+
+  async function publishNativeStateOnce(force = false) {
     if (!state.db || !state.user?.uid || !state.nativeState?.deviceId) return;
     const native = state.nativeState;
+    if (native.eventDrivenState === true) return;
     try { localStorage.setItem('startab_windows_native_device_id_v1', String(native.deviceId)); } catch (_) {}
     try { if (native.deviceName) localStorage.setItem('startab_windows_native_device_name_v1', String(native.deviceName)); } catch (_) {}
     const target = state.db
@@ -491,7 +486,11 @@
     if (force) payload.connectedAt = firebase.firestore.FieldValue.serverTimestamp();
 
     try {
+      const { clientAt, updatedAt, connectedAt, ...meaningful } = payload;
+      const fingerprint = JSON.stringify(meaningful);
+      if (fingerprint === state.lastStateFingerprint) return;
       await target.set(payload, { merge: true });
+      state.lastStateFingerprint = fingerprint;
     } catch (error) {
       console.error('StarTab Windows bridge: no se pudo publicar estado:', error);
     }
@@ -584,13 +583,6 @@
     if (event.key === 'starTab_lastUser') void syncUser();
   });
 
-  state.heartbeat = window.setInterval(() => {
-    // El agente standalone ya mantiene la presencia en Firestore. Evitamos
-    // duplicar su heartbeat desde Chrome; Native Messaging solo publica si
-    // no hay un agente cloud standalone activo.
-    if (state.nativeConnected && !state.standaloneCloudOnline) void publishNativeState(false);
-  }, HEARTBEAT_MS);
-
   state.userTimer = window.setInterval(() => void syncUser(), 3_000);
 
   initFirebase();
@@ -624,9 +616,8 @@
   const NATIVE_DEVICE_KEY = 'startab_windows_native_device_id_v1';
   const LAST_COMMAND_PREFIX = 'startab_media_remote_last_command_v3_';
   const LEADER_LOCK = 'startab-media-cloud-bridge-v3';
-  const HEARTBEAT_MS = 30_000;
+  const USER_CHECK_MS = 3_000;
   const COMMAND_MAX_AGE_MS = 25_000;
-  const STATE_FORCE_REFRESH_MS = 60_000;
 
   const media = {
     db: null,
@@ -640,6 +631,9 @@
     isLeader: false,
     sessions: [],
     publishTimer: 0,
+    publishChain: Promise.resolve(),
+    retryTimer: 0,
+    retryDelay: 1000,
     lastPublishedFingerprint: '',
     lastPublishedSessions: [],
     lastPublishedAt: 0,
@@ -769,6 +763,7 @@
       readyState: Number(session.readyState) || 0,
       firstSeenAt: Number(session.firstSeenAt) || Number(session.updatedAt) || Date.now(),
       updatedAt: Number(session.updatedAt) || Date.now(),
+      seekVersion: Number(session.seekVersion) || 0,
     };
   }
 
@@ -779,22 +774,21 @@
       Math.round(item.duration * 10) / 10, item.playbackRate,
       Math.round(item.volume * 1000) / 1000, item.muted,
       item.canSeek, item.canSeekBackward, item.canSeekForward,
-      item.canPrev, item.canNext, item.canVolume, item.mediaKind, item.pageUrl,
+      item.canPrev, item.canNext, item.canVolume, item.mediaKind, item.pageUrl, item.seekVersion, item.tabTitle,
     ]));
   }
 
   function stateNeedsPublish(nextSessions, force = false) {
-    if (force) return true;
+    if (media.lastDeviceLabel !== mediaDeviceLabel()) return true;
     const fingerprint = stableFingerprint(nextSessions);
     if (fingerprint !== media.lastPublishedFingerprint) return true;
     if (!media.lastPublishedAt || media.lastPublishedSessions.length !== nextSessions.length) return true;
-    if (Date.now() - media.lastPublishedAt > STATE_FORCE_REFRESH_MS) return true;
 
-    const elapsed = Math.max(0, (Date.now() - media.lastPublishedAt) / 1000);
     const previous = new Map(media.lastPublishedSessions.map((item) => [item.key, item]));
     for (const current of nextSessions) {
       const old = previous.get(current.key);
       if (!old) return true;
+      const elapsed = Math.max(0, (Number(current.updatedAt) - Number(old.updatedAt)) / 1000);
       const expected = old.playbackState === 'playing'
         ? Math.min(old.duration || Infinity, (Number(old.currentTime) || 0) + elapsed * (Number(old.playbackRate) || 1))
         : Number(old.currentTime) || 0;
@@ -809,6 +803,9 @@
     }
     media.refs = null;
     media.boundDeviceId = '';
+    media.lastPublishedFingerprint = '';
+    media.lastPublishedAt = 0;
+    clearTimeout(media.retryTimer);
   }
 
   async function syncUser() {
@@ -833,6 +830,16 @@
       state: userRoot.collection('mediaRemote').doc(`state_${deviceId}`),
       command: userRoot.collection('mediaRemote').doc(`command_${deviceId}`),
     };
+    const refs = media.refs;
+    media.seedPromise = refs.state.get().then(snapshot => {
+      if (media.refs !== refs || !snapshot.exists) return;
+      const data = snapshot.data() || {};
+      const sessions = Array.isArray(data.sessions) ? data.sessions : [];
+      media.lastPublishedSessions = sessions;
+      media.lastPublishedFingerprint = stableFingerprint(sessions);
+      media.lastPublishedAt = Number(data.clientAt) || 1;
+      media.lastDeviceLabel = String(data.deviceLabel || '');
+    }).catch(() => {});
 
     media.unsubs.push(
       media.refs.command.onSnapshot((snapshot) => {
@@ -842,7 +849,6 @@
 
     if (media.isLeader) {
       void refreshRegistry(true);
-      void publishHeartbeat(true);
     }
   }
 
@@ -856,14 +862,21 @@
     } catch (_) {}
   }
 
-  async function publishState(force = false) {
+  function publishState(force = false) {
+    media.publishChain = media.publishChain.catch(() => {}).then(() => publishStateOnce(force));
+    return media.publishChain;
+  }
+
+  async function publishStateOnce(force = false) {
+    await media.seedPromise;
     const deviceId = media.boundDeviceId || mediaDeviceId();
     if (!media.isLeader || !media.refs?.state || !media.uid || !deviceId) return;
     const sessions = normalizeSessions(media.sessions).map(serializeSession);
     if (!stateNeedsPublish(sessions, force)) return;
     const fingerprint = stableFingerprint(sessions);
+    const ref = media.refs.state;
     try {
-      await media.refs.state.set({
+      await ref.set({
         deviceId,
         deviceLabel: mediaDeviceLabel(),
         online: true,
@@ -872,11 +885,20 @@
         serverAt: serverTimestamp(),
         stateUpdatedAt: serverTimestamp(),
       }, { merge: false });
+      if (media.refs?.state !== ref) return;
+      clearTimeout(media.retryTimer);
+      media.retryDelay = 1000;
+      media.lastDeviceLabel = mediaDeviceLabel();
       media.lastPublishedFingerprint = fingerprint;
       media.lastPublishedSessions = sessions.map((item) => ({ ...item }));
       media.lastPublishedAt = Date.now();
     } catch (error) {
       console.warn('StarTab Media background: no se pudo publicar estado:', error);
+      clearTimeout(media.retryTimer);
+      if (media.refs?.state === ref) {
+        media.retryTimer = setTimeout(() => void publishState(false), media.retryDelay);
+        media.retryDelay = Math.min(30000, media.retryDelay * 2);
+      }
     }
   }
 
@@ -897,77 +919,46 @@
     }, 90);
   }
 
-  async function publishHeartbeat(forceState = false) {
-    const deviceId = media.boundDeviceId || mediaDeviceId();
-    if (!media.isLeader || !media.refs?.state || !deviceId) return;
-    try {
-      await media.refs.state.set({
-        deviceId,
-        deviceLabel: mediaDeviceLabel(),
-        online: true,
-        clientAt: Date.now(),
-        serverAt: serverTimestamp(),
-      }, { merge: true });
-      if (forceState) await refreshRegistry(true);
-    } catch (error) {
-      console.warn('StarTab Media background: heartbeat pendiente:', error);
-    }
-  }
-
   async function handleCommandSnapshot(snapshot) {
     const deviceId = media.boundDeviceId || mediaDeviceId();
     if (!media.isLeader || !deviceId || !snapshot?.exists) return;
     const data = snapshot.data() || {};
     const id = String(data.id || '');
-    if (!id || id === media.lastCommandId) return;
+    if (!id || id === media.lastCommandId || data.result?.id === id) return;
     if (String(data.targetDeviceId || '') !== deviceId) return;
-
-    const issuedAt = Number(data.clientAt) || 0;
-    if (!issuedAt || Date.now() - issuedAt > COMMAND_MAX_AGE_MS + 5_000) {
-      saveLastCommandId(deviceId, id);
-      return;
-    }
-
     saveLastCommandId(deviceId, id);
-    const target = data.target || {};
-    const command = data.command || {};
-    const action = String(command.action || '');
-    const tabId = Number(target.tabId);
-
-    try {
-      if (action === 'openTab') {
-        if (Number.isInteger(tabId)) {
-          await chrome.runtime.sendMessage({
-            type: 'STARTAB_MEDIA_OPEN_TAB',
-            target: { tabId },
-          });
+    const ref = media.refs?.command;
+    const issuedAt = Number(data.clientAt) || 0;
+    const expired = !issuedAt || Date.now() - issuedAt > COMMAND_MAX_AGE_MS ||
+      (Number(data.expiresAtClient) > 0 && Date.now() > Number(data.expiresAtClient));
+    let response = { ok: false, reason: 'expired' };
+    if (!expired) {
+      try {
+        const action = String(data.command?.action || '');
+        const target = { tabId: Number(data.target?.tabId), frameId: Number(data.target?.frameId) || 0 };
+        if (action === 'refreshState') {
+          await refreshRegistry(false);
+          response = { ok: true };
+        } else {
+          const type = action === 'openTab' ? 'STARTAB_MEDIA_OPEN_TAB' :
+            action === 'closeTab' ? 'STARTAB_MEDIA_CLOSE_TAB' : 'STARTAB_MEDIA_CONTROL';
+          response = await chrome.runtime.sendMessage({ type, target,
+            command: { action, value: data.command?.value } }) || { ok: false, reason: 'no-response' };
+          await refreshRegistry(false);
         }
-      } else if (action === 'closeTab') {
-        if (Number.isInteger(tabId)) {
-          await chrome.runtime.sendMessage({
-            type: 'STARTAB_MEDIA_CLOSE_TAB',
-            target: { tabId },
-          });
-        }
-      } else {
-        await chrome.runtime.sendMessage({
-          type: 'STARTAB_MEDIA_CONTROL',
-          target: {
-            tabId,
-            frameId: Number(target.frameId) || 0,
-          },
-          command: {
-            action,
-            value: command.value,
-          },
-        });
-      }
-    } catch (error) {
-      console.warn('StarTab Media background: no se pudo ejecutar el comando remoto:', action, error);
+        await publishState(false); // Deduplicated, including refresh requests.
+      } catch (error) { response = { ok: false, reason: String(error?.message || error) }; }
     }
-
-    await refreshRegistry(false);
-    schedulePublish(true);
+    if (!ref) return;
+    try {
+      // Do not attach an old result to a newer command from another controller.
+      await media.db.runTransaction(async transaction => {
+        const current = await transaction.get(ref);
+        if (current.data()?.id === id) transaction.set(ref, {
+          result: { id, ok: response.ok === true, reason: String(response.reason || ''), clientAt: Date.now() },
+        }, { merge: true });
+      });
+    } catch (error) { console.warn('StarTab Media: no se pudo confirmar la orden:', error); }
   }
 
   function startLeaderLock() {
@@ -981,7 +972,6 @@
       media.isLeader = true;
       await syncUser();
       await refreshRegistry(true);
-      await publishHeartbeat(true);
       await new Promise(() => {});
     }).catch((error) => {
       console.warn('StarTab Media background: no se pudo adquirir liderazgo:', error);
@@ -1026,13 +1016,12 @@
   });
 
   window.addEventListener('online', () => {
-    void syncUser().then(() => publishHeartbeat(true));
+    void syncUser().then(() => refreshRegistry(true));
   });
 
   window.setInterval(() => {
     void syncUser();
-    if (media.isLeader && media.refs?.state) void publishHeartbeat(false);
-  }, HEARTBEAT_MS);
+  }, USER_CHECK_MS);
 
   initFirebase();
   startLeaderLock();

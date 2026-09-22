@@ -3,7 +3,6 @@
 
   const FIREBASE_RETRY_MS = 300;
   const FIREBASE_MAX_RETRIES = 40;
-  const DEVICE_STALE_MS = 90_000;
   const SESSION_TTL_MS = 5 * 60_000;
   const RELAY_INTERVAL_MS = 95;
   const ICE_TIMEOUT_MS = 3200;
@@ -190,7 +189,7 @@
     const snapshot = await ref.get();
     if (!snapshot.exists) return null;
     const data = snapshot.data() || {};
-    const online = !!data.online && Number(data.clientAt) > 0 && Date.now() - Number(data.clientAt) < DEVICE_STALE_MS;
+    const online = true; // Stored presence never prevents a connection attempt.
     return { ref, data: { ...data, deviceId }, online };
   }
 
@@ -211,6 +210,11 @@
     });
   }
 
+  function supportsEventCommands(version) {
+    const parts = String(version || '').split('.').map(Number);
+    return (parts[0] > 1) || (parts[0] === 1 && (parts[1] > 6 || (parts[1] === 6 && parts[2] >= 3)));
+  }
+
   const audioRequests = new Map();
   let audioConnecting = null;
   let audioAttemptAt = 0;
@@ -223,11 +227,13 @@
         }
         return false; // Firebase handles this command while the direct channel connects.
       }
+      const basic = ['setVolume', 'setMute'].includes(command.action);
+      if (!basic && !supportsEventCommands(state.agentVersion)) return false;
       const channel = state.controlChannel;
-      const id = crypto.randomUUID();
+      const id = command.operationId || crypto.randomUUID();
       return new Promise(resolve => {
         const finish = ok => { clearTimeout(timer); audioRequests.delete(id); resolve(ok); };
-        const timer = setTimeout(() => finish(false), 1200);
+        const timer = setTimeout(() => finish(false), basic ? 1200 : 10000);
         audioRequests.set(id, finish);
         try { channel.send(JSON.stringify({t:'audio', id, ...command})); }
         catch (_) { finish(false); }

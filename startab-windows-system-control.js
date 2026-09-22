@@ -3,10 +3,8 @@
 
   const FIREBASE_RETRY_MS = 300;
   const FIREBASE_MAX_RETRIES = 40;
-  const DEVICE_STALE_MS = 90_000;
   const SELECTED_DEVICE_KEY = 'startab_windows_volume_selected_device_v2';
   const CLIENT_ID_KEY = 'startab_windows_system_client_v1';
-  const REFRESH_INTERVAL_MS = 15_000;
   const REQUIRED_AGENT = [1, 6, 0];
   const RGB_REQUIRED_AGENT = [1, 6, 0];
 
@@ -98,9 +96,7 @@
   }
 
   function isOnline(device) {
-    if (!device?.online) return false;
-    const clientAt = Number(device.clientAt) || 0;
-    return clientAt > 0 && Date.now() - clientAt < DEVICE_STALE_MS;
+    return !!device?.deviceId;
   }
 
   function selectedDeviceId() {
@@ -179,7 +175,10 @@
     else if (!device) setOnlineState('error', 'Sin PC');
     else if (!online) setOnlineState('error', 'Offline');
     else if (!supported) setOnlineState('warning', 'EXE antiguo');
-    else setOnlineState('connected', 'En línea');
+    else {
+      const status = globalThis.StartabWindowsCommands?.status(device.deviceId);
+      setOnlineState(status?.ok === false ? 'warning' : 'connected', status?.pending ? 'Comprobando…' : status?.ok === false ? 'Sin respuesta · reintentar' : status?.ok === true ? 'Responde' : 'Vinculado');
+    }
 
     dom.grid?.querySelectorAll('.windows-pc-action').forEach((button) => {
       button.disabled = !supported;
@@ -257,14 +256,17 @@
       else if (!device) dom.note.textContent = 'Selecciona primero un PC en “Volumen del sistema”.';
       else if (!online) dom.note.textContent = 'El PC seleccionado está desconectado.';
       else if (!supported) dom.note.textContent = `Estas acciones requieren StartabWindowsVolume.exe v2.4.0 o superior. Tu PC usa ${device.agentVersion || 'una versión anterior'}.`;
-      else dom.note.textContent = 'Los comandos se envían únicamente al PC Windows seleccionado en StarTab.';
+      else dom.note.textContent = globalThis.StartabWindowsCommands?.label(device.deviceId) || 'Último estado guardado · listo para controlar';
     }
   }
+
+  window.addEventListener('startab-pc-command-status', () => render());
 
   function stopDeviceListener() {
     state.unsubscribeDevice?.();
     state.unsubscribeDevice = null;
     state.deviceId = '';
+    state.probeDevice = '';
     state.lastDevice = null;
   }
 
@@ -286,7 +288,12 @@
           return;
         }
         const data = snapshot.data() || {};
+        globalThis.StartabWindowsCommands?.observe(deviceId, data);
         render({ ...data, deviceId: data.deviceId || snapshot.id });
+        if (state.open && state.probeDevice !== deviceId && versionAtLeast(data.agentVersion)) {
+          state.probeDevice = deviceId;
+          void sendCommand('getSystemState');
+        }
       }, (error) => {
         console.warn('StarTab System Control: no se pudo leer el PC:', error);
         render(null);
@@ -296,21 +303,8 @@
   async function writeCommand(action, extra = {}) {
     state.user = currentUser();
     const device = state.lastDevice;
-    if (!state.db || !state.user?.uid || !device?.deviceId || !isOnline(device) || !versionAtLeast(device.agentVersion)) return false;
-    const command = {
-      id: `${Date.now().toString(36)}-${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}`,
-      action,
-      issuedBy: state.user.uid,
-      issuedByClient: clientId,
-      clientAt: Date.now(),
-      expiresAtClient: Date.now() + 20_000,
-      serverAt: firebase.firestore.FieldValue.serverTimestamp(),
-      ...extra,
-    };
-    await state.db.collection('users').doc(state.user.uid)
-      .collection('windowsDevices').doc(device.deviceId)
-      .set({ command }, { merge: true });
-    return true;
+    if (!state.db || !state.user?.uid || !device?.deviceId || !versionAtLeast(device.agentVersion)) return false;
+    return globalThis.StartabWindowsCommands.send({db: state.db, user: state.user, device, action, extra});
   }
 
   function sendCommand(action, extra = {}) {
@@ -325,13 +319,9 @@
   }
 
   function scheduleRefresh() {
+    // State is maintained by Windows events, not panel polling.
     clearInterval(state.refreshTimer);
     state.refreshTimer = 0;
-    if (!state.open) return;
-    state.refreshTimer = window.setInterval(() => {
-      if (!state.open || !versionAtLeast(state.lastDevice?.agentVersion) || !isOnline(state.lastDevice)) return;
-      void sendCommand('getSystemState');
-    }, REFRESH_INTERVAL_MS);
   }
 
   async function openModal() {
@@ -345,9 +335,7 @@
     document.body.classList.add('windows-pc-control-open');
     connectSelectedDevice();
     globalThis.StartabHaptics?.pulse?.('pc-control-open', 7, 70);
-    window.setTimeout(() => {
-      if (state.open && versionAtLeast(state.lastDevice?.agentVersion) && isOnline(state.lastDevice)) void sendCommand('getSystemState');
-    }, 120);
+
     scheduleRefresh();
   }
 
@@ -393,12 +381,7 @@
     globalThis.StartabHaptics?.pulse?.(`pc-control-${action}`, action === 'shutdown' || action === 'restart' ? 20 : 10, 70);
     const ok = await sendCommand(action);
     button.classList.remove('is-sending');
-    if (dom.note) dom.note.textContent = ok ? 'Comando enviado al PC seleccionado.' : 'No se pudo enviar el comando al PC.';
-    if (ok && ['shutdown', 'restart', 'logoff', 'sleep', 'lock', 'monitorOff'].includes(action)) {
-      window.setTimeout(() => {
-        if (state.open && dom.note) dom.note.textContent = 'Esperando la respuesta del PC…';
-      }, 1100);
-    }
+    if (dom.note) dom.note.textContent = ok ? 'Orden confirmada por el agente de Windows.' : 'La PC no respondió o no pudo ejecutar la orden. Puedes volver a intentar.';
   }
 
   async function toggleHotspot() {
@@ -526,9 +509,7 @@
       if (state.open) {
         clearConfirmation();
         connectSelectedDevice();
-        window.setTimeout(() => {
-          if (state.open && versionAtLeast(state.lastDevice?.agentVersion) && isOnline(state.lastDevice)) void sendCommand('getSystemState');
-        }, 120);
+
       }
     });
     document.addEventListener('keydown', (event) => {
