@@ -530,6 +530,11 @@
       if (state.selectedId && !state.devices.has(state.selectedId) && state.devices.size) state.selectedId = [...state.devices.keys()][0];
       if (state.selectedId) localStorage.setItem(SELECTED_KEY, state.selectedId);
       connectSelectedLocal(); render();
+      const navigationError = selectedDevice()?.navigationError;
+      if (navigationError?.id && pendingNavigation.has(navigationError.id)) {
+        pendingNavigation.delete(navigationError.id);
+        if (Date.now() - Number(navigationError.clientAt || 0) < 8000) showCommandError(navigationError.reason || 'dpad-unavailable');
+      }
       if (dom.appsLayer?.classList.contains('is-open')) renderAppsList();
     }, () => render());
   }
@@ -556,7 +561,10 @@
   function commandErrorMessage(reason = '') {
     const map = {
       'accessibility-disabled':'Activa “StarTab TV · Cursor remoto” en Accesibilidad del Google TV.',
-      'dpad-unavailable':'La cruceta no pudo mover el foco en esta pantalla del TV.',
+      'dpad-unavailable':'La aplicación no admite el movimiento básico. Abre Cruceta en StarTab TV para activar las teclas reales.',
+      'dpad-native-required':'Esta pantalla necesita teclas reales. Abre Cruceta en StarTab TV y sigue la activación de compatibilidad.',
+      'dpad-not-confirmed':'No se pudo confirmar la pulsación. Vuelve a intentar; no se repite automáticamente para evitar un salto doble.',
+      'dpad-expired':'La pulsación llegó tarde y se descartó. Vuelve a pulsar.',
       'ok-unavailable':'No hay un elemento seleccionable para ejecutar OK.',
       'home-unavailable':'Android TV no permitió ejecutar Home.',
       'fixed-volume-policy':'Este Google TV delega el volumen por CEC/IR y Android no puede modificarlo directamente.',
@@ -747,10 +755,19 @@
     try { await state.db.collection('users').doc(uid()).collection('tvDevices').doc(d.deviceId).set({ ...payload, controlLease: lease }, { merge:true }); return true; } catch (_) { return false; }
   }
 
+  const pendingNavigation = new Map();
+
   function sendAction(type, extra = {}, haptic = true) {
     if (haptic) globalThis.StartabHaptics?.click?.();
-    if (wsSend({ id:unique(), t:type, ...extra })) return;
-    firebaseMerge({ actionCommand:{ id:unique(), type, ...extra, clientAt:Date.now() } });
+    const id = unique();
+    const navigation = type === 'dpad' || type === 'ok';
+    const expiresAtClient = Date.now() + 4000;
+    if (wsSend({ id, t:type, ...extra, ...(navigation ? { expiresAtClient } : {}) })) return;
+    if (navigation) {
+      pendingNavigation.set(id, Date.now());
+      for (const [key, stamp] of pendingNavigation) if (Date.now() - stamp > 8000) pendingNavigation.delete(key);
+    }
+    firebaseMerge({ actionCommand:{ id, type, ...extra, clientAt:Date.now(), ...(navigation ? { expiresAtClient } : {}) } });
   }
 
   function sendMove(dx,dy) {
